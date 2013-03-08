@@ -1,3 +1,13 @@
+#!/usr/bin/env python
+# encoding: utf-8
+"""
+sortphotos.py
+
+Created on 3/2/2013
+Copyright (c) S. Andrew Ning. All rights reserved.
+
+"""
+
 import os
 import sys
 import shutil
@@ -5,7 +15,6 @@ import fnmatch
 import time
 import subprocess
 import filecmp
-import argparse
 
 import exif
 
@@ -214,6 +223,8 @@ def sortPhotos(src_dir, dest_dir, extensions, sort_type, move_files, removeDupli
 
 
 if __name__ == '__main__':
+
+    import argparse
 
     # setup command line parsing
     parser = argparse.ArgumentParser(formatter_class=argparse.RawTextHelpFormatter,
