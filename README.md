@@ -48,6 +48,23 @@ To sort every possible file type
 
 However, this option will copy even hidden files like .DS_Store.
 
+# Automation
+
+*Note while sortphotos.py was written in a cross-platform way, the following instructions for automation are specific to OS X.  For other operating systems there are of course ways to schedule tasks or submit cron jobs, but I will leave that as an exercise to the reader.*
+
+An an optional setup, I like to automate the process of moving my photos.  This can be accomplished simply on OS X using Launch Agents.  First edit the supplied plist file ``com.andrewning.sortphotos.plist`` in any text editor.  On line 10 enter the **full path** of where ``sortphotos.py`` is stored.  On line 12 enter the full path of your source directory (I use the [PhotoSync iOS App](http://www.photosync-app.com) to transfer photos from my phone to my computer so they all end up in folder called PhotoSync, but this can be any folder you like).  One line 13 enter the full path of the destination top level directory (e.g., ``/Users/Me/Pictures``).  Finally, on line 16 you can change how often the script will run (in seconds).  I have it set to run once a day, but you can set it to whatever you like.
+
+Now move the plist file to ``~/Library/LaunchAgents/``.  Switch to that directory and load it
+
+    $ launchctl load com.andrewning.sortphotos.plist
+
+That's it.  It will now run once a day automatically (or to whatever internal you picked).  Of course if there are no pictures in the source folder the script does nothing and will check again at the next interval.  There are ways to use folder listeners instead of a time-based execution, but this script is so lightweight the added complexity is unwarranted.  If you want to make sure your service is scheduled, execute
+
+    $ launchctl list | grep sortphotos
+
+and you should see the Agent listed (I grep the results because you will typically have many services running).  If you want to stop the script from running anymore just unload it.
+
+    $ launchctl unload com.andrewning.sortphotos.plist
 
 # Acknowledgments
 
