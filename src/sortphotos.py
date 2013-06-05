@@ -30,7 +30,7 @@ def parse_date_exif(date):
     entries = date.split(':')
     year = entries[0]
     month = entries[1]
-    month += ' - ' + months[month]
+    month += '-' + months[month]
     day = entries[2]
 
     return year, month, day
@@ -48,7 +48,7 @@ def parse_date_tstamp(fname):
     date = time.gmtime(creation_time)
     year = str(date.tm_year)
     month = '{0:02d}'.format(date.tm_mon)
-    month += ' - ' + months[month]
+    month += '-' + months[month]
     day = '{0:02d}'.format(date.tm_mday)
 
     return year, month, day
@@ -206,16 +206,15 @@ def sortPhotos(src_dir, dest_dir, extensions, sort_type, move_files, removeDupli
             else:
                 break
 
-        # if file is the same we don't need to copy or move
-        if fileIsIdentical:
-            continue
-
-
+     
         # finally move or copy the file
         if move_files:
             os.rename(src_file, dest_file)
         else:
-            shutil.copy2(src_file, dest_file)
+            if fileIsIdentical:
+                continue  # if file is same, we just ignore it (for copy option)
+            else:
+                shutil.copy2(src_file, dest_file)
 
 
     print
