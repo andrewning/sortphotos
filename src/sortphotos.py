@@ -206,7 +206,7 @@ def sortPhotos(src_dir, dest_dir, extensions, sort_type, move_files, removeDupli
             else:
                 break
 
-     
+
         # finally move or copy the file
         if move_files:
             os.rename(src_file, dest_file)
@@ -236,7 +236,7 @@ if __name__ == '__main__':
     parser.add_argument('--keep-duplicates', action='store_true',
                         help='If file is a duplicate keep it anyway (after renmaing).')
     parser.add_argument('--extensions', type=str, nargs='+',
-                        default=['jpg', 'tiff', 'avi', 'mov'],
+                        default=['jpg', 'tiff', 'avi', 'mov', 'mp4'],
                         help='file types to sort')
 
 
