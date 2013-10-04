@@ -60,9 +60,14 @@ def enum(*sequential, **named):
     return type('Enum', (), enums)
 
 
-# Courtesy of Miles (http://stackoverflow.com/questions/946967/get-file-creation-time-with-python-on-mac)
+# Modification of --> Miles (http://stackoverflow.com/questions/946967/get-file-creation-time-with-python-on-mac)
 def get_creation_time(path):
-    p = subprocess.Popen(['stat', '-f%B', path],
+    if sys.platform.startswith('linux'):
+        flag = '-c %B'
+    else:  # OS X
+        flag = '-f %B'
+
+    p = subprocess.Popen(['stat', flag, path],
         stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     if p.wait():
         raise OSError(p.stderr.read().rstrip())
@@ -143,7 +148,7 @@ def sortPhotos(src_dir, dest_dir, extensions, sort_type, move_files, removeDupli
         # get extension for types that may have EXIF data
         root, ext = os.path.splitext(src_file)
 
-        if ext.lower() in ['.jpg', '.tiff']:
+        if ext.lower() in ['.jpg', '.jpeg', '.tiff']:
 
             tags = exif.process_file(f, details=False)
 
@@ -236,7 +241,7 @@ if __name__ == '__main__':
     parser.add_argument('--keep-duplicates', action='store_true',
                         help='If file is a duplicate keep it anyway (after renmaing).')
     parser.add_argument('--extensions', type=str, nargs='+',
-                        default=['jpg', 'tiff', 'avi', 'mov', 'mp4'],
+                        default=['jpg', 'jpeg', 'tiff', 'avi', 'mov', 'mp4'],
                         help='file types to sort')
 
 
