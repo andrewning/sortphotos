@@ -63,7 +63,7 @@ def enum(*sequential, **named):
 # Modification of --> Miles (http://stackoverflow.com/questions/946967/get-file-creation-time-with-python-on-mac)
 def get_creation_time(path):
     if sys.platform.startswith('linux'):
-        flag = '-c %B'
+        flag = '-c %Y'
     else:  # OS X
         flag = '-f %B'
 
