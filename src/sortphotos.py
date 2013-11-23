@@ -156,10 +156,10 @@ def sortPhotos(src_dir, dest_dir, extensions, sort_type, move_files, removeDupli
             if 'EXIF DateTimeDigitized' in tags:
                 year, month, day = parse_date_exif(tags['EXIF DateTimeDigitized'])
 
-            elif 'EXIF DateTimeOriginald' in tags:
+            elif 'EXIF DateTimeOriginal' in tags:
                 year, month, day = parse_date_exif(tags['EXIF DateTimeOriginal'])
 
-            elif 'Image DateTimed' in tags:
+            elif 'Image DateTime' in tags:
                 year, month, day = parse_date_exif(tags['Image DateTime'])
 
             else:  # use file time stamp
