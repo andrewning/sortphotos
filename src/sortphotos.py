@@ -54,6 +54,16 @@ def parse_date_tstamp(fname):
     return year, month, day
 
 
+def valid_date(date):
+    """check if date is not zero time"""
+     
+    elts = str(date).split(':')
+    if len(elts) > 0 and elts[0] > '0000':
+        return True
+    else:
+        return False
+
+
 # Courtesy of Alec Thomas (http://stackoverflow.com/questions/36932/whats-the-best-way-to-implement-an-enum-in-python)
 def enum(*sequential, **named):
     enums = dict(zip(sequential, range(len(sequential))), **named)
@@ -153,13 +163,13 @@ def sortPhotos(src_dir, dest_dir, extensions, sort_type, move_files, removeDupli
             tags = exif.process_file(f, details=False)
 
             # look for date in EXIF data
-            if 'EXIF DateTimeDigitized' in tags:
+            if 'EXIF DateTimeDigitized' in tags and valid_date(tags['EXIF DateTimeDigitized']):
                 year, month, day = parse_date_exif(tags['EXIF DateTimeDigitized'])
 
-            elif 'EXIF DateTimeOriginal' in tags:
+            elif 'EXIF DateTimeOriginal' in tags and valid_date(tags['EXIF DateTimeOriginal']):
                 year, month, day = parse_date_exif(tags['EXIF DateTimeOriginal'])
 
-            elif 'Image DateTime' in tags:
+            elif 'Image DateTime' in tags and valid_date(tags['Image DateTime']):
                 year, month, day = parse_date_exif(tags['Image DateTime'])
 
             else:  # use file time stamp
