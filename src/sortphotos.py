@@ -16,7 +16,7 @@ import time
 import subprocess
 import filecmp
 
-import exif
+import exifread
 
 
 
@@ -56,7 +56,7 @@ def parse_date_tstamp(fname):
 
 def valid_date(date):
     """check if date is not zero time"""
-     
+
     elts = str(date).split(':')
     if len(elts) > 0 and elts[0] > '0000':
         return True
@@ -160,7 +160,7 @@ def sortPhotos(src_dir, dest_dir, extensions, sort_type, move_files, removeDupli
 
         if ext.lower() in ['.jpg', '.jpeg', '.tiff']:
 
-            tags = exif.process_file(f, details=False)
+            tags = exifread.process_file(f, details=False)
 
             # look for date in EXIF data
             if 'EXIF DateTimeDigitized' in tags and valid_date(tags['EXIF DateTimeDigitized']):

@@ -68,7 +68,7 @@ and you should see the Agent listed (I grep the results because you will typical
 
 # Acknowledgments
 
-SortPhotos grabs EXIF data from the photos using [EXIF.py](https://github.com/ianare/exif-py) which was written by Gene Cash and Thierry Bousch.
+SortPhotos grabs EXIF data from the photos using [exif-py](https://github.com/ianare/exif-py).
 
 # License
 
