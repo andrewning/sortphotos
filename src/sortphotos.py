@@ -36,7 +36,7 @@ def parse_date_exif(date):
     return year, month, day
 
 
-def parse_date_tstamp(fname):
+def parse_date_tstamp(fname, day_begins):
     """extract date info from file timestamp"""
 
     # time of last modification
@@ -50,6 +50,10 @@ def parse_date_tstamp(fname):
     month = '{0:02d}'.format(date.tm_mon)
     month += '-' + months[month]
     day = '{0:02d}'.format(date.tm_mday)
+
+    # check for early hour photos to be grouped with previous day
+    if date.tm_hour < day_begins:
+        day = '{0:02d}'.format(date.tm_mday-1)
 
     return year, month, day
 
@@ -103,7 +107,8 @@ SortType = enum('Year', 'YearMonth', 'YearMonthDay')
 
 # --------- main script -----------------
 
-def sortPhotos(src_dir, dest_dir, extensions, sort_type, move_files, removeDuplicates, ignore_exif):
+def sortPhotos(src_dir, dest_dir, extensions, sort_type, move_files, removeDuplicates,
+               ignore_exif, day_begins):
 
 
     # some error checking
@@ -153,7 +158,7 @@ def sortPhotos(src_dir, dest_dir, extensions, sort_type, move_files, removeDupli
         idx += 1
 
         if ignore_exif:
-            year, month, day = parse_date_tstamp(src_file)
+            year, month, day = parse_date_tstamp(src_file, day_begins)
 
         else:
             # open file
@@ -172,7 +177,7 @@ def sortPhotos(src_dir, dest_dir, extensions, sort_type, move_files, removeDupli
                 year, month, day = parse_date_exif(tags['Image DateTime'])
 
             else:  # use file time stamp if no valid EXIF data
-                year, month, day = parse_date_tstamp(src_file)
+                year, month, day = parse_date_tstamp(src_file, day_begins)
 
 
 
@@ -249,6 +254,9 @@ if __name__ == '__main__':
                         help='file types to sort')
     parser.add_argument('--ignore-exif', action='store_true',
                         help='always use file time stamp even if EXIF data exists')
+    parser.add_argument('--day-begins', type=int, default=0, help='hour of day that new day begins (0-23), \
+                        defaults to 0 which corresponds to midnight.  Useful for gropuing pictures with \
+                        previous day.')
 
 
     # parse command line arguments
@@ -262,7 +270,7 @@ if __name__ == '__main__':
         sort_type = SortType.YearMonthDay
 
     sortPhotos(args.src_dir, args.dest_dir, args.extensions, sort_type,
-              args.move, not args.keep_duplicates, args.ignore_exif)
+              args.move, not args.keep_duplicates, args.ignore_exif, args.day_begins)
 
 
 
