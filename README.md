@@ -48,6 +48,14 @@ To sort every possible file type
 
 However, this option will copy even hidden files like .DS_Store.
 
+## ignore EXIF
+If you don't want to use EXIF data at all (even if it exists) and just use time stamps you can add the ``--ignore-exif`` flag.
+
+## change time of day when the day "begins"
+If you are taking photos for an event that goes past midnight, you might want the early morning photos to be grouped with those from the previous day.  By default the new day begins at midnight, but if you wanted any photos taken before 4AM to be grouped with the previous day you can use  
+``--day-begins 4``  
+The argument to the flag should be an integer between 0-23 corresponding to the hours of the day starting at midnight.
+
 # Automation
 
 *Note while sortphotos.py was written in a cross-platform way, the following instructions for automation are specific to OS X.  For other operating systems there are of course ways to schedule tasks or submit cron jobs, but I will leave that as an exercise to the reader.*
