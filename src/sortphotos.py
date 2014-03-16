@@ -53,7 +53,12 @@ def parse_date_tstamp(fname, day_begins):
 
     # check for early hour photos to be grouped with previous day
     if date.tm_hour < day_begins:
-        day = '{0:02d}'.format(date.tm_mday-1)
+
+        date = time.gmtime(creation_time - (date.tm_hour+1)*3600)  # push it to the day before for classificiation purposes
+        year = str(date.tm_year)
+        month = '{0:02d}'.format(date.tm_mon)
+        month += '-' + months[month]
+        day = '{0:02d}'.format(date.tm_mday)
 
     return year, month, day
 
