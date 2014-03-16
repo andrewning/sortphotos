@@ -155,29 +155,19 @@ def sortPhotos(src_dir, dest_dir, extensions, sort_type, move_files, removeDupli
         # open file
         f = open(src_file, 'rb')
 
-        # get extension for types that may have EXIF data
-        root, ext = os.path.splitext(src_file)
+        tags = exifread.process_file(f, details=False)
 
-        if ext.lower() in ['.jpg', '.jpeg', '.tiff']:
+        # look for date in EXIF data
+        if 'EXIF DateTimeDigitized' in tags and valid_date(tags['EXIF DateTimeDigitized']):
+            year, month, day = parse_date_exif(tags['EXIF DateTimeDigitized'])
 
-            tags = exifread.process_file(f, details=False)
+        elif 'EXIF DateTimeOriginal' in tags and valid_date(tags['EXIF DateTimeOriginal']):
+            year, month, day = parse_date_exif(tags['EXIF DateTimeOriginal'])
 
-            # look for date in EXIF data
-            if 'EXIF DateTimeDigitized' in tags and valid_date(tags['EXIF DateTimeDigitized']):
-                year, month, day = parse_date_exif(tags['EXIF DateTimeDigitized'])
+        elif 'Image DateTime' in tags and valid_date(tags['Image DateTime']):
+            year, month, day = parse_date_exif(tags['Image DateTime'])
 
-            elif 'EXIF DateTimeOriginal' in tags and valid_date(tags['EXIF DateTimeOriginal']):
-                year, month, day = parse_date_exif(tags['EXIF DateTimeOriginal'])
-
-            elif 'Image DateTime' in tags and valid_date(tags['Image DateTime']):
-                year, month, day = parse_date_exif(tags['Image DateTime'])
-
-            else:  # use file time stamp
-                year, month, day = parse_date_tstamp(src_file)
-
-
-        # if no EXIF data use file timestamp
-        else:
+        else:  # use file time stamp if no valid EXIF data
             year, month, day = parse_date_tstamp(src_file)
 
 
