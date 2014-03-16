@@ -103,7 +103,7 @@ SortType = enum('Year', 'YearMonth', 'YearMonthDay')
 
 # --------- main script -----------------
 
-def sortPhotos(src_dir, dest_dir, extensions, sort_type, move_files, removeDuplicates):
+def sortPhotos(src_dir, dest_dir, extensions, sort_type, move_files, removeDuplicates, ignore_exif):
 
 
     # some error checking
@@ -152,23 +152,27 @@ def sortPhotos(src_dir, dest_dir, extensions, sort_type, move_files, removeDupli
 
         idx += 1
 
-        # open file
-        f = open(src_file, 'rb')
-
-        tags = exifread.process_file(f, details=False)
-
-        # look for date in EXIF data
-        if 'EXIF DateTimeDigitized' in tags and valid_date(tags['EXIF DateTimeDigitized']):
-            year, month, day = parse_date_exif(tags['EXIF DateTimeDigitized'])
-
-        elif 'EXIF DateTimeOriginal' in tags and valid_date(tags['EXIF DateTimeOriginal']):
-            year, month, day = parse_date_exif(tags['EXIF DateTimeOriginal'])
-
-        elif 'Image DateTime' in tags and valid_date(tags['Image DateTime']):
-            year, month, day = parse_date_exif(tags['Image DateTime'])
-
-        else:  # use file time stamp if no valid EXIF data
+        if ignore_exif:
             year, month, day = parse_date_tstamp(src_file)
+
+        else:
+            # open file
+            f = open(src_file, 'rb')
+
+            tags = exifread.process_file(f, details=False)
+
+            # look for date in EXIF data
+            if 'EXIF DateTimeDigitized' in tags and valid_date(tags['EXIF DateTimeDigitized']):
+                year, month, day = parse_date_exif(tags['EXIF DateTimeDigitized'])
+
+            elif 'EXIF DateTimeOriginal' in tags and valid_date(tags['EXIF DateTimeOriginal']):
+                year, month, day = parse_date_exif(tags['EXIF DateTimeOriginal'])
+
+            elif 'Image DateTime' in tags and valid_date(tags['Image DateTime']):
+                year, month, day = parse_date_exif(tags['Image DateTime'])
+
+            else:  # use file time stamp if no valid EXIF data
+                year, month, day = parse_date_tstamp(src_file)
 
 
 
@@ -243,6 +247,8 @@ if __name__ == '__main__':
     parser.add_argument('--extensions', type=str, nargs='+',
                         default=['jpg', 'jpeg', 'tiff', 'avi', 'mov', 'mp4'],
                         help='file types to sort')
+    parser.add_argument('--ignore-exif', action='store_true',
+                        help='always use file time stamp even if EXIF data exists')
 
 
     # parse command line arguments
@@ -256,7 +262,7 @@ if __name__ == '__main__':
         sort_type = SortType.YearMonthDay
 
     sortPhotos(args.src_dir, args.dest_dir, args.extensions, sort_type,
-              args.move, not args.keep_duplicates)
+              args.move, not args.keep_duplicates, args.ignore_exif)
 
 
 
