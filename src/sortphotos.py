@@ -12,9 +12,9 @@ import os
 import sys
 import shutil
 import fnmatch
-import time
 import subprocess
 import filecmp
+from datetime import datetime, timedelta
 
 import exifread
 
@@ -23,20 +23,27 @@ import exifread
 
 # -------- convenience methods -------------
 
-def parse_date_exif(date):
-    """extract date info from EXIF data"""
+def parse_date_exif(date_string):
+    """
+    extract date info from EXIF data
+    YYYY:MM:DD HH:MM:SS
+    """
 
-    date = str(date).split()[0]
-    entries = date.split(':')
-    year = entries[0]
-    month = entries[1]
-    month += '-' + months[month]
-    day = entries[2]
+    date_array, time_array = str(date_string).split()
+    date_entries = date_array.split(':')
+    time_entries = time_array.split(':')
+    year = int(date_entries[0])
+    month = int(date_entries[1])
+    day = int(date_entries[2])
 
-    return year, month, day
+    hour = int(time_entries[0])
+    minute = int(time_entries[1])
+    second = int(time_entries[2])
+
+    return datetime(year, month, day, hour, minute, second)
 
 
-def parse_date_tstamp(fname, day_begins):
+def parse_date_tstamp(fname):
     """extract date info from file timestamp"""
 
     # time of last modification
@@ -45,20 +52,21 @@ def parse_date_tstamp(fname, day_begins):
     else:
         creation_time = get_creation_time(fname)
 
-    date = time.gmtime(creation_time)
-    year = str(date.tm_year)
-    month = '{0:02d}'.format(date.tm_mon)
-    month += '-' + months[month]
-    day = '{0:02d}'.format(date.tm_mday)
+    return datetime.fromtimestamp(creation_time)
+
+
+def year_month_day(date, day_begins):
 
     # check for early hour photos to be grouped with previous day
-    if date.tm_hour < day_begins:
+    if date.hour < day_begins:
+        newdate = date - timedelta(hours=date.hour+1)  # push it to the day before for classificiation purposes
+    else:
+        newdate = date
 
-        date = time.gmtime(creation_time - (date.tm_hour+1)*3600)  # push it to the day before for classificiation purposes
-        year = str(date.tm_year)
-        month = '{0:02d}'.format(date.tm_mon)
-        month += '-' + months[month]
-        day = '{0:02d}'.format(date.tm_mday)
+    year = str(newdate.year)
+    month = '{0:02d}'.format(newdate.month)
+    month += '-' + months[month]
+    day = '{0:02d}'.format(newdate.day)
 
     return year, month, day
 
@@ -163,7 +171,7 @@ def sortPhotos(src_dir, dest_dir, extensions, sort_type, move_files, removeDupli
         idx += 1
 
         if ignore_exif:
-            year, month, day = parse_date_tstamp(src_file, day_begins)
+            date = parse_date_tstamp(src_file)
 
         else:
             # open file
@@ -173,18 +181,19 @@ def sortPhotos(src_dir, dest_dir, extensions, sort_type, move_files, removeDupli
 
             # look for date in EXIF data
             if 'EXIF DateTimeDigitized' in tags and valid_date(tags['EXIF DateTimeDigitized']):
-                year, month, day = parse_date_exif(tags['EXIF DateTimeDigitized'])
+                date = parse_date_exif(tags['EXIF DateTimeDigitized'])
 
             elif 'EXIF DateTimeOriginal' in tags and valid_date(tags['EXIF DateTimeOriginal']):
-                year, month, day = parse_date_exif(tags['EXIF DateTimeOriginal'])
+                date = parse_date_exif(tags['EXIF DateTimeOriginal'])
 
             elif 'Image DateTime' in tags and valid_date(tags['Image DateTime']):
-                year, month, day = parse_date_exif(tags['Image DateTime'])
+                date = parse_date_exif(tags['Image DateTime'])
 
             else:  # use file time stamp if no valid EXIF data
-                year, month, day = parse_date_tstamp(src_file, day_begins)
+                date = parse_date_tstamp(src_file)
 
 
+        year, month, day = year_month_day(date, day_begins)
 
         # create year directory if necessary
         dest_file = os.path.join(dest_dir, year)
