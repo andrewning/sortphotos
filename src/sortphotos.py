@@ -181,6 +181,8 @@ def sortPhotos(src_dir, dest_dir, extensions, sort_type, move_files, removeDupli
 
             tags = exifread.process_file(f, details=False)
 
+            f.close()
+
             # look for date in EXIF data
             if 'EXIF DateTimeDigitized' in tags and valid_date(tags['EXIF DateTimeDigitized']):
                 date = parse_date_exif(tags['EXIF DateTimeDigitized'])
