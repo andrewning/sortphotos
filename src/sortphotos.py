@@ -14,7 +14,6 @@ import shutil
 import fnmatch
 import subprocess
 import filecmp
-import glob
 from datetime import datetime, timedelta
 
 import exifread
@@ -68,7 +67,7 @@ def year_month_day(date, day_begins):
     month = '{0:02d}'.format(newdate.month)
     month += '-' + months[month]
     day = '{0:02d}'.format(newdate.day)
-    week = '{0:02d}'.format(int(date.strftime("%W")) + 1) # +1 sinc strftime("%W") starts at 0
+    week = '{0:02d}'.format(int(date.strftime("%W")) + 1)  # +1 sinc strftime("%W") starts at 0
 
     return year, month, day, week
 
