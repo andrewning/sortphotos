@@ -73,11 +73,18 @@ def year_month_day(date, day_begins):
 
 
 def valid_date(date):
-    """check if date is not zero time"""
+    """check if date is not zero time and matches correct EXIF format: YYYY:MM:DD HH:MM:SS"""
 
-    elts = str(date).split(':')
-    if len(elts) > 0 and elts[0] > '0000':
-        return True
+    elements = str(date).strip().split()
+    if len(elements) == 2:
+        date_entries = elements[0].split(':')
+        time_entries = elements[1].split(':')
+
+        valid_date = len(date_entries) == 3 and date_entries[0] > '0000'
+        valid_time = len(time_entries) == 3
+
+        return valid_date and valid_time
+
     else:
         return False
 
