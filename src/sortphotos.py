@@ -84,6 +84,8 @@ def valid_date(date):
 
     elements = str(date).strip().split()
 
+    if (len(elements)) < 1:
+        return False
     date_entries = elements[0].split(':')
     valid_date = len(date_entries) == 3 and date_entries[0] > '0000'
     valid_time = True
