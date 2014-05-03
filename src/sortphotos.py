@@ -190,11 +190,11 @@ def sortPhotos(src_dir, dest_dir, extensions, sort_type, move_files, removeDupli
             f.close()
 
             # look for date in EXIF data
-            if 'EXIF DateTimeDigitized' in tags and valid_date(tags['EXIF DateTimeDigitized']):
-                date = parse_date_exif(tags['EXIF DateTimeDigitized'])
-
-            elif 'EXIF DateTimeOriginal' in tags and valid_date(tags['EXIF DateTimeOriginal']):
+            if 'EXIF DateTimeOriginal' in tags and valid_date(tags['EXIF DateTimeOriginal']):
                 date = parse_date_exif(tags['EXIF DateTimeOriginal'])
+
+            elif 'EXIF DateTimeDigitized' in tags and valid_date(tags['EXIF DateTimeDigitized']):
+                date = parse_date_exif(tags['EXIF DateTimeDigitized'])
 
             elif 'Image DateTime' in tags and valid_date(tags['Image DateTime']):
                 date = parse_date_exif(tags['Image DateTime'])
