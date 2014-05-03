@@ -62,7 +62,7 @@ def parse_date_tstamp(fname):
     return datetime.fromtimestamp(creation_time)
 
 
-def year_month_day(date, day_begins):
+def year_month_day(date, day_begins, short_month):
 
     # check for early hour photos to be grouped with previous day
     if date.hour < day_begins:
@@ -72,7 +72,8 @@ def year_month_day(date, day_begins):
 
     year = str(newdate.year)
     month = '{0:02d}'.format(newdate.month)
-    month += '-' + months[month]
+    if not short_month:
+        month += '-' + months[month]
     day = '{0:02d}'.format(newdate.day)
     week = '{0:02d}'.format(int(date.strftime("%W")) + 1)  # +1 sinc strftime("%W") starts at 0
 
@@ -136,7 +137,7 @@ SortType = enum('Year', 'YearMonth', 'YearMonthDay', 'YearWeek')
 # --------- main script -----------------
 
 def sortPhotos(src_dir, dest_dir, extensions, sort_type, move_files, removeDuplicates,
-               ignore_exif, day_begins):
+               ignore_exif, day_begins, short_month):
 
 
     # some error checking
@@ -210,7 +211,7 @@ def sortPhotos(src_dir, dest_dir, extensions, sort_type, move_files, removeDupli
                 date = parse_date_tstamp(src_file)
 
 
-        year, month, day, week = year_month_day(date, day_begins)
+        year, month, day, week = year_month_day(date, day_begins, short_month)
 
         # create year directory if necessary
         dest_file = os.path.join(dest_dir, year)
@@ -294,6 +295,8 @@ if __name__ == '__main__':
     parser.add_argument('--day-begins', type=int, default=0, help='hour of day that new day begins (0-23), \
                         defaults to 0 which corresponds to midnight.  Useful for gropuing pictures with \
                         previous day.')
+    parser.add_argument('--short-month', action='store_true',
+                        help='include only month number in the destination folder path')
 
 
     # parse command line arguments
@@ -309,7 +312,7 @@ if __name__ == '__main__':
         sort_type = SortType.YearWeek
 
     sortPhotos(args.src_dir, args.dest_dir, args.extensions, sort_type,
-              args.move, not args.keep_duplicates, args.ignore_exif, args.day_begins)
+              args.move, not args.keep_duplicates, args.ignore_exif, args.day_begins, args.short_month)
 
 
 
