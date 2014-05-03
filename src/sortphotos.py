@@ -29,16 +29,23 @@ def parse_date_exif(date_string):
     YYYY:MM:DD HH:MM:SS
     """
 
-    date_array, time_array = str(date_string).split()
-    date_entries = date_array.split(':')
-    time_entries = time_array.split(':')
+    elements = str(date_string).strip().split()
+
+    date_entries = elements[0].split(':')
     year = int(date_entries[0])
     month = int(date_entries[1])
     day = int(date_entries[2])
 
-    hour = int(time_entries[0])
-    minute = int(time_entries[1])
-    second = int(time_entries[2])
+    if len(elements) > 1:
+        time_entries = elements[1].split(':')
+        hour = int(time_entries[0])
+        minute = int(time_entries[1])
+        second = int(time_entries[2])
+
+    else:
+        hour = 12  # defaulting to noon if no time data provided
+        minute = 0
+        second = 0
 
     return datetime(year, month, day, hour, minute, second)
 
@@ -76,17 +83,15 @@ def valid_date(date):
     """check if date is not zero time and matches correct EXIF format: YYYY:MM:DD HH:MM:SS"""
 
     elements = str(date).strip().split()
-    if len(elements) == 2:
-        date_entries = elements[0].split(':')
-        time_entries = elements[1].split(':')
 
-        valid_date = len(date_entries) == 3 and date_entries[0] > '0000'
-        valid_time = len(time_entries) == 3
+    date_entries = elements[0].split(':')
+    valid_date = len(date_entries) == 3 and date_entries[0] > '0000'
+    valid_time = True
 
-        return valid_date and valid_time
+    if len(elements) > 1:
+        valid_time = len(elements[1].split(':')) == 3
 
-    else:
-        return False
+    return valid_date and valid_time
 
 
 # Courtesy of Alec Thomas (http://stackoverflow.com/questions/36932/whats-the-best-way-to-implement-an-enum-in-python)
