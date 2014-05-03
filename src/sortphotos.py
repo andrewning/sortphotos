@@ -14,6 +14,7 @@ import shutil
 import fnmatch
 import subprocess
 import filecmp
+import glob
 from datetime import datetime, timedelta
 
 import exifread
@@ -67,8 +68,9 @@ def year_month_day(date, day_begins):
     month = '{0:02d}'.format(newdate.month)
     month += '-' + months[month]
     day = '{0:02d}'.format(newdate.day)
+    week = '{0:02d}'.format(int(date.strftime("%W")) + 1) # +1 sinc strftime("%W") starts at 0
 
-    return year, month, day
+    return year, month, day, week
 
 
 def valid_date(date):
@@ -110,7 +112,7 @@ months = {'01': 'JAN', '02': 'FEB', '03': 'MAR', '04': 'APR', '05': 'MAY',
           '06': 'JUN', '07': 'JUL', '08': 'AUG', '09': 'SEP', '10': 'OCT',
           '11': 'NOV', '12': 'DEC'}
 
-SortType = enum('Year', 'YearMonth', 'YearMonthDay')
+SortType = enum('Year', 'YearMonth', 'YearMonthDay', 'YearWeek')
 
 # ----------------------------------
 
@@ -179,6 +181,8 @@ def sortPhotos(src_dir, dest_dir, extensions, sort_type, move_files, removeDupli
 
             tags = exifread.process_file(f, details=False)
 
+            f.close()
+
             # look for date in EXIF data
             if 'EXIF DateTimeDigitized' in tags and valid_date(tags['EXIF DateTimeDigitized']):
                 date = parse_date_exif(tags['EXIF DateTimeDigitized'])
@@ -193,7 +197,7 @@ def sortPhotos(src_dir, dest_dir, extensions, sort_type, move_files, removeDupli
                 date = parse_date_tstamp(src_file)
 
 
-        year, month, day = year_month_day(date, day_begins)
+        year, month, day, week = year_month_day(date, day_begins)
 
         # create year directory if necessary
         dest_file = os.path.join(dest_dir, year)
@@ -209,6 +213,12 @@ def sortPhotos(src_dir, dest_dir, extensions, sort_type, move_files, removeDupli
         # create day directory if necessary
         if sort_type == SortType.YearMonthDay:
             dest_file = os.path.join(dest_file, day)
+            if not os.path.exists(dest_file):
+                os.makedirs(dest_file)
+
+        # create week directory if necessary
+        if sort_type == SortType.YearWeek:
+            dest_file = os.path.join(dest_file, week)
             if not os.path.exists(dest_file):
                 os.makedirs(dest_file)
 
@@ -259,12 +269,12 @@ if __name__ == '__main__':
     parser.add_argument('src_dir', type=str, help='source directory (searched recursively)')
     parser.add_argument('dest_dir', type=str, help='destination directory')
     parser.add_argument('-m', '--move', action='store_true', help='move files instead of copy')
-    parser.add_argument('-s', '--sort', type=str, choices=['y', 'm', 'd'], default='m',
-                        help='choose destination folder structure\n\ty: sort by year\n\tm: sort by year then month\n\td: sort by year then month then day')
+    parser.add_argument('-s', '--sort', type=str, choices=['y', 'm', 'd', 'w'], default='m',
+                        help='choose destination folder structure\n\ty: sort by year\n\tm: sort by year then month\n\td: sort by year then month then day\n\tw: sort by year then week')
     parser.add_argument('--keep-duplicates', action='store_true',
                         help='If file is a duplicate keep it anyway (after renmaing).')
     parser.add_argument('--extensions', type=str, nargs='+',
-                        default=['jpg', 'jpeg', 'tiff', 'avi', 'mov', 'mp4'],
+                        default=['jpg', 'jpeg', 'tiff', 'arw', 'avi', 'mov', 'mp4', 'mts'],
                         help='file types to sort')
     parser.add_argument('--ignore-exif', action='store_true',
                         help='always use file time stamp even if EXIF data exists')
@@ -282,6 +292,8 @@ if __name__ == '__main__':
         sort_type = SortType.YearMonth
     elif args.sort == 'd':
         sort_type = SortType.YearMonthDay
+    elif args.sort == 'w':
+        sort_type = SortType.YearWeek
 
     sortPhotos(args.src_dir, args.dest_dir, args.extensions, sort_type,
               args.move, not args.keep_duplicates, args.ignore_exif, args.day_begins)
