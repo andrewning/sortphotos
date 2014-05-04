@@ -19,10 +19,20 @@ There are several options that can be invoked.  For example the default behavior
 
     python sortphotos.py -m /source /destination
 
-## sort by year, month, day
-By default folders are sorted by year then month.  So for example if cool_picture.jpg was taken on June 1, 2010 the resulting directory hierarchy will look like: 2010 > June > cool_picture.jpg.  You can choose to sort only by year ``--sort y``, by year then month ``--sort m`` (default), or by year then month then day ``--sort d``.  So for example to move your files (rather than copy) and sort by year, month and day you would call
+## sort in directories
+By default folders are sorted by year then month, with both the month number and name.  So for example if cool_picture.jpg was taken on June 1, 2010 the resulting directory hierarchy will look like: 2010 > 06-Jun > cool_picture.jpg.  However, you can customize the sorting style almost anyway you want.  The script takes an optional argument ``-s`` or ``--sort``, which accepts a format string using the conventions described [here](https://docs.python.org/2/library/datetime.html#strftime-and-strptime-behavior).  To separate by subdirectory, just use a forward slash (even if you are on Windows).    So for example, the default sorting behavior (2010/06-Jun) is equivalent to:
 
-    python sortphotos.py -m --sort d /source /destination
+    python sortphotos.py --sort %Y/%m-%b
+
+ Or you could sort just by month, but with the month full name (June):
+
+    python sortphotos.py --sort %B
+
+Or you can sort by year without century, then week number, then an abbreviated day of the week (10/23/Sun)
+
+    python sortphotos.py --sort %y/%U/%a
+
+The possibilities go on and on.
 
 ## duplicate removal
 SortPhotos will *always* check to make sure something with the same file name doesn't already exist where it's trying to write, so that you don't unintentionally overwrite a file. It this occurs it will append a number on the end of the file.  So for example if photo.jpg was taken on June 1, 2010 but 2010 > June > photo.jpg already exists then the new file will be copied as photo_1.jpg and so on.  SortPhotos will go one step further and if it finds a file of the same name, it will then run a file compare to see if the files are actually the same.  If they are *exactly* the same, it will just skip the copy (or move) operation.  This will prevent you from having duplicate files.  However you have the option of turning this off (not the name comparison, that will always happen, just the weeding out of duplicates).  This option would be useful, for example, if you are copying over a bunch of new photos that you are sure don't already exist in your organized collection of photos.  It's a little faster to skip duplicate detection.   Invoke the option ``--keep-duplicates`` in order to skip duplicate detection.
@@ -30,7 +40,7 @@ SortPhotos will *always* check to make sure something with the same file name do
     python sortphotos.py --keep-duplicates /source /destination
 
 ## choose which file types to search for
-You can restrict what types of files SortPhotos looks for in your source directory.  By default it only looks for the most common photo and video containers ('jpg', 'tiff', 'avi', 'mov').  You can change this behavior through the ``extensions`` argument.  Note that it is not case sensitive so if you specify 'jpg' as an extension it will search for both jpg and JPG files or even jPg files.  For example say you want to copy and sort only the *.gif and *.avi files you would call
+You can restrict what types of files SortPhotos looks for in your source directory.  By default it only looks for the most common photo and video containers ('jpg', 'jpeg', 'tiff', 'arw', 'avi', 'mov', 'mp4', 'mts').  You can change this behavior through the ``extensions`` argument.  Note that it is not case sensitive so if you specify 'jpg' as an extension it will search for both jpg and JPG files or even jPg files.  For example say you want to copy and sort only the *.gif and *.avi files you would call
 
     python sortphotos.py /source /destination --extensions gif avi
 
