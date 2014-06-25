@@ -108,6 +108,33 @@ def get_creation_time(path):
     else:
         return int(p.stdout.read())
 
+def rename_file(src_file, dest_file, title_pattern):	
+    title, ext = os.path.splitext(os.path.basename(src_file))
+    created = get_date(src_file)
+    created_str = created.strftime('%b %d %H-%M-%S %Y')
+    return os.path.join(os.path.dirname(dest_file), title_pattern % created_str + ext)
+
+def get_date(src_file):
+    # open file
+    f = open(src_file, 'rb')
+
+    tags = exifread.process_file(f, details=False)
+
+    f.close()
+
+    # look for date in EXIF data
+    if 'EXIF DateTimeOriginal' in tags and valid_date(tags['EXIF DateTimeOriginal']):
+        return parse_date_exif(tags['EXIF DateTimeOriginal'])
+
+    elif 'EXIF DateTimeDigitized' in tags and valid_date(tags['EXIF DateTimeDigitized']):
+        return parse_date_exif(tags['EXIF DateTimeDigitized'])
+
+    elif 'Image DateTime' in tags and valid_date(tags['Image DateTime']):
+        return parse_date_exif(tags['Image DateTime'])
+
+    else:  # use file time stamp if no valid EXIF data
+        return parse_date_tstamp(src_file)
+
 # ---------------------------------------
 
 
@@ -116,7 +143,7 @@ def get_creation_time(path):
 # --------- main script -----------------
 
 def sortPhotos(src_dir, dest_dir, extensions, sort_format, move_files, removeDuplicates,
-               ignore_exif, day_begins):
+               ignore_exif, day_begins, rename):
 
 
     # some error checking
@@ -169,25 +196,7 @@ def sortPhotos(src_dir, dest_dir, extensions, sort_format, move_files, removeDup
             date = parse_date_tstamp(src_file)
 
         else:
-            # open file
-            f = open(src_file, 'rb')
-
-            tags = exifread.process_file(f, details=False)
-
-            f.close()
-
-            # look for date in EXIF data
-            if 'EXIF DateTimeOriginal' in tags and valid_date(tags['EXIF DateTimeOriginal']):
-                date = parse_date_exif(tags['EXIF DateTimeOriginal'])
-
-            elif 'EXIF DateTimeDigitized' in tags and valid_date(tags['EXIF DateTimeDigitized']):
-                date = parse_date_exif(tags['EXIF DateTimeDigitized'])
-
-            elif 'Image DateTime' in tags and valid_date(tags['Image DateTime']):
-                date = parse_date_exif(tags['Image DateTime'])
-
-            else:  # use file time stamp if no valid EXIF data
-                date = parse_date_tstamp(src_file)
+           date = get_date(src_file)
 
 
         # early morning photos can be grouped with previous day (depending on user setting)
@@ -203,7 +212,10 @@ def sortPhotos(src_dir, dest_dir, extensions, sort_format, move_files, removeDup
                 os.makedirs(dest_file)
 
         # setup destination file
+        basename = os.path.basename(src_file)
+        
         dest_file = os.path.join(dest_file, os.path.basename(src_file))
+        dir_name = os.path.dirname(dest_file)
         root, ext = os.path.splitext(dest_file)
 
         # check for collisions
@@ -227,12 +239,19 @@ def sortPhotos(src_dir, dest_dir, extensions, sort_format, move_files, removeDup
 
         # finally move or copy the file
         if move_files:
-            os.rename(src_file, dest_file)
+            if rename:
+                os.rename(src_file, rename_file(src_file, dest_file, rename))
+            else:
+                os.rename(src_file, dest_file)
         else:
             if fileIsIdentical:
                 continue  # if file is same, we just ignore it (for copy option)
             else:
-                shutil.copy2(src_file, dest_file)
+                if rename:
+                    new_name = rename_file(src_file, dest_file, rename)
+                    shutil.copy2(src_file, new_name)
+                else:
+                    shutil.copy2(src_file, dest_file)
 
 
     print
@@ -258,19 +277,21 @@ with both the month number and name (e.g., 2012/12-Feb).")
     parser.add_argument('--keep-duplicates', action='store_true',
                         help='If file is a duplicate keep it anyway (after renmaing).')
     parser.add_argument('--extensions', type=str, nargs='+',
-                        default=['jpg', 'jpeg', 'tiff', 'arw', 'avi', 'mov', 'mp4', 'mts'],
+                        default=['jpg', 'jpeg', 'tiff', 'arw', 'avi', 'mov', 'mp4', 'mts', 'dng'],
                         help='file types to sort')
     parser.add_argument('--ignore-exif', action='store_true',
                         help='always use file time stamp even if EXIF data exists')
     parser.add_argument('--day-begins', type=int, default=0, help='hour of day that new day begins (0-23), \n\
 defaults to 0 which corresponds to midnight.  Useful for grouping pictures with previous day.')
+    parser.add_argument('--rename', type=str,
+                        help='The pattern to rename to')
 
 
     # parse command line arguments
     args = parser.parse_args()
 
     sortPhotos(args.src_dir, args.dest_dir, args.extensions, args.sort,
-              args.move, not args.keep_duplicates, args.ignore_exif, args.day_begins)
+              args.move, not args.keep_duplicates, args.ignore_exif, args.day_begins, args.rename)
 
 
 
