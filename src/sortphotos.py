@@ -227,7 +227,7 @@ def sortPhotos(src_dir, dest_dir, extensions, sort_format, move_files, removeDup
 
         # finally move or copy the file
         if move_files:
-            os.rename(src_file, dest_file)
+            shutil.move(src_file, dest_file)
         else:
             if fileIsIdentical:
                 continue  # if file is same, we just ignore it (for copy option)
