@@ -14,7 +14,8 @@ import shutil
 import fnmatch
 import subprocess
 import filecmp
-from datetime import datetime, timedelta
+import re
+from datetime import datetime, timedelta, date
 
 import exifread
 
@@ -22,6 +23,11 @@ import exifread
 
 
 # -------- convenience methods -------------
+
+bigMedian = re.compile('\D(?P<year>19\d{2}|20\d{2})[.\/ \-]?(?:(?P<month>0[1-9]|1[0-2])[.\/ \-]?(?P<day>\d{2}))\D') #Big Endian
+middleMedian = re.compile('\D(?P<month>0[1-9]|1[0-2])[.\/ \-]?(?P<day>\d{2})[.\/ \-]?(?P<year>19\d{2}|20\d{2})\D')  #Middle Endian
+littleMedian = re.compile('\D(?P<day>\d{2})[.\/ \-]?(?P<month>0[1-9]|1[0-2])[.\/ \-]?(?P<year>19\d{2}|20\d{2})\D') #Low Endian
+time =  re.compile('\D(?P<hours>[0-1]\d|2[0-3])(?P<minutes>[0-5]\d)(?P<seconds>[0-5]\d)\D') #HHMMSS
 
 def parse_date_exif(date_string):
     """
@@ -49,7 +55,55 @@ def parse_date_exif(date_string):
 
     return datetime(year, month, day, hour, minute, second)
 
+def parse_filename_tstamp(flags,fname):
+    """extract date from filaname"""
+    #remove the path to get the basename
+    fname = os.path.basename(fname)
+    year = None
+    month = None
+    day = None
+    hours = None
+    minutes = None
+    seconds = None
 
+    if 'l' in flags or 'L' in flags:
+        r = littleMedian.search(fname)
+        if r:
+            year = int(r.group('year'))
+            month = int(r.group('month'))
+            day = int(r.group('day'))            
+
+    if 'm' in flags or 'M' in flags:
+        r = middleMedian.search(fname)
+        if r:
+            year = int(r.group('year'))
+            month = int(r.group('month'))
+            day = int(r.group('day'))            
+
+    if 'b' in flags or 'B' in flags:
+        r = bigMedian.search(fname)
+        if r:
+            year = int(r.group('year'))
+            month = int(r.group('month'))
+            day = int(r.group('day'))            
+
+    """extract time from filaname"""
+    if 't' in flags or 'T' in flags:
+        r = time.search(fname)
+        if r:
+            hours = int(r.group('hours'))
+            minutes = int(r.group('minutes'))
+            seconds = int(r.group('seconds'))            
+
+    d = None
+    if year is not None:
+        if hours is not None:
+            return datetime(year,month,day,hours,minutes,seconds)
+        return datetime(year,month,day)
+
+    return False
+
+    
 def parse_date_tstamp(fname):
     """extract date info from file timestamp"""
 
@@ -116,7 +170,7 @@ def get_creation_time(path):
 # --------- main script -----------------
 
 def sortPhotos(src_dir, dest_dir, extensions, sort_format, move_files, removeDuplicates,
-               ignore_exif, day_begins):
+               ignore_exif, day_begins,filename_parse):
 
 
     # some error checking
@@ -166,7 +220,12 @@ def sortPhotos(src_dir, dest_dir, extensions, sort_format, move_files, removeDup
         idx += 1
 
         if ignore_exif:
-            date = parse_date_tstamp(src_file)
+            if filename_parse != None:
+                date = parse_filename_tstamp(filename_parse,src_file)
+                if date is False:
+                    date = parse_date_tstamp(src_file)
+            else:
+                date = parse_date_tstamp(src_file)
 
         else:
             # open file
@@ -175,7 +234,6 @@ def sortPhotos(src_dir, dest_dir, extensions, sort_format, move_files, removeDup
             tags = exifread.process_file(f, details=False)
 
             f.close()
-
             # look for date in EXIF data
             if 'EXIF DateTimeOriginal' in tags and valid_date(tags['EXIF DateTimeOriginal']):
                 date = parse_date_exif(tags['EXIF DateTimeOriginal'])
@@ -187,7 +245,14 @@ def sortPhotos(src_dir, dest_dir, extensions, sort_format, move_files, removeDup
                 date = parse_date_exif(tags['Image DateTime'])
 
             else:  # use file time stamp if no valid EXIF data
-                date = parse_date_tstamp(src_file)
+                if filename_parse != None:
+                    date = parse_filename_tstamp(filename_parse,src_file)
+
+                    if date is False:
+                        date = parse_date_tstamp(src_file)
+                else:
+                    date = parse_date_tstamp(src_file)
+                
 
 
         # early morning photos can be grouped with previous day (depending on user setting)
@@ -260,6 +325,12 @@ with both the month number and name (e.g., 2012/12-Feb).")
     parser.add_argument('--extensions', type=str, nargs='+',
                         default=['jpg', 'jpeg', 'tiff', 'arw', 'avi', 'mov', 'mp4', 'mts'],
                         help='file types to sort')
+    parser.add_argument('--filename-parse',type=str,default=None,help="check for date in filename before filesystem creation date,\n\
+    L or l for little median (DDMMYYYY)\n\
+    M or m for Middle median (MMDDYYYY)\n\
+    B or b for Big median (YYYYMMDD)\n\
+    T or t for time in the day (HHMMSS)\n\
+WARNING:you can use multiple flag but if you mix L M and B tags except somes bas results")
     parser.add_argument('--ignore-exif', action='store_true',
                         help='always use file time stamp even if EXIF data exists')
     parser.add_argument('--day-begins', type=int, default=0, help='hour of day that new day begins (0-23), \n\
@@ -270,7 +341,7 @@ defaults to 0 which corresponds to midnight.  Useful for grouping pictures with 
     args = parser.parse_args()
 
     sortPhotos(args.src_dir, args.dest_dir, args.extensions, args.sort,
-              args.move, not args.keep_duplicates, args.ignore_exif, args.day_begins)
+              args.move, not args.keep_duplicates, args.ignore_exif, args.day_begins,args.filename_parse)
 
 
 
