@@ -219,6 +219,8 @@ def log(str):
 def sortPhotos(src_dir, dest_dir, extensions, sort_format, move_files, removeDuplicates,
                ignore_exif, day_begins,filename_parse):
 
+    if args.simulate:
+        log("[SIMULATE MODE] nothing will be moved or copied")
 
     # some error checking
     if not os.path.exists(src_dir):
@@ -329,6 +331,7 @@ def sortPhotos(src_dir, dest_dir, extensions, sort_format, move_files, removeDup
         # setup destination file
         dest_file = os.path.join(dest_file, os.path.basename(src_file))
         root, ext = os.path.splitext(dest_file)
+        log("destination file :"+dest_file)
 
         # check for collisions
         append = 1
@@ -352,20 +355,31 @@ def sortPhotos(src_dir, dest_dir, extensions, sort_format, move_files, removeDup
 
 
         # finally move or copy the file
-        if move_files:
-            if fileIsIdentical:
-                log("ignoring moving file")
-                continue  # if file is same, we just ignore it 
-            shutil.move(src_file, dest_file)
-            log("file moved to "+dest_file)
-        else:
-            if fileIsIdentical:
-                log("ignoring copying file")
-                continue  # if file is same, we just ignore it
+        if not args.simulate:
+            if move_files:
+                if fileIsIdentical:
+                    log("ignoring moving file")
+                    continue  # if file is same, we just ignore it 
+                shutil.move(src_file, dest_file)
+                log("file moved to "+dest_file)
             else:
-                shutil.copy2(src_file, dest_file)
-                log("file copied to "+dest_file)
-
+                if fileIsIdentical:
+                    log("ignoring copying file")
+                    continue  # if file is same, we just ignore it
+                else:
+                    shutil.copy2(src_file, dest_file)
+                    log("file copied to "+dest_file)
+        else:
+            if move_files:
+                if fileIsIdentical:
+                    log("ignoring moving file")
+                else:
+                    log("[SIMULATE]file moved to "+dest_file)
+            else:
+                if fileIsIdentical:
+                    log("ignoring copying file")
+                else:
+                    log("[SIMULATE]file copied to "+dest_file)
 
     print
 
@@ -400,6 +414,7 @@ with both the month number and name (e.g., 2012/12-Feb).")
     A or a for ask anytime a date is found (useful when you have multiple medians in your files)\n\
 WARNING:you can use multiple flags but if you mix L M and B tags except somes bad results")
     parser.add_argument('-v','--verbose',default=False,action='store_true',help="verbose mode")
+    parser.add_argument('--simulate',default=False,action='store_true',help="Simulation mode (and verbose)")
     parser.add_argument('--ignore-exif', action='store_true',
                         help='always use file time stamp even if EXIF data exists')
     parser.add_argument('--day-begins', type=int, default=0, help='hour of day that new day begins (0-23), \n\
@@ -408,6 +423,11 @@ defaults to 0 which corresponds to midnight.  Useful for grouping pictures with 
 
     # parse command line arguments
     args = parser.parse_args()
+
+    #set verbose if simulate is on
+    if args.simulate:
+        args.verbose = True
+
 
     sortPhotos(args.src_dir, args.dest_dir, args.extensions, args.sort,
               args.move, not args.keep_duplicates, args.ignore_exif, args.day_begins,args.filename_parse)
