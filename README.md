@@ -66,6 +66,21 @@ If you are taking photos for an event that goes past midnight, you might want th
 ``--day-begins 4``  
 The argument to the flag should be an integer between 0-23 corresponding to the hours of the day starting at midnight.
 
+## retrieve date from filename before system creation date
+If you want to get date from the filename (like IMG_22032013.jpg) you can use --filename-parse with one of the following flags
+
+* L or l for little median (DDMMYYYY)
+* M or m for middle median (MMDDYYYY)
+* B or b for big median (YYYYMMDD)
+* T or t for time in the day (HHMMSS)
+* A or a for ask anytime several dates are found in the filename (like 12042014 can be 12th April or 4th December)
+
+## verboserse mode
+If you want to output informations, use the -v --verbose 
+
+## simulation mode
+If you want to test your combinaison of flags before moving/copying your files you can add --simulation to output every informations that should happen without actually do them
+
 # Automation
 
 *Note while sortphotos.py was written in a cross-platform way, the following instructions for automation are specific to OS X.  For other operating systems there are of course ways to schedule tasks or submit cron jobs, but I will leave that as an exercise to the reader.*
