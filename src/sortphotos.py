@@ -56,38 +56,17 @@ def parse_date_exif(date_string):
     return datetime(year, month, day, hour, minute, second)
 
 def parse_filename_tstamp(flags,fname):
-    """extract date from filaname"""
     #remove the path to get the basename
     fname = os.path.basename(fname)
-    year = None
-    month = None
-    day = None
+    littleDate = None
+    middleDate = None
+    bigDate = None
+
     hours = None
     minutes = None
     seconds = None
 
-    if 'l' in flags or 'L' in flags:
-        r = littleMedian.search(fname)
-        if r:
-            year = int(r.group('year'))
-            month = int(r.group('month'))
-            day = int(r.group('day'))            
-
-    if 'm' in flags or 'M' in flags:
-        r = middleMedian.search(fname)
-        if r:
-            year = int(r.group('year'))
-            month = int(r.group('month'))
-            day = int(r.group('day'))            
-
-    if 'b' in flags or 'B' in flags:
-        r = bigMedian.search(fname)
-        if r:
-            year = int(r.group('year'))
-            month = int(r.group('month'))
-            day = int(r.group('day'))            
-
-    """extract time from filaname"""
+    """extract time from filename"""
     if 't' in flags or 'T' in flags:
         r = time.search(fname)
         if r:
@@ -95,11 +74,74 @@ def parse_filename_tstamp(flags,fname):
             minutes = int(r.group('minutes'))
             seconds = int(r.group('seconds'))            
 
-    d = None
-    if year is not None:
-        if hours is not None:
-            return datetime(year,month,day,hours,minutes,seconds)
-        return datetime(year,month,day)
+    """extract date from filaname"""
+    if 'l' in flags or 'L' in flags:
+        r = littleMedian.search(fname)
+        if r:
+          littleDate = datetime(int(r.group('year')),int(r.group('month')),int(r.group('day')))          
+          if hours is not None:
+              littleDate = littleDate.replace(hour=hours,minute=minutes,second=seconds)
+
+    if 'm' in flags or 'M' in flags:
+        r = middleMedian.search(fname)
+        if r:
+          middleDate = datetime(int(r.group('year')),int(r.group('month')),int(r.group('day')))          
+          if hours is not None:
+              middleDate = middleDate.replace(hour=hours,minute=minutes,second=seconds)
+
+    if 'b' in flags or 'B' in flags:
+        r = bigMedian.search(fname)
+        if r:
+          bigDate = datetime(int(r.group('year')),int(r.group('month')),int(r.group('day')))          
+          if hours is not None:
+              bigDate = bigDate.replace(hour=hours,minute=minutes,second=seconds)
+
+    if 'a' in flags or 'A' in flags:
+        inc = 0
+        arrayDate = []
+        if littleDate is not None:
+            arrayDate.append(littleDate)
+        if middleDate is not None:
+            arrayDate.append(middleDate)
+        if bigDate is not None:
+            arrayDate.append(bigDate)
+
+        if len(arrayDate) == 1:
+            return arrayDate[0]
+        if len(arrayDate) == 0:
+            return False
+
+        sys.stdout.write("\r\nfile: "+fname+"\r\n")
+        if littleDate is not None:
+            inc = inc + 1
+            sys.stdout.write(str(inc)+")Little Median: "+littleDate.strftime("%a, %d %b %Y %H:%M:%S")+"\r\n")
+        if middleDate is not None:
+            inc = inc + 1
+            sys.stdout.write(str(inc)+")Middle Median: "+middleDate.strftime("%a, %d %b %Y %H:%M:%S")+"\r\n")
+        if bigDate is not None:
+            inc = inc + 1
+            sys.stdout.write(str(inc)+")Big Median: "+bigDate.strftime("%a, %d %b %Y %H:%M:%S")+"\r\n")
+
+        while (True):
+            r = raw_input("Please choose between choice (default 1): ")
+            if not r :
+                return arrayDate[0]
+            
+            if (r.isdigit() is False and r) or (int(r) < 1 or int(r) > inc):
+                sys.stdout.write("\r\n"+r+" is not a valid choice\r\n")
+                continue
+            
+            return arrayDate[int(r)-1]
+
+    else:
+        #choose the first one
+        for i in range(0, len(flags)):
+            if (i is 'l' or i is 'L') and (littleDate is not None):
+                return littleDate
+            if (i is 'm' or i is 'M') and (middleDate is not None):
+                return middleDate
+            if (i is 'b' or i is 'B') and (bigDate is not None):
+                return bigDate
 
     return False
 
@@ -220,8 +262,9 @@ def sortPhotos(src_dir, dest_dir, extensions, sort_format, move_files, removeDup
         idx += 1
 
         if ignore_exif:
-            if filename_parse != None:
+            if filename_parse is not None:
                 date = parse_filename_tstamp(filename_parse,src_file)
+
                 if date is False:
                     date = parse_date_tstamp(src_file)
             else:
@@ -245,7 +288,7 @@ def sortPhotos(src_dir, dest_dir, extensions, sort_format, move_files, removeDup
                 date = parse_date_exif(tags['Image DateTime'])
 
             else:  # use file time stamp if no valid EXIF data
-                if filename_parse != None:
+                if filename_parse is not None:
                     date = parse_filename_tstamp(filename_parse,src_file)
 
                     if date is False:
@@ -330,7 +373,8 @@ with both the month number and name (e.g., 2012/12-Feb).")
     M or m for Middle median (MMDDYYYY)\n\
     B or b for Big median (YYYYMMDD)\n\
     T or t for time in the day (HHMMSS)\n\
-WARNING:you can use multiple flag but if you mix L M and B tags except somes bas results")
+    A or a for ask anytime a date is found (useful when you have multiple medians in your files)\n\
+WARNING:you can use multiple flags but if you mix L M and B tags except somes bad results")
     parser.add_argument('--ignore-exif', action='store_true',
                         help='always use file time stamp even if EXIF data exists')
     parser.add_argument('--day-begins', type=int, default=0, help='hour of day that new day begins (0-23), \n\
