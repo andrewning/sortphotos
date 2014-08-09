@@ -204,6 +204,11 @@ def get_creation_time(path):
     else:
         return int(p.stdout.read())
 
+
+def log(str):
+    if args.verbose:
+        sys.stdout.write(str+"\r\n")
+
 # ---------------------------------------
 
 
@@ -258,17 +263,21 @@ def sortPhotos(src_dir, dest_dir, extensions, sort_format, move_files, removeDup
         sys.stdout.write('\r')
         sys.stdout.write('[%-20s] %d of %d ' % ('='*numdots, idx+1, num_files))
         sys.stdout.flush()
-
         idx += 1
 
+        log("\r\nParsing file "+src_file)
+        
         if ignore_exif:
             if filename_parse is not None:
                 date = parse_filename_tstamp(filename_parse,src_file)
-
                 if date is False:
                     date = parse_date_tstamp(src_file)
+                    log("date taken from file system timestamp: "+date.strftime("%A %d. %B %Y at %H:%M:%S"))
+                else:
+                    log("date taken from filename: "+date.strftime("%A %d. %B %Y at %H:%M:%S"))
             else:
                 date = parse_date_tstamp(src_file)
+                log("date taken from file system timestamp: "+date.strftime("%A %d. %B %Y at %H:%M:%S"))
 
         else:
             # open file
@@ -280,12 +289,15 @@ def sortPhotos(src_dir, dest_dir, extensions, sort_format, move_files, removeDup
             # look for date in EXIF data
             if 'EXIF DateTimeOriginal' in tags and valid_date(tags['EXIF DateTimeOriginal']):
                 date = parse_date_exif(tags['EXIF DateTimeOriginal'])
+                log("date taken from EXIF DateTimeOriginal: "+date.strftime("%A %d. %B %Y at %H:%M:%S"))
 
             elif 'EXIF DateTimeDigitized' in tags and valid_date(tags['EXIF DateTimeDigitized']):
                 date = parse_date_exif(tags['EXIF DateTimeDigitized'])
+                log("date taken from EXIF DateTimeDigitized: "+date.strftime("%A %d. %B %Y at %H:%M:%S"))
 
             elif 'Image DateTime' in tags and valid_date(tags['Image DateTime']):
                 date = parse_date_exif(tags['Image DateTime'])
+                log("date taken from EXIF Image DateTime: "+date.strftime("%A %d. %B %Y at %H:%M:%S"))
 
             else:  # use file time stamp if no valid EXIF data
                 if filename_parse is not None:
@@ -293,8 +305,12 @@ def sortPhotos(src_dir, dest_dir, extensions, sort_format, move_files, removeDup
 
                     if date is False:
                         date = parse_date_tstamp(src_file)
+                        log("date taken from file system timestamp: "+date.strftime("%A %d. %B %Y at %H:%M:%S"))
+                    else:
+                        log("date taken from filename: "+date.strftime("%A %d. %B %Y at %H:%M:%S"))
                 else:
                     date = parse_date_tstamp(src_file)
+                    log("date taken from file system timestamp: "+date.strftime("%A %d. %B %Y at %H:%M:%S"))
                 
 
 
@@ -321,8 +337,10 @@ def sortPhotos(src_dir, dest_dir, extensions, sort_format, move_files, removeDup
         while True:
 
             if os.path.isfile(dest_file):  # check for existing name
+                log("file already exist")
                 if removeDuplicates and filecmp.cmp(src_file, dest_file):  # check for identical files
                     fileIsIdentical = True
+                    
                     break
 
                 else:  # name is same, but file is different
@@ -335,12 +353,18 @@ def sortPhotos(src_dir, dest_dir, extensions, sort_format, move_files, removeDup
 
         # finally move or copy the file
         if move_files:
+            if fileIsIdentical:
+                log("ignoring moving file")
+                continue  # if file is same, we just ignore it 
             shutil.move(src_file, dest_file)
+            log("file moved to "+dest_file)
         else:
             if fileIsIdentical:
-                continue  # if file is same, we just ignore it (for copy option)
+                log("ignoring copying file")
+                continue  # if file is same, we just ignore it
             else:
                 shutil.copy2(src_file, dest_file)
+                log("file copied to "+dest_file)
 
 
     print
@@ -375,6 +399,7 @@ with both the month number and name (e.g., 2012/12-Feb).")
     T or t for time in the day (HHMMSS)\n\
     A or a for ask anytime a date is found (useful when you have multiple medians in your files)\n\
 WARNING:you can use multiple flags but if you mix L M and B tags except somes bad results")
+    parser.add_argument('-v','--verbose',default=False,action='store_true',help="verbose mode")
     parser.add_argument('--ignore-exif', action='store_true',
                         help='always use file time stamp even if EXIF data exists')
     parser.add_argument('--day-begins', type=int, default=0, help='hour of day that new day begins (0-23), \n\
