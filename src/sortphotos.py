@@ -209,6 +209,21 @@ def log(str):
     if args.verbose:
         sys.stdout.write(str+"\r\n")
 
+
+def file_operation(src_file,dest_file,operation):
+    operationDone = operation.replace("copy","copied").replace("move","moved")
+    if args.simulate:
+        log("[SIMULATE] file "+operationDone+" to "+dest_file)
+    else:
+        if operation is "copy":
+            shutil.copy2(src_file, dest_file)
+
+        elif operation is "move":
+            shutil.move(src_file, dest_file)
+
+        log("file "+operationDone+" to "+dest_file)
+
+
 # ---------------------------------------
 
 
@@ -353,33 +368,41 @@ def sortPhotos(src_dir, dest_dir, extensions, sort_format, move_files, removeDup
             else:
                 break
 
-
         # finally move or copy the file
-        if not args.simulate:
-            if move_files:
-                if fileIsIdentical:
-                    log("ignoring moving file")
-                    continue  # if file is same, we just ignore it 
-                shutil.move(src_file, dest_file)
-                log("file moved to "+dest_file)
-            else:
-                if fileIsIdentical:
-                    log("ignoring copying file")
-                    continue  # if file is same, we just ignore it
-                else:
-                    shutil.copy2(src_file, dest_file)
-                    log("file copied to "+dest_file)
+        operation = "copy"
+        if move_files:
+            operation = "move"
+
+        if fileIsIdentical:
+            log("ignoring file because identical file exist")
         else:
-            if move_files:
-                if fileIsIdentical:
-                    log("ignoring moving file")
-                else:
-                    log("[SIMULATE]file moved to "+dest_file)
-            else:
-                if fileIsIdentical:
-                    log("ignoring copying file")
-                else:
-                    log("[SIMULATE]file copied to "+dest_file)
+            file_operation(src_file,dest_file,operation)
+
+       # if not args.simulate:
+       #     if move_files:
+       #         if fileIsIdentical:
+       #             log("ignoring moving file")
+       #             continue  # if file is same, we just ignore it 
+       #         shutil.move(src_file, dest_file)
+       #         log("file moved to "+dest_file)
+       #     else:
+       #         if fileIsIdentical:
+       #             log("ignoring copying file")
+       #             continue  # if file is same, we just ignore it
+       #         else:
+       #             shutil.copy2(src_file, dest_file)
+       #             log("file copied to "+dest_file)
+       # else:
+       #     if move_files:
+       #         if fileIsIdentical:
+       #             log("ignoring moving file")
+       #         else:
+       #             log("[SIMULATE]file moved to "+dest_file)
+       #     else:
+       #         if fileIsIdentical:
+       #             log("ignoring copying file")
+       #         else:
+       #             log("[SIMULATE]file copied to "+dest_file)
 
     print
 
