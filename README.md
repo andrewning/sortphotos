@@ -75,7 +75,7 @@ If you want to get date from the filename (like IMG_22032013.jpg) you can use --
 * T or t for time in the day (HHMMSS)
 * A or a for ask anytime several dates are found in the filename (like 12042014 can be 12th April or 4th December)
 
-## verboserse mode
+## verbose mode
 If you want to output informations, use the -v --verbose 
 
 ## simulation mode
