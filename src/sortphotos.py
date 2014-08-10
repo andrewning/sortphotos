@@ -14,7 +14,8 @@ import shutil
 import fnmatch
 import subprocess
 import filecmp
-from datetime import datetime, timedelta
+import re
+from datetime import datetime, timedelta, date
 
 import exifread
 
@@ -22,6 +23,11 @@ import exifread
 
 
 # -------- convenience methods -------------
+
+bigMedian = re.compile('\D(?P<year>19\d{2}|20\d{2})[.\/ \-]?(?:(?P<month>0[1-9]|1[0-2])[.\/ \-]?(?P<day>\d{2}))\D') #Big Endian
+middleMedian = re.compile('\D(?P<month>0[1-9]|1[0-2])[.\/ \-]?(?P<day>\d{2})[.\/ \-]?(?P<year>19\d{2}|20\d{2})\D')  #Middle Endian
+littleMedian = re.compile('\D(?P<day>\d{2})[.\/ \-]?(?P<month>0[1-9]|1[0-2])[.\/ \-]?(?P<year>19\d{2}|20\d{2})\D') #Low Endian
+time =  re.compile('\D(?P<hours>[0-1]\d|2[0-3])(?P<minutes>[0-5]\d)(?P<seconds>[0-5]\d)\D') #HHMMSS
 
 def parse_date_exif(date_string):
     """
@@ -49,7 +55,97 @@ def parse_date_exif(date_string):
 
     return datetime(year, month, day, hour, minute, second)
 
+def parse_filename_tstamp(flags,fname):
+    #remove the path to get the basename
+    fname = os.path.basename(fname)
+    littleDate = None
+    middleDate = None
+    bigDate = None
 
+    hours = None
+    minutes = None
+    seconds = None
+
+    """extract time from filename"""
+    if 't' in flags or 'T' in flags:
+        r = time.search(fname)
+        if r:
+            hours = int(r.group('hours'))
+            minutes = int(r.group('minutes'))
+            seconds = int(r.group('seconds'))            
+
+    """extract date from filaname"""
+    if 'l' in flags or 'L' in flags:
+        r = littleMedian.search(fname)
+        if r:
+          littleDate = datetime(int(r.group('year')),int(r.group('month')),int(r.group('day')))          
+          if hours is not None:
+              littleDate = littleDate.replace(hour=hours,minute=minutes,second=seconds)
+
+    if 'm' in flags or 'M' in flags:
+        r = middleMedian.search(fname)
+        if r:
+          middleDate = datetime(int(r.group('year')),int(r.group('month')),int(r.group('day')))          
+          if hours is not None:
+              middleDate = middleDate.replace(hour=hours,minute=minutes,second=seconds)
+
+    if 'b' in flags or 'B' in flags:
+        r = bigMedian.search(fname)
+        if r:
+          bigDate = datetime(int(r.group('year')),int(r.group('month')),int(r.group('day')))          
+          if hours is not None:
+              bigDate = bigDate.replace(hour=hours,minute=minutes,second=seconds)
+
+    if 'a' in flags or 'A' in flags:
+        inc = 0
+        arrayDate = []
+        if littleDate is not None:
+            arrayDate.append(littleDate)
+        if middleDate is not None:
+            arrayDate.append(middleDate)
+        if bigDate is not None:
+            arrayDate.append(bigDate)
+
+        if len(arrayDate) == 1:
+            return arrayDate[0]
+        if len(arrayDate) == 0:
+            return False
+
+        sys.stdout.write("\r\nfile: "+fname+"\r\n")
+        if littleDate is not None:
+            inc = inc + 1
+            sys.stdout.write(str(inc)+")Little Median: "+littleDate.strftime("%a, %d %b %Y %H:%M:%S")+"\r\n")
+        if middleDate is not None:
+            inc = inc + 1
+            sys.stdout.write(str(inc)+")Middle Median: "+middleDate.strftime("%a, %d %b %Y %H:%M:%S")+"\r\n")
+        if bigDate is not None:
+            inc = inc + 1
+            sys.stdout.write(str(inc)+")Big Median: "+bigDate.strftime("%a, %d %b %Y %H:%M:%S")+"\r\n")
+
+        while (True):
+            r = raw_input("Please choose between choice (default 1): ")
+            if not r :
+                return arrayDate[0]
+            
+            if (r.isdigit() is False and r) or (int(r) < 1 or int(r) > inc):
+                sys.stdout.write("\r\n"+r+" is not a valid choice\r\n")
+                continue
+            
+            return arrayDate[int(r)-1]
+
+    else:
+        #choose the first one
+        for i in range(0, len(flags)):
+            if (i is 'l' or i is 'L') and (littleDate is not None):
+                return littleDate
+            if (i is 'm' or i is 'M') and (middleDate is not None):
+                return middleDate
+            if (i is 'b' or i is 'B') and (bigDate is not None):
+                return bigDate
+
+    return False
+
+    
 def parse_date_tstamp(fname):
     """extract date info from file timestamp"""
 
@@ -108,6 +204,26 @@ def get_creation_time(path):
     else:
         return int(p.stdout.read())
 
+
+def log(str):
+    if args.verbose:
+        sys.stdout.write(str+"\r\n")
+
+
+def file_operation(src_file,dest_file,operation):
+    operationDone = operation.replace("copy","copied").replace("move","moved")
+    if args.simulate:
+        log("[SIMULATE] file "+operationDone+" to "+dest_file)
+    else:
+        if operation is "copy":
+            shutil.copy2(src_file, dest_file)
+
+        elif operation is "move":
+            shutil.move(src_file, dest_file)
+
+        log("file "+operationDone+" to "+dest_file)
+
+
 # ---------------------------------------
 
 
@@ -116,8 +232,10 @@ def get_creation_time(path):
 # --------- main script -----------------
 
 def sortPhotos(src_dir, dest_dir, extensions, sort_format, move_files, removeDuplicates,
-               ignore_exif, day_begins):
+               ignore_exif, day_begins,filename_parse):
 
+    if args.simulate:
+        log("[SIMULATE MODE] nothing will be moved or copied")
 
     # some error checking
     if not os.path.exists(src_dir):
@@ -162,11 +280,21 @@ def sortPhotos(src_dir, dest_dir, extensions, sort_format, move_files, removeDup
         sys.stdout.write('\r')
         sys.stdout.write('[%-20s] %d of %d ' % ('='*numdots, idx+1, num_files))
         sys.stdout.flush()
-
         idx += 1
 
+        log("\r\nParsing file "+src_file)
+        
         if ignore_exif:
-            date = parse_date_tstamp(src_file)
+            if filename_parse is not None:
+                date = parse_filename_tstamp(filename_parse,src_file)
+                if date is False:
+                    date = parse_date_tstamp(src_file)
+                    log("date taken from file system timestamp: "+date.strftime("%A %d. %B %Y at %H:%M:%S"))
+                else:
+                    log("date taken from filename: "+date.strftime("%A %d. %B %Y at %H:%M:%S"))
+            else:
+                date = parse_date_tstamp(src_file)
+                log("date taken from file system timestamp: "+date.strftime("%A %d. %B %Y at %H:%M:%S"))
 
         else:
             # open file
@@ -175,19 +303,32 @@ def sortPhotos(src_dir, dest_dir, extensions, sort_format, move_files, removeDup
             tags = exifread.process_file(f, details=False)
 
             f.close()
-
             # look for date in EXIF data
             if 'EXIF DateTimeOriginal' in tags and valid_date(tags['EXIF DateTimeOriginal']):
                 date = parse_date_exif(tags['EXIF DateTimeOriginal'])
+                log("date taken from EXIF DateTimeOriginal: "+date.strftime("%A %d. %B %Y at %H:%M:%S"))
 
             elif 'EXIF DateTimeDigitized' in tags and valid_date(tags['EXIF DateTimeDigitized']):
                 date = parse_date_exif(tags['EXIF DateTimeDigitized'])
+                log("date taken from EXIF DateTimeDigitized: "+date.strftime("%A %d. %B %Y at %H:%M:%S"))
 
             elif 'Image DateTime' in tags and valid_date(tags['Image DateTime']):
                 date = parse_date_exif(tags['Image DateTime'])
+                log("date taken from EXIF Image DateTime: "+date.strftime("%A %d. %B %Y at %H:%M:%S"))
 
             else:  # use file time stamp if no valid EXIF data
-                date = parse_date_tstamp(src_file)
+                if filename_parse is not None:
+                    date = parse_filename_tstamp(filename_parse,src_file)
+
+                    if date is False:
+                        date = parse_date_tstamp(src_file)
+                        log("date taken from file system timestamp: "+date.strftime("%A %d. %B %Y at %H:%M:%S"))
+                    else:
+                        log("date taken from filename: "+date.strftime("%A %d. %B %Y at %H:%M:%S"))
+                else:
+                    date = parse_date_tstamp(src_file)
+                    log("date taken from file system timestamp: "+date.strftime("%A %d. %B %Y at %H:%M:%S"))
+                
 
 
         # early morning photos can be grouped with previous day (depending on user setting)
@@ -205,6 +346,7 @@ def sortPhotos(src_dir, dest_dir, extensions, sort_format, move_files, removeDup
         # setup destination file
         dest_file = os.path.join(dest_file, os.path.basename(src_file))
         root, ext = os.path.splitext(dest_file)
+        log("destination file :"+dest_file)
 
         # check for collisions
         append = 1
@@ -213,8 +355,10 @@ def sortPhotos(src_dir, dest_dir, extensions, sort_format, move_files, removeDup
         while True:
 
             if os.path.isfile(dest_file):  # check for existing name
+                log("file already exist")
                 if removeDuplicates and filecmp.cmp(src_file, dest_file):  # check for identical files
                     fileIsIdentical = True
+                    
                     break
 
                 else:  # name is same, but file is different
@@ -224,16 +368,41 @@ def sortPhotos(src_dir, dest_dir, extensions, sort_format, move_files, removeDup
             else:
                 break
 
-
         # finally move or copy the file
+        operation = "copy"
         if move_files:
-            shutil.move(src_file, dest_file)
-        else:
-            if fileIsIdentical:
-                continue  # if file is same, we just ignore it (for copy option)
-            else:
-                shutil.copy2(src_file, dest_file)
+            operation = "move"
 
+        if fileIsIdentical:
+            log("ignoring file because identical file exist")
+        else:
+            file_operation(src_file,dest_file,operation)
+
+       # if not args.simulate:
+       #     if move_files:
+       #         if fileIsIdentical:
+       #             log("ignoring moving file")
+       #             continue  # if file is same, we just ignore it 
+       #         shutil.move(src_file, dest_file)
+       #         log("file moved to "+dest_file)
+       #     else:
+       #         if fileIsIdentical:
+       #             log("ignoring copying file")
+       #             continue  # if file is same, we just ignore it
+       #         else:
+       #             shutil.copy2(src_file, dest_file)
+       #             log("file copied to "+dest_file)
+       # else:
+       #     if move_files:
+       #         if fileIsIdentical:
+       #             log("ignoring moving file")
+       #         else:
+       #             log("[SIMULATE]file moved to "+dest_file)
+       #     else:
+       #         if fileIsIdentical:
+       #             log("ignoring copying file")
+       #         else:
+       #             log("[SIMULATE]file copied to "+dest_file)
 
     print
 
@@ -260,6 +429,15 @@ with both the month number and name (e.g., 2012/12-Feb).")
     parser.add_argument('--extensions', type=str, nargs='+',
                         default=['jpg', 'jpeg', 'tiff', 'arw', 'avi', 'mov', 'mp4', 'mts'],
                         help='file types to sort')
+    parser.add_argument('--filename-parse',type=str,default=None,help="check for date in filename before filesystem creation date,\n\
+    L or l for little median (DDMMYYYY)\n\
+    M or m for Middle median (MMDDYYYY)\n\
+    B or b for Big median (YYYYMMDD)\n\
+    T or t for time in the day (HHMMSS)\n\
+    A or a for ask anytime a date is found (useful when you have multiple medians in your files)\n\
+WARNING:you can use multiple flags but if you mix L M and B tags except somes bad results")
+    parser.add_argument('-v','--verbose',default=False,action='store_true',help="verbose mode")
+    parser.add_argument('--simulate',default=False,action='store_true',help="Simulation mode (and verbose)")
     parser.add_argument('--ignore-exif', action='store_true',
                         help='always use file time stamp even if EXIF data exists')
     parser.add_argument('--day-begins', type=int, default=0, help='hour of day that new day begins (0-23), \n\
@@ -269,8 +447,13 @@ defaults to 0 which corresponds to midnight.  Useful for grouping pictures with 
     # parse command line arguments
     args = parser.parse_args()
 
+    #set verbose if simulate is on
+    if args.simulate:
+        args.verbose = True
+
+
     sortPhotos(args.src_dir, args.dest_dir, args.extensions, args.sort,
-              args.move, not args.keep_duplicates, args.ignore_exif, args.day_begins)
+              args.move, not args.keep_duplicates, args.ignore_exif, args.day_begins,args.filename_parse)
 
 
 
