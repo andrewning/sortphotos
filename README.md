@@ -34,6 +34,21 @@ Or you can sort by year without century, then week number, then an abbreviated d
 
 The possibilities go on and on.
 
+## original source directory structure
+The default behavior is to omit the original directory structure in the source directory and to move or copy the files to the formatted date directories under the destination directory. By using the -p/--preserve-dir option, the original source directory structure will be preserved and created under the destination directory as well as the formatted date directories.
+
+For example, with an original directory structure of:
+
+    src/dir1/dir2/file
+
+The default behavior will lead to:
+
+    dst/2014/08-Aug/file
+
+With -p/--preserve-dir, we get:
+
+    dst/dir1/dir2/2014/08-Aug/file
+
 ## duplicate removal
 SortPhotos will *always* check to make sure something with the same file name doesn't already exist where it's trying to write, so that you don't unintentionally overwrite a file. It this occurs it will append a number on the end of the file.  So for example if photo.jpg was taken on June 1, 2010 but 2010 > June > photo.jpg already exists then the new file will be copied as photo_1.jpg and so on.  SortPhotos will go one step further and if it finds a file of the same name, it will then run a file compare to see if the files are actually the same.  If they are *exactly* the same, it will just skip the copy (or move) operation.  This will prevent you from having duplicate files.  However you have the option of turning this off (not the name comparison, that will always happen, just the weeding out of duplicates).  This option would be useful, for example, if you are copying over a bunch of new photos that you are sure don't already exist in your organized collection of photos.  It's a little faster to skip duplicate detection.   Invoke the option ``--keep-duplicates`` in order to skip duplicate detection.
 
