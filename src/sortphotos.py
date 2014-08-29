@@ -116,7 +116,7 @@ def get_creation_time(path):
 # --------- main script -----------------
 
 def sortPhotos(src_dir, dest_dir, extensions, sort_format, move_files, removeDuplicates,
-               ignore_exif, day_begins):
+               ignore_exif, day_begins, preserve_dirs):
 
 
     # some error checking
@@ -145,9 +145,10 @@ def sortPhotos(src_dir, dest_dir, extensions, sort_format, move_files, removeDup
             if case_sensitive_os:
                 matches += fnmatch.filter(filenames, '*.' + ext.upper())
 
-            # add file root and save the matched file in list
+            # save the matched file's relative dir, and its name
             for match in matches:
-                matched_files.append(os.path.join(root, match))
+                rel_path = os.path.relpath(root, src_dir)
+                matched_files.append((rel_path, match))
 
 
     # setup a progress bar
@@ -155,7 +156,9 @@ def sortPhotos(src_dir, dest_dir, extensions, sort_format, move_files, removeDup
     idx = 0
 
 
-    for src_file in matched_files:
+    for file_rel_path, file_name in matched_files:
+        # full original file name
+        src_file = os.path.join(src_dir, file_rel_path, file_name)
 
         # update progress bar
         numdots = int(20.0*(idx+1)/num_files)
@@ -194,16 +197,16 @@ def sortPhotos(src_dir, dest_dir, extensions, sort_format, move_files, removeDup
         date = check_for_early_morning_photos(date, day_begins)
 
         # create folder structure
-        dir_structure = date.strftime(sort_format)
-        dirs = dir_structure.split('/')
-        dest_file = dest_dir
-        for thedir in dirs:
-            dest_file = os.path.join(dest_file, thedir)
-            if not os.path.exists(dest_file):
-                os.makedirs(dest_file)
+        dest_file_dirs = [dest_dir]
+        if preserve_dirs:
+            dest_file_dirs.append(file_rel_path)
+        dest_file_dirs += date.strftime(sort_format).split('/')
+        dest_file = os.path.join(*dest_file_dirs)
+        if not os.path.exists(dest_file):
+            os.makedirs(dest_file)
 
         # setup destination file
-        dest_file = os.path.join(dest_file, os.path.basename(src_file))
+        dest_file = os.path.join(dest_file, file_name)
         root, ext = os.path.splitext(dest_file)
 
         # check for collisions
@@ -234,11 +237,6 @@ def sortPhotos(src_dir, dest_dir, extensions, sort_format, move_files, removeDup
             else:
                 shutil.copy2(src_file, dest_file)
 
-
-    print
-
-
-
 if __name__ == '__main__':
 
     import argparse
@@ -249,6 +247,7 @@ if __name__ == '__main__':
     parser.add_argument('src_dir', type=str, help='source directory (searched recursively)')
     parser.add_argument('dest_dir', type=str, help='destination directory')
     parser.add_argument('-m', '--move', action='store_true', help='move files instead of copy')
+    parser.add_argument('-p', '--preserve-dirs', action='store_true', help='preserve original src_dir folder structure while moving or copying to dest_dir')
     parser.add_argument('-s', '--sort', type=str, default='%Y/%m-%b',
                         help="choose destination folder structure using datetime format \n\
 https://docs.python.org/2/library/datetime.html#strftime-and-strptime-behavior. \n\
@@ -270,7 +269,8 @@ defaults to 0 which corresponds to midnight.  Useful for grouping pictures with 
     args = parser.parse_args()
 
     sortPhotos(args.src_dir, args.dest_dir, args.extensions, args.sort,
-              args.move, not args.keep_duplicates, args.ignore_exif, args.day_begins)
+               args.move, not args.keep_duplicates, args.ignore_exif,
+               args.day_begins, args.preserve_dirs)
 
 
 
