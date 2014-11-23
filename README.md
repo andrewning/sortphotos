@@ -78,11 +78,11 @@ This would create files like: 2003_1031_1544.jpg.  By default the script keeps t
 
 sortphotos.py takes a list of tags you want to search for.  This list should be ordered in terms of precedence.  The default list is
 
-    python sortphotos.py --tags ['CreationDate', 'DateTimeOriginal', 'DateTimeCreated', 'CreateDate', 'DateCreated', 'FileCreateDate', 'FileModifyDate']
+    python sortphotos.py source dest --tags CreationDate DateTimeOriginal DateTimeCreated CreateDate DateCreated FileCreateDate FileModifyDate
 
 The first five are different EXIF data tags, and the last two are file stamp data.  This means if any of the EXIF data is available for a given file, the script will sort the file by that EXIF data, but if none of the options given are available it will fall back on file timestamp data.  If you want to only sort using EXIF data and have any files without EXIF data left behind for manual sorting, you could specify something like
 
-    python sortphotos.py --tags ['CreationDate', 'DateTimeOriginal', 'DateTimeCreated', 'CreateDate', 'DateCreated']
+    python sortphotos.py source dest --tags CreationDate DateTimeOriginal DateTimeCreated CreateDate DateCreated
 
 These five are commonly used tags, but there are a wide range of EXIF and other tags available (listed [here](http://www.sno.phy.queensu.ca/~phil/exiftool/TagNames/index.html)).  For the specific file types you use, you should rearrange or add the corresponding EXIF tags you need.  
 
