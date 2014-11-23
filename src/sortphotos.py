@@ -9,6 +9,9 @@ Copyright (c) S. Andrew Ning. All rights reserved.
 """
 
 import subprocess
+import os
+
+exiftool_location = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'Image-ExifTool', 'exiftool')
 
 
 #  this class is based on code from Sven Marnach (http://stackoverflow.com/questions/10075115/call-exiftool-from-a-python-script)
@@ -16,7 +19,7 @@ class ExifTool(object):
 
     sentinel = "{ready}\n"
 
-    def __init__(self, executable='Image-ExifTool/exiftool'):
+    def __init__(self, executable=exiftool_location):
         self.executable = executable
 
     def __enter__(self):
