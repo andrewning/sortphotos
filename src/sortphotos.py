@@ -61,7 +61,7 @@ def parse_date_exif(date_string):
         if len(time_entries) == 3:
             hour = int(time[0])
             minute = int(time[1])
-            second = int(time[2])
+            second = int(time[2].split('.')[0])
 
         # adjust for time-zone if needed
         if len(time_entries) > 2:
