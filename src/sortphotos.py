@@ -80,7 +80,12 @@ def parse_date_exif(date_string):
 
 
     # form date object
-    date = datetime(year, month, day, hour, minute, second)
+    try:
+        date = datetime(year, month, day, hour, minute, second)
+    except ValueError:
+        return None  # errors in time format
+
+    # adjust for time zone if necessary
     if time_zone_adjust:
         date += dateadd
 
