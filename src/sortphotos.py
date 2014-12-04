@@ -407,7 +407,7 @@ if __name__ == '__main__':
     parser.add_argument('src_dir', type=str, help='source directory')
     parser.add_argument('dest_dir', type=str, help='destination directory')
     parser.add_argument('-r', '--recursive', action='store_true', help='search src_dir recursively')
-    parser.add_argument('-c', '--copy', action='store_true', help='copy files instead of move')
+    parser.add_argument('-m', '--move', action='store_true', help='move files instead of copy')
     parser.add_argument('-s', '--silent', action='store_true', help='don\'t display parsing details.')
     parser.add_argument('-t', '--test', action='store_true', help='run a test.  files will not be moved/copied\ninstead you will just a list of would happen')
     parser.add_argument('--sort', type=str, default='%Y/%m-%b',
@@ -447,6 +447,6 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     sortPhotos(args.src_dir, args.dest_dir, args.sort, args.rename, args.recursive,
-        args.copy, args.test, not args.keep_duplicates, args.day_begins,
+        not args.move, args.test, not args.keep_duplicates, args.day_begins,
         args.ignore_groups, args.ignore_tags, args.use_only_groups,
         args.use_only_tags, not args.silent)
