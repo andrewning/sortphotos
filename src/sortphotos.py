@@ -167,7 +167,7 @@ class ExifTool(object):
 
     def __enter__(self):
         self.process = subprocess.Popen(
-            [self.executable, "-stay_open", "True",  "-@", "-"],
+            ['perl', self.executable, "-stay_open", "True",  "-@", "-"],
             stdin=subprocess.PIPE, stdout=subprocess.PIPE)
         return self
 
