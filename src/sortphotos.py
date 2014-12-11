@@ -288,14 +288,19 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
         # extract timestamp date for photo
         src_file, date, keys = get_oldest_timestamp(data, additional_groups_to_ignore, additional_tags_to_ignore)
 
-        # write out which photo we are at
-        ending = ']\n'
-        if test:
-            ending = '] (TEST - no files are being moved/copied)\n'
-        sys.stdout.write('[' + str(idx+1) + '/' + str(num_files) + ending)
-
         if verbose:
+        # write out which photo we are at
+            ending = ']\n'
+            if test:
+                ending = '] (TEST - no files are being moved/copied)\n'
+            sys.stdout.write('[' + str(idx+1) + '/' + str(num_files) + ending)
             sys.stdout.write('Source: ' + src_file + '\n')
+        else:
+            # progress bar
+            numdots = int(20.0*(idx+1)/num_files)
+            sys.stdout.write('\r')
+            sys.stdout.write('[%-20s] %d of %d ' % ('='*numdots, idx+1, num_files))
+            sys.stdout.flush()
 
         # check if no valid date found
         if not date:
@@ -393,6 +398,8 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
             sys.stdout.flush()
 
 
+    if not verbose:
+        sys.stdout.write('\n')
 
 
 
