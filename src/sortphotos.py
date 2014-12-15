@@ -85,6 +85,12 @@ def parse_date_exif(date_string):
     except ValueError:
         return None  # errors in time format
 
+    # try converting it (some "valid" dates are way before 1900 and cannot be parsed by strtime later)
+    try:
+        date.strftime('%Y/%m-%b')  # any format with year, month, day, would work here.
+    except ValueError:
+        return None  # errors in time format
+
     # adjust for time zone if necessary
     if time_zone_adjust:
         date += dateadd
