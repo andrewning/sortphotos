@@ -171,8 +171,9 @@ class ExifTool(object):
 
     sentinel = "{ready}\n"
 
-    def __init__(self, executable=exiftool_location):
+    def __init__(self, executable=exiftool_location, verbose=False):
         self.executable = executable
+        self.verbose = verbose
 
     def __enter__(self):
         self.process = subprocess.Popen(
@@ -191,7 +192,10 @@ class ExifTool(object):
         output = ""
         fd = self.process.stdout.fileno()
         while not output.endswith(self.sentinel):
-            output += os.read(fd, 4096)
+            increment = os.read(fd, 4096)
+            if self.verbose:
+                sys.stdout.write(increment)
+            output += increment
         return output[:-len(self.sentinel)]
 
     def get_metadata(self, *args):
@@ -281,10 +285,10 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
 
 
     # get all metadata
-    with ExifTool() as e:
-            sys.stdout.write('Preprocessing with ExifTool.  May take a while for a large number of files.')
-            metadata = e.get_metadata(*args)
-            sys.stdout.write('Done preprocessing.')
+    with ExifTool(verbose=verbose) as e:
+        sys.stdout.write('Preprocessing with ExifTool.  May take a while for a large number of files.\n')
+        sys.stdout.flush()
+        metadata = e.get_metadata(*args)
 
     # setup output to screen
     num_files = len(metadata)
