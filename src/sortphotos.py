@@ -282,7 +282,9 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
 
     # get all metadata
     with ExifTool() as e:
+            sys.stdout.write('Preprocessing with ExifTool.  May take a while for a large number of files.')
             metadata = e.get_metadata(*args)
+            sys.stdout.write('Done preprocessing.')
 
     # setup output to screen
     num_files = len(metadata)
