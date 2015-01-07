@@ -211,7 +211,7 @@ class ExifTool(object):
 
 
 
-def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
+def sortPhotos(src_dir, dest_dir, sort_format, rename_format, includeOriginalFilenameInRename, recursive=False,
         copy_files=False, test=False, remove_duplicates=True, day_begins=0,
         additional_groups_to_ignore=['File'], additional_tags_to_ignore=[],
         use_only_groups=None, use_only_tags=None, verbose=True):
@@ -231,6 +231,8 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
         date format code for how you want your files renamed
         (https://docs.python.org/2/library/datetime.html#strftime-and-strptime-behavior)
         None to not rename file
+    includeOriginalFilenameInRename : bool
+        True if you want to include the original file name when renaming
     recursive : bool
         True if you want src_dir to be searched recursively for files (False to search only in top-level of src_dir)
     copy_files : bool
@@ -346,7 +348,10 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
 
         if rename_format is not None:
             _, ext = os.path.splitext(filename)
-            filename = date.strftime(rename_format) + ext
+            filename = date.strftime(rename_format)
+            if includeOriginalFilenameInRename:
+                filename = date.strftime(rename_format) + '__' + _
+            filename = filename + ext
 
         # setup destination file
         dest_file = os.path.join(dest_file, filename)
@@ -442,6 +447,7 @@ if __name__ == '__main__':
                         help="rename file using format codes \n\
     https://docs.python.org/2/library/datetime.html#strftime-and-strptime-behavior. \n\
     default is None which just uses original filename")
+    parser.add_argument('--includeOriginalFilenameInRename', action='store_true', help='append the original filename to the renamed file.')
     parser.add_argument('--keep-duplicates', action='store_true',
                         help='If file is a duplicate keep it anyway (after renaming).')
     parser.add_argument('--day-begins', type=int, default=0, help='hour of day that new day begins (0-23), \n\
@@ -468,7 +474,7 @@ if __name__ == '__main__':
     # parse command line arguments
     args = parser.parse_args()
 
-    sortPhotos(args.src_dir, args.dest_dir, args.sort, args.rename, args.recursive,
+    sortPhotos(args.src_dir, args.dest_dir, args.sort, args.rename, args.includeOriginalFilenameInRename, args.recursive,
         args.copy, args.test, not args.keep_duplicates, args.day_begins,
         args.ignore_groups, args.ignore_tags, args.use_only_groups,
         args.use_only_tags, not args.silent)
