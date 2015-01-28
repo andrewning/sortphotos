@@ -169,7 +169,7 @@ def check_for_early_morning_photos(date, day_begins):
 class ExifTool(object):
     """used to run ExifTool from Python and keep it open"""
 
-    sentinel = "{ready}\n"
+    sentinel = "{ready}"
 
     def __init__(self, executable=exiftool_location, verbose=False):
         self.executable = executable
@@ -191,12 +191,12 @@ class ExifTool(object):
         self.process.stdin.flush()
         output = ""
         fd = self.process.stdout.fileno()
-        while not output.endswith(self.sentinel):
+        while not output.rstrip(' \t\n\r').endswith(self.sentinel):
             increment = os.read(fd, 4096)
             if self.verbose:
                 sys.stdout.write(increment)
             output += increment
-        return output[:-len(self.sentinel)]
+        return output.rstrip(' \t\n\r')[:-len(self.sentinel)]
 
     def get_metadata(self, *args):
 
