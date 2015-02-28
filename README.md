@@ -1,18 +1,17 @@
 # SortPhotos
 
-
 # ChangeLog (of major changes)
 
 ### 02/28/2015
 
 #### Compatibilty with Python 2.5:
 
-- install setuptools
-	``wget https://bitbucket.org/pypa/setuptools/raw/bootstrap-py24/ez_setup.py``
+- install setuptools  
+	``wget https://bitbucket.org/pypa/setuptools/raw/bootstrap-py24/ez_setup.py``  
 	``python ez_setup.py``
-- install argparse
+- install argparse  
 	``easy_install argparse``
-- install simplejson
+- install simplejson  
 	``easy_install simplejson``
 
 
