@@ -417,10 +417,7 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
         sys.stdout.write('\n')
 
 
-
-
-if __name__ == '__main__':
-
+def main():
     import argparse
 
     # setup command line parsing
@@ -472,3 +469,6 @@ if __name__ == '__main__':
         args.copy, args.test, not args.keep_duplicates, args.day_begins,
         args.ignore_groups, args.ignore_tags, args.use_only_groups,
         args.use_only_tags, not args.silent)
+
+if __name__ == '__main__':
+    main()
