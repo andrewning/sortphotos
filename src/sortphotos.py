@@ -438,11 +438,11 @@ if __name__ == '__main__':
     https://docs.python.org/2/library/datetime.html#strftime-and-strptime-behavior. \n\
     Use forward slashes / to indicate subdirectory(ies) (independent of your OS convention). \n\
     The default is '%%Y/%%m-%%b', which separates by year then month \n\
-    with both the month number and name (e.g., 2012/12-Feb).")
+    with both the month number and name (e.g., 2012/02-Feb).")
     parser.add_argument('--rename', type=str, default=None,
                         help="rename file using format codes \n\
     https://docs.python.org/2/library/datetime.html#strftime-and-strptime-behavior. \n\
-    you can use '#f' to add the filename (without extinsion) \n\
+    you can use '#f' to add the filename (without extension) \n\
     default is None which just uses original filename")
     parser.add_argument('--keep-duplicates', action='store_true',
                         help='If file is a duplicate keep it anyway (after renaming).')
