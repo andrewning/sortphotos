@@ -115,7 +115,7 @@ def get_oldest_timestamp(data, additional_groups_to_ignore, additional_tags_to_i
 
     # ssetup tags to ignore
     ignore_groups = ['ICC_Profile'] + additional_groups_to_ignore
-    ignore_tags = ['SourceFile', 'EXIF:GPSTimeStamp', 'XMP:HistoryWhen'] + additional_tags_to_ignore
+    ignore_tags = ['SourceFile', 'XMP:HistoryWhen'] + additional_tags_to_ignore
 
 
     if print_all_tags:
@@ -125,7 +125,7 @@ def get_oldest_timestamp(data, additional_groups_to_ignore, additional_tags_to_i
     for key in data.keys():
 
         # check if this key needs to be ignored, or is in the set of tags that must be used
-        if (key not in ignore_tags) and (key.split(':')[0] not in ignore_groups):
+        if (key not in ignore_tags) and (key.split(':')[0] not in ignore_groups) and 'GPS' not in key:
 
             date = data[key]
 
