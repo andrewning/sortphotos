@@ -148,7 +148,8 @@ SortPhotos grabs EXIF data from the photos/videos using the very excellent [Exif
 
 - Windows compatibility fix (thanks PaulRobson)
 - added setup script (thanks josephholsten)
-- ignore GPS time stamps (thanks egallen)
+- ignore GPS time stamps (thanks egallen for finding error)
+- fix for non-ascii file names (thanks maxsl for finding error)
 
 ### 11/28/2014
 
