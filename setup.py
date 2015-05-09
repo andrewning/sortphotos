@@ -1,16 +1,20 @@
-# !/usr/bin/env python
+#!/usr/bin/env python
+# encoding: utf-8
 
 from setuptools import setup, find_packages
 
-setup(name='sortphotos',
-      version='0.1',
-      packages=find_packages(),
-      package_data={
-      },
-      install_requires=[
-      ],
-      entry_points={
-          'console_scripts': [
-            'sortphotos = src.sortphotos:main',
-          ]
-      })
+setup(
+    name='sortphotos',
+    version='1.0',
+    description='Organizes photos and videos into folders using date/time information ',
+    author='Andrew Ning',
+    packages=find_packages(),
+    include_package_data=True,
+    license='MIT License',
+    entry_points={
+        'console_scripts': [
+          'sortphotos = src.sortphotos:main',
+        ]
+      }
+)
+
