@@ -1,36 +1,5 @@
 # SortPhotos
 
-# ChangeLog (of major changes)
-
-### 11/28/2014
-
-Another complete rewrite.  The script retains the powerful metadata reading capabilities of ExifTool but now uses its own file processing as it did before for more flexibility.  Specifying what tags to look for required some guesswork, so this version automates this by looking through tags for the oldest date.  Restrictions can be set on what groups/tags to search across.  Some flags have changed.  See rest of README.
-
-Main Changes
-
-- better automatic tag searching.  Now automatically finds tags with date information and looks for the oldest.  Lots of options for what groups/tags to restrict search to
-- duplicates can now be automatically removed (only if name is exactly the same and a file hash is exactly the same).
-- ``--day-begins`` feature is added back in
-- much more information is reported during processing
-
-### 11/15/2014
-
-The version is a complete overhaul of the past script.  It now makes use of the excellent ExifTool by Phil Harvey, which amongst other things gives us the ability to read EXIF or other metadata for a [wide range of file types](http://www.sno.phy.queensu.ca/~phil/exiftool/#supported).  Before we were limited primarily to jpg and a few other image types, but now most video formats are included as well as a wide range of RAW file types.  ExifTool also provides a lot of the file moving functionality that was previously contained in this tool so sortphotos.py is much simpler and has a few new capabilities.  There are a few features that were in sortphotos.py that have been left out  in this new version.  Because we are taking advantage of implementation features in ExifTool to handle the file management, we gained some capabilities but also lost some.  Missing features are detailed below and may be re-added in the future.  The usage of the script, while very similar to how it was before, is not perfectly backwards compatible.  If one of the critical features for you is missing then you shouldn't update at this time.  If you are using sortphotos.py in other automated scripts then you should update those to conform to the new usage.
-
-Main changes
-
-- EXIF data can be extracted for a huge number of file types, including videos
-- automatic file renaming is supported
-- the source directory can now be searched non-recursively, and that is in fact the default now
-- by default the script moves rather than copies (behavior was reversed before)
-- more descriptive information is given on where the files are going
-- a test option allows you to simulate what will happen when you run the script without actually moving/copying any files
-
-Previous features that were in sortphotos.py but have not yet been reincorporated into the new version
-
-- Duplicates are not automatically removed.  Before if two files were exactly the same (through a hash) one would be removed.  The new version does not remove any files.  If two files have the same name it will not overwrite but will append a number at the end.
-- the --day-begins feature is not included.  Before you could specify an hour that you wanted the day to start so you could group early morning photos with the previous day, but because of the way things are currently implemented this was not straightforward to add back in. 
-
 # Description
 
 SortPhotos is a Python script that organizes photos into folders by date and/or time (year, year/month, year/month/day, or other custom formats).  If you're like me then your growing collection of files are contained in a bunch of folders, some with a date like "Sep 2010", and others which names like "Camping Trip".  SortPhotos takes this collection of folders and files and reorganizes them into a hierarchy of folders by almost any custom date/time format (by default it is by year then month).  It will work with any file, but works best with image and video files that contain EXIF or other metadata formats because that stays with the file even if the files are modified.  The script is also useful for transferring files from your camera into your collection of nicely organized photos.
@@ -172,6 +141,37 @@ and you should see the Agent listed (I grep the results because you will typical
 # Acknowledgments
 
 SortPhotos grabs EXIF data from the photos/videos using the very excellent [ExifTool](http://www.sno.phy.queensu.ca/~phil/exiftool/) written by Phil Harvey.
+
+# ChangeLog (of major changes)
+
+### 11/28/2014
+
+Another complete rewrite.  The script retains the powerful metadata reading capabilities of ExifTool but now uses its own file processing as it did before for more flexibility.  Specifying what tags to look for required some guesswork, so this version automates this by looking through tags for the oldest date.  Restrictions can be set on what groups/tags to search across.  Some flags have changed.  See rest of README.
+
+Main Changes
+
+- better automatic tag searching.  Now automatically finds tags with date information and looks for the oldest.  Lots of options for what groups/tags to restrict search to
+- duplicates can now be automatically removed (only if name is exactly the same and a file hash is exactly the same).
+- ``--day-begins`` feature is added back in
+- much more information is reported during processing
+
+### 11/15/2014
+
+The version is a complete overhaul of the past script.  It now makes use of the excellent ExifTool by Phil Harvey, which amongst other things gives us the ability to read EXIF or other metadata for a [wide range of file types](http://www.sno.phy.queensu.ca/~phil/exiftool/#supported).  Before we were limited primarily to jpg and a few other image types, but now most video formats are included as well as a wide range of RAW file types.  ExifTool also provides a lot of the file moving functionality that was previously contained in this tool so sortphotos.py is much simpler and has a few new capabilities.  There are a few features that were in sortphotos.py that have been left out  in this new version.  Because we are taking advantage of implementation features in ExifTool to handle the file management, we gained some capabilities but also lost some.  Missing features are detailed below and may be re-added in the future.  The usage of the script, while very similar to how it was before, is not perfectly backwards compatible.  If one of the critical features for you is missing then you shouldn't update at this time.  If you are using sortphotos.py in other automated scripts then you should update those to conform to the new usage.
+
+Main changes
+
+- EXIF data can be extracted for a huge number of file types, including videos
+- automatic file renaming is supported
+- the source directory can now be searched non-recursively, and that is in fact the default now
+- by default the script moves rather than copies (behavior was reversed before)
+- more descriptive information is given on where the files are going
+- a test option allows you to simulate what will happen when you run the script without actually moving/copying any files
+
+Previous features that were in sortphotos.py but have not yet been reincorporated into the new version
+
+- Duplicates are not automatically removed.  Before if two files were exactly the same (through a hash) one would be removed.  The new version does not remove any files.  If two files have the same name it will not overwrite but will append a number at the end.
+- the --day-begins feature is not included.  Before you could specify an hour that you wanted the day to start so you could group early morning photos with the previous day, but because of the way things are currently implemented this was not straightforward to add back in.
 
 # License
 
