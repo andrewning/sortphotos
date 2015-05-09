@@ -144,6 +144,12 @@ SortPhotos grabs EXIF data from the photos/videos using the very excellent [Exif
 
 # ChangeLog (of major changes)
 
+### 5/9/2015
+
+- Windows compatibility fix (thanks PaulRobson)
+- added setup script (thanks josephholsten)
+- ignore GPS time stamps (thanks egallen)
+
 ### 11/28/2014
 
 Another complete rewrite.  The script retains the powerful metadata reading capabilities of ExifTool but now uses its own file processing as it did before for more flexibility.  Specifying what tags to look for required some guesswork, so this version automates this by looking through tags for the oldest date.  Restrictions can be set on what groups/tags to search across.  Some flags have changed.  See rest of README.

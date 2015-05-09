@@ -8,6 +8,7 @@ Copyright (c) S. Andrew Ning. All rights reserved.
 
 """
 
+from __future__ import print_function
 import subprocess
 import os
 import sys
@@ -119,7 +120,7 @@ def get_oldest_timestamp(data, additional_groups_to_ignore, additional_tags_to_i
 
 
     if print_all_tags:
-        sys.stdout.write('All relevant tags:\n')
+        print('All relevant tags:')
 
     # run through all keys
     for key in data.keys():
@@ -130,7 +131,7 @@ def get_oldest_timestamp(data, additional_groups_to_ignore, additional_tags_to_i
             date = data[key]
 
             if print_all_tags:
-                sys.stdout.write(str(key) + ', ' + str(date) + '\n')
+                print(str(key) + ', ' + str(date))
 
             # (rare) check if multiple dates returned in a list, take the first one which is the oldest
             if isinstance(date, list):
@@ -149,7 +150,7 @@ def get_oldest_timestamp(data, additional_groups_to_ignore, additional_tags_to_i
         oldest_date = None
 
     if print_all_tags:
-        sys.stdout.write('\n')
+        print()
 
     return src_file, oldest_date, oldest_keys
 
@@ -159,7 +160,7 @@ def check_for_early_morning_photos(date, day_begins):
     """check for early hour photos to be grouped with previous day"""
 
     if date.hour < day_begins:
-        sys.stdout.write('moving this photo to the previous day for classification purposes (day_begins=' + str(day_begins) + ')\n')
+        print('moving this photo to the previous day for classification purposes (day_begins=' + str(day_begins) + ')')
         date = date - timedelta(hours=date.hour+1)  # push it to the day before for classificiation purposes
 
     return date
@@ -286,13 +287,13 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
 
     # get all metadata
     with ExifTool(verbose=verbose) as e:
-        sys.stdout.write('Preprocessing with ExifTool.  May take a while for a large number of files.\n')
+        print('Preprocessing with ExifTool.  May take a while for a large number of files.')
         sys.stdout.flush()
         metadata = e.get_metadata(*args)
 
     # setup output to screen
     num_files = len(metadata)
-    sys.stdout.write('\n')
+    print()
 
     if test:
         test_file_dict = {}
@@ -305,11 +306,11 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
 
         if verbose:
         # write out which photo we are at
-            ending = ']\n'
+            ending = ']'
             if test:
-                ending = '] (TEST - no files are being moved/copied)\n'
-            sys.stdout.write('[' + str(idx+1) + '/' + str(num_files) + ending)
-            sys.stdout.write('Source: ' + src_file + '\n')
+                ending = '] (TEST - no files are being moved/copied)'
+            print('[' + str(idx+1) + '/' + str(num_files) + ending)
+            print('Source: ' + src_file)
         else:
             # progress bar
             numdots = int(20.0*(idx+1)/num_files)
@@ -320,13 +321,14 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
         # check if no valid date found
         if not date:
             if verbose:
-                sys.stdout.write('No valid dates were found using the specified tags.  File will remain where it is.\n\n')
-                sys.stdout.flush()
+                print('No valid dates were found using the specified tags.  File will remain where it is.')
+                print()
+                # sys.stdout.flush()
             continue
 
         if verbose:
-            sys.stdout.write('Date/Time: ' + str(date) + '\n')
-            sys.stdout.write('Corresponding Tags: ' + ', '.join(keys) + '\n')
+            print('Date/Time: ' + str(date))
+            print('Corresponding Tags: ' + ', '.join(keys))
 
         # early morning photos can be grouped with previous day (depending on user setting)
         date = check_for_early_morning_photos(date, day_begins)
@@ -358,7 +360,7 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
                 name += '(copy): '
             else:
                 name += '(move): '
-            sys.stdout.write(name + dest_file + '\n')
+            print(name + dest_file)
 
 
         # check for collisions
@@ -376,17 +378,17 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
                     fileIsIdentical = True
                     if verbose:
                         if copy_files:
-                            sys.stdout.write('Identical file already exists.  Duplicate will be ignored.\n\n')
-                            sys.stdout.flush()
+                            print('Identical file already exists.  Duplicate will be ignored.\n')
+                            # sys.stdout.flush()
                         else:
-                            sys.stdout.write('Identical file already exists.  Duplicate will be overwritten.\n')
+                            print('Identical file already exists.  Duplicate will be overwritten.')
                     break
 
                 else:  # name is same, but file is different
                     dest_file = root + '_' + str(append) + ext
                     append += 1
                     if verbose:
-                        sys.stdout.write('Same name already exists...renaming to: ' + dest_file + '\n')
+                        print('Same name already exists...renaming to: ' + dest_file)
 
             else:
                 break
@@ -409,12 +411,12 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
 
 
         if verbose:
-            sys.stdout.write('\n')
-            sys.stdout.flush()
+            print()
+            # sys.stdout.flush()
 
 
     if not verbose:
-        sys.stdout.write('\n')
+        print()
 
 
 def main():
