@@ -2,6 +2,19 @@
 
 # ChangeLog (of major changes)
 
+### 02/28/2015
+
+#### Compatibilty with Python 2.5:
+
+- install setuptools  
+	``wget https://bitbucket.org/pypa/setuptools/raw/bootstrap-py24/ez_setup.py``  
+	``python ez_setup.py``
+- install argparse  
+	``easy_install argparse``
+- install simplejson  
+	``easy_install simplejson``
+
+
 ### 11/28/2014
 
 Another complete rewrite.  The script retains the powerful metadata reading capabilities of ExifTool but now uses its own file processing as it did before for more flexibility.  Specifying what tags to look for required some guesswork, so this version automates this by looking through tags for the oldest date.  Restrictions can be set on what groups/tags to search across.  Some flags have changed.  See rest of README.
