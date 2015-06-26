@@ -45,7 +45,7 @@ def parse_date_exif(date_string):
     if len(date_entries) == 3 and date_entries[0] > '0000':
         year = int(date_entries[0])
         month = int(date_entries[1])
-        day = int(date_entries[2])
+        day = int(date_entries[2].split('.')[0])
     else:
         return None
 
