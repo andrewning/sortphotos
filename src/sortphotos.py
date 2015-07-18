@@ -9,11 +9,15 @@ Copyright (c) S. Andrew Ning. All rights reserved.
 """
 
 from __future__ import print_function
+from __future__ import with_statement
 import subprocess
 import os
 import sys
 import shutil
-import json
+try:
+    import json
+except:
+    import simplejson as json
 import filecmp
 from datetime import datetime, timedelta
 import re

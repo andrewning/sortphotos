@@ -144,6 +144,11 @@ SortPhotos grabs EXIF data from the photos/videos using the very excellent [Exif
 
 # ChangeLog (of major changes)
 
+### 7/17/2015
+
+- @nueh fix for Python 2.5 (which you might be stuck with on a NAS for example).  
+- bug fixes (ignore hidden files, ignore dates with only time but no date)
+
 ### 5/9/2015
 
 - Windows compatibility fix (thanks PaulRobson)
