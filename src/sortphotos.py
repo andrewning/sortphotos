@@ -42,7 +42,8 @@ def parse_date_exif(date_string):
     # parse year, month, day
     date_entries = elements[0].split(':')  # ['YYYY', 'MM', 'DD']
 
-    if len(date_entries) == 3 and date_entries[0] > '0000':
+    # check if three entries, nonzero data, and no decimal (which occurs for timestamps with only time but no date)
+    if len(date_entries) == 3 and date_entries[0] > '0000' and '.' not in ''.join(date_entries):
         year = int(date_entries[0])
         month = int(date_entries[1])
         day = int(date_entries[2])
