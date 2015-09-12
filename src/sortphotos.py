@@ -21,7 +21,7 @@ except:
 import filecmp
 from datetime import datetime, timedelta
 import re
-
+import locale
 
 exiftool_location = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'Image-ExifTool', 'exiftool')
 
@@ -474,9 +474,15 @@ def main():
                     default=None,
                     help='specify a restricted set of tags to search for date information\n\
     e.g., EXIF:CreateDate')
+    parser.add_argument('--set-locale', type=str,
+                    default=None,
+                    help='specify a locale like fr_FR fro french, useful to get month directory name in your own locale')
 
     # parse command line arguments
     args = parser.parse_args()
+
+    if args.set_locale:
+        locale.setlocale(locale.LC_TIME, args.set_locale)
 
     sortPhotos(args.src_dir, args.dest_dir, args.sort, args.rename, args.recursive,
         args.copy, args.test, not args.keep_duplicates, args.day_begins,
