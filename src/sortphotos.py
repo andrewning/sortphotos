@@ -14,6 +14,7 @@ import subprocess
 import os
 import sys
 import shutil
+import fnmatch #used for filtering files
 try:
     import json
 except:
@@ -220,7 +221,8 @@ class ExifTool(object):
 def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
         copy_files=False, test=False, remove_duplicates=True, day_begins=0,
         additional_groups_to_ignore=['File'], additional_tags_to_ignore=[],
-        use_only_groups=None, use_only_tags=None, verbose=True):
+        use_only_groups=None, use_only_tags=None, verbose=True,
+        ignore_list=[], remove_ignored_files=False):
     """
     This function is a convenience wrapper around ExifTool based on common usage scenarios for sortphotos.py
 
@@ -258,7 +260,10 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
         a list of tags that will be exclusived searched across for date info
     verbose : bool
         True if you want to see details of file processing
-
+    ignore : list(str)
+        a list of files to be ignored, example: --ignore .* *.db
+    remove_ignored_files : bool
+        True to remove files that are ignored with ignore_list parameter
     """
 
     # some error checking
@@ -289,6 +294,18 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
 
     args += [src_dir]
 
+    # in recursive mode, if the user ask to remove ignored files we scan and remove them before running exiftool
+    if recursive and remove_ignored_files and len(ignore_list) > 0:
+        for root, dirs, files in os.walk(src_dir):
+            for current_file in files:
+                for _filter in ignore_list:
+                    if fnmatch.fnmatch(os.path.split(current_file)[-1], _filter):
+                        file_to_delete = os.path.join(root,current_file)
+                        print("File [%s] match ignored file filter [%s]: deleting."%(file_to_delete,_filter))
+                        if not test:
+                            os.remove(file_to_delete)
+                        #once a filter has matched we break to next file to avoid removing several times
+                        break
 
     # get all metadata
     with ExifTool(verbose=verbose) as e:
@@ -330,6 +347,17 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
                 print()
                 # sys.stdout.flush()
             continue
+
+        # filter ignored files and remove them if requested
+        for _filter in ignore_list:
+            if fnmatch.fnmatch(os.path.split(src_file)[-1], _filter):
+                if remove_ignored_files:
+                    print("file [%s] match filter [%s]: deleting." % (src_file, _filter))
+                    if not test:
+                        os.remove(src_file)
+                else:
+                    print("file [%s] match filter [%s]: ignoring." % (src_file, _filter))
+                continue
 
         # ignore hidden files
         if os.path.basename(src_file).startswith('.'):
@@ -478,6 +506,10 @@ def main():
                     default=None,
                     help='specify a restricted set of tags to search for date information\n\
     e.g., EXIF:CreateDate')
+    parser.add_argument('--ignore', type=str, nargs='+',
+                    default=None,
+                    help='specify a pattern for files to be ignored ex: .*,*.db')
+    parser.add_argument('--remove-ignored-files', action='store_true', help='remove ignored files')
     parser.add_argument('--set-locale', type=str,
                     default=None,
                     help='specify a locale like fr_FR fro french, useful to get month directory name in your own locale')
@@ -491,7 +523,7 @@ def main():
     sortPhotos(args.src_dir, args.dest_dir, args.sort, args.rename, args.recursive,
         args.copy, args.test, not args.keep_duplicates, args.day_begins,
         args.ignore_groups, args.ignore_tags, args.use_only_groups,
-        args.use_only_tags, not args.silent)
+        args.use_only_tags, not args.silent, args.ignore, args.remove_ignored_files)
 
 if __name__ == '__main__':
     main()
