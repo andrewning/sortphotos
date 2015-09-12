@@ -357,6 +357,10 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
         # rename file if necessary
         filename = os.path.basename(src_file)
 
+        # patch to support foreign characters under python 2.x
+        if sys.version_info.major < 3:
+            dest_file = dest_file.decode('utf-8')
+
         if rename_format is not None:
             _, ext = os.path.splitext(filename)
             filename = date.strftime(rename_format) + ext
