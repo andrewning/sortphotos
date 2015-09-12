@@ -211,7 +211,7 @@ class ExifTool(object):
             return json.loads(self.execute(*args))
         except ValueError:
             sys.stdout.write('No files to parse or invalid data\n')
-            exit()
+            return {}
 
 
 # ---------------------------------------
@@ -222,7 +222,7 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
         copy_files=False, test=False, remove_duplicates=True, day_begins=0,
         additional_groups_to_ignore=['File'], additional_tags_to_ignore=[],
         use_only_groups=None, use_only_tags=None, verbose=True,
-        ignore_list=[], remove_ignored_files=False):
+        ignore_list=[], remove_ignored_files=False, remove_empty_dirs=False):
     """
     This function is a convenience wrapper around ExifTool based on common usage scenarios for sortphotos.py
 
@@ -264,6 +264,8 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
         a list of files to be ignored, example: --ignore .* *.db
     remove_ignored_files : bool
         True to remove files that are ignored with ignore_list parameter
+    remove_empty_dirs : bool
+        True to empty dirs once processing is done
     """
 
     # some error checking
@@ -461,6 +463,15 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
     if not verbose:
         print()
 
+    if remove_empty_dirs:
+        # use topdown false to scan from bottom to top to avoid trying to delete top directory while child haven't
+        # been processed
+        for dirpath, dirnames, files in os.walk(src_dir, topdown=False):
+            if not files and dirpath != src_dir:
+                print("[Cleaning] Removing empty directory: %s" % dirpath)
+                if not test:
+                    os.rmdir(dirpath)
+
 
 def main():
     import argparse
@@ -510,6 +521,7 @@ def main():
                     default=None,
                     help='specify a pattern for files to be ignored ex: .*,*.db')
     parser.add_argument('--remove-ignored-files', action='store_true', help='remove ignored files')
+    parser.add_argument('--remove-empty-dirs', action='store_true', help='remove empty dirs')
     parser.add_argument('--set-locale', type=str,
                     default=None,
                     help='specify a locale like fr_FR fro french, useful to get month directory name in your own locale')
@@ -523,7 +535,7 @@ def main():
     sortPhotos(args.src_dir, args.dest_dir, args.sort, args.rename, args.recursive,
         args.copy, args.test, not args.keep_duplicates, args.day_begins,
         args.ignore_groups, args.ignore_tags, args.use_only_groups,
-        args.use_only_tags, not args.silent, args.ignore, args.remove_ignored_files)
+        args.use_only_tags, not args.silent, args.ignore, args.remove_ignored_files, args.remove_empty_dirs)
 
 if __name__ == '__main__':
     main()
