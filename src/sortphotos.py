@@ -472,7 +472,11 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
                 if not test:
                     os.rmdir(dirpath)
 
-
+def run_sortphotos(args):
+    sortPhotos(args.src_dir, args.dest_dir, args.sort, args.rename, args.recursive,
+               args.copy, args.test, not args.keep_duplicates, args.day_begins,
+               args.ignore_groups, args.ignore_tags, args.use_only_groups,
+               args.use_only_tags, not args.silent, args.ignore, args.remove_ignored_files, args.remove_empty_dirs)
 def main():
     import argparse
 
@@ -522,6 +526,7 @@ def main():
                     help='specify a pattern for files to be ignored ex: .*,*.db')
     parser.add_argument('--remove-ignored-files', action='store_true', help='remove ignored files')
     parser.add_argument('--remove-empty-dirs', action='store_true', help='remove empty dirs')
+    parser.add_argument('-w','--watch', action='store_true', help='long running mode whare the source dir is constantly watched')
     parser.add_argument('--set-locale', type=str,
                     default=None,
                     help='specify a locale like fr_FR fro french, useful to get month directory name in your own locale')
@@ -532,10 +537,38 @@ def main():
     if args.set_locale:
         locale.setlocale(locale.LC_TIME, args.set_locale)
 
-    sortPhotos(args.src_dir, args.dest_dir, args.sort, args.rename, args.recursive,
-        args.copy, args.test, not args.keep_duplicates, args.day_begins,
-        args.ignore_groups, args.ignore_tags, args.use_only_groups,
-        args.use_only_tags, not args.silent, args.ignore, args.remove_ignored_files, args.remove_empty_dirs)
+    if args.watch:
+
+        import select
+
+        file_present = []
+        while True:
+            try:
+                i, o, e = select.select( [sys.stdin], [], [],  5)
+
+                if(i):
+                    for new_file in sys.stdin.readline()[:-1].split('\n'):
+                        if os.path.exists(new_file):
+                            print("New file present:", new_file)
+                            file_present.append(new_file)
+                else:
+                    print("No activity detected.")
+                    if len(file_present) > 0:
+                        print("Sorting files...")
+                        run_sortphotos(args)
+                        print("Done!")
+                        file_present = []
+            except KeyboardInterrupt:
+                sys.exit(0)
+            except:
+                import traceback
+                e = sys.exc_info()[0]
+                print("Exception detected:",e)
+                print('-'*60)
+                traceback.print_exc(file=sys.stdout)
+                print('-'*60)
+    else:
+        run_sortphotos(args)
 
 if __name__ == '__main__':
     main()
