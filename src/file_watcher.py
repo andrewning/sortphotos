@@ -11,7 +11,7 @@ Copyright (c) L. Dufréchou. All rights reserved.
 WATCH_DIR     = "~/Documents/incoming_photos"
 SORTED_DIR    = "~/Documents/sorted_photos"
 SORTPHOTOS    = "~/Documents/sortphotos/src/sortphotos.py"
-FSWATCH       = "~/Documents/sortphotos/src/bin/fswatch"
+FSWATCH       = "~/Documents/sortphotos/src/tools/fswatch"
 
 USER_OPTIONS  = "--sort %Y/%m-%B --rename %y%m%d_%H%M_%S --set-locale fr_FR"
 

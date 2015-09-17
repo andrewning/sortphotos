@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Disabled</key>
+	<false/>
+	<key>Label</key>
+	<string>com.sortphotos.file_watcher</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>python</string>
+		<string>~/Documents/sortphotos/src/file_watcher.py</string> <!-- full path to file_watcher.py -->
+	</array>
+	<key>RunAtLoad</key>
+	<true/>
+</dict>
+</plist>
