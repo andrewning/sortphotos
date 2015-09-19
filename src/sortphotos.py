@@ -15,6 +15,7 @@ import os
 import sys
 import shutil
 import fnmatch #used for filtering files
+import select #used by stdin watcher
 try:
     import json
 except:
@@ -25,7 +26,7 @@ import re
 import locale
 
 exiftool_location = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'Image-ExifTool', 'exiftool')
-
+TERMINAL_APP  = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'tools', 'terminal-notifier.app/Contents/MacOS/terminal-notifier')
 
 # -------- convenience methods -------------
 
@@ -261,7 +262,7 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
     verbose : bool
         True if you want to see details of file processing
     ignore : list(str)
-        a list of files to be ignored, example: --ignore .* *.db
+        a list of files to be ignored separated by ',' , example: --ignore '.*,*.db' (be aware to put the filter between bracket to avoid side effect with command line)
     remove_ignored_files : bool
         True to remove files that are ignored with ignore_list parameter
     remove_empty_dirs : bool
@@ -296,6 +297,8 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
 
     args += [src_dir]
 
+    ignore_list = ignore_list.split(',')
+    print("Scanning for files matching:%s"%(ignore_list))
     # in recursive mode, if the user ask to remove ignored files we scan and remove them before running exiftool
     if recursive and remove_ignored_files and len(ignore_list) > 0:
         for root, dirs, files in os.walk(src_dir):
@@ -472,11 +475,49 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
                 if not test:
                     os.rmdir(dirpath)
 
+    return num_files
+
+def run_stdin_watcher(args):
+    verbose = args.verbose
+    file_present = []
+    while True:
+        try:
+            i, o, e = select.select( [sys.stdin], [], [],  5)
+
+            if(i):
+                for new_file in sys.stdin.readline()[:-1].split('\n'):
+                    if os.path.exists(new_file):
+                        if verbose:
+                            print("New file present:", new_file)
+                            file_present.append(new_file)
+            else:
+                if verbose:
+                    print("No activity detected.")
+                if len(file_present) > 0:
+                    print("Sorting files...")
+                    run_sortphotos(args)
+                    print("Done!")
+                    file_present = []
+        except KeyboardInterrupt:
+            sys.exit(0)
+        except:
+            import traceback
+            e = sys.exc_info()[0]
+            print("Exception detected:",e)
+            print('-'*60)
+            traceback.print_exc(file=sys.stdout)
+            print('-'*60)
+
 def run_sortphotos(args):
-    sortPhotos(args.src_dir, args.dest_dir, args.sort, args.rename, args.recursive,
-               args.copy, args.test, not args.keep_duplicates, args.day_begins,
-               args.ignore_groups, args.ignore_tags, args.use_only_groups,
-               args.use_only_tags, not args.silent, args.ignore, args.remove_ignored_files, args.remove_empty_dirs)
+    sorted = sortPhotos(args.src_dir, args.dest_dir, args.sort, args.rename, args.recursive,
+                        args.copy, args.test, not args.keep_duplicates, args.day_begins,
+                        args.ignore_groups, args.ignore_tags, args.use_only_groups,
+                        args.use_only_tags, not args.silent, args.ignore, args.remove_ignored_files, args.remove_empty_dirs)
+
+    if sys.platform == 'darwin' and args.notify and sorted > 0:
+        terminal_app_cmd = TERMINAL_APP + " -title 'Sortphoto' -message '"+str(sorted)+" photos sorted.' -sound 'default' -execute 'open "+args.dest_dir+"'"
+        os.system(terminal_app_cmd)
+
 def main():
     import argparse
 
@@ -521,52 +562,28 @@ def main():
                     default=None,
                     help='specify a restricted set of tags to search for date information\n\
     e.g., EXIF:CreateDate')
-    parser.add_argument('--ignore', type=str, nargs='+',
+    parser.add_argument('--ignore', type=str,
                     default=None,
-                    help='specify a pattern for files to be ignored ex: .*,*.db')
+                    help="a list of files to be ignored separated by ','\n\
+    example: --ignore '.*,*.db' \n\
+    (be aware to put the filter between bracket to avoid side effect with command line)")
     parser.add_argument('--remove-ignored-files', action='store_true', help='remove ignored files')
     parser.add_argument('--remove-empty-dirs', action='store_true', help='remove empty dirs')
     parser.add_argument('-w','--watch', action='store_true', help='long running mode whare the source dir is constantly watched')
+    parser.add_argument('--notify', action='store_true', help='notify once sorting is done')
     parser.add_argument('--set-locale', type=str,
                     default=None,
                     help='specify a locale like fr_FR fro french, useful to get month directory name in your own locale')
 
     # parse command line arguments
     args = parser.parse_args()
+    #print(args)
 
     if args.set_locale:
         locale.setlocale(locale.LC_TIME, args.set_locale)
 
     if args.watch:
-
-        import select
-
-        file_present = []
-        while True:
-            try:
-                i, o, e = select.select( [sys.stdin], [], [],  5)
-
-                if(i):
-                    for new_file in sys.stdin.readline()[:-1].split('\n'):
-                        if os.path.exists(new_file):
-                            print("New file present:", new_file)
-                            file_present.append(new_file)
-                else:
-                    print("No activity detected.")
-                    if len(file_present) > 0:
-                        print("Sorting files...")
-                        run_sortphotos(args)
-                        print("Done!")
-                        file_present = []
-            except KeyboardInterrupt:
-                sys.exit(0)
-            except:
-                import traceback
-                e = sys.exc_info()[0]
-                print("Exception detected:",e)
-                print('-'*60)
-                traceback.print_exc(file=sys.stdout)
-                print('-'*60)
+        run_stdin_watcher(args)
     else:
         run_sortphotos(args)
 
