@@ -94,14 +94,15 @@ SortPhotos will *always* check to make sure something with the same file name do
 
 ## filtering file to be processed and cleaning the source directory
 Sometimes, especially when working with directories coming from winwdows, it is desirable to filter for example Thumb.db files so they are no moved/copied to dest_dir. 
-The ``--filter`` option can be used for that. Ex: ``--filter '*.db'``
-Several filter can be applied to filter several type of files seprarting them with ',': Ex: ``--filter '.*,*.db'``
+The ``--filter`` option can be used for that. Ex: ``--filter '*.db'``.
+Several filter can be applied to filter several type of files seprarting them with ',': Ex: ``--filter '.*,*.db'``.
 Don't forget the quotes ``'`` to delimit filter or the terminal window can expand them.
-Invoke the option ``--remove-filtered-files`` to add a step that remove filtered files before processing the whole directory. This is usefull when combined with move option (default) to get clean empty dirs once the source directory has been processed
+Invoke the option ``--remove-filtered-files`` to add a step that remove filtered files before processing the whole directory. This is usefull when combined with move option (default) to get clean empty dirs once the source directory has been processed.
 Invoke the option ``--remove-empty-dirs`` to delete empty dirs once the processing is finished
 
 ## using notification (OSX only)
-To get a notification once directory has been processed use ``--notify``
+To get a notification once directory has been processed use ``--notify``.
+
 ![Notify](notify.png)
 
 ## forcing a locale
