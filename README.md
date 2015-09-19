@@ -92,6 +92,23 @@ SortPhotos will *always* check to make sure something with the same file name do
 
     python sortphotos.py --keep-duplicates /source /destination
 
+## filtering file to be processed and cleaning the source directory
+Sometimes, especially when working with directories coming from winwdows, it is desirable to filter for example Thumb.db files so they are no moved/copied to dest_dir. 
+The ``--filter`` option can be used for that. Ex: ``--filter '*.db'``
+Several filter can be applied to filter several type of files seprarting them with ',': Ex: ``--filter '.*,*.db'``
+Don't forget the quotes ``'`` to delimit filter or the terminal window can expand them.
+Invoke the option ``--remove-filtered-files`` to add a step that remove filtered files before processing the whole directory. This is usefull when combined with move option (default) to get clean empty dirs once the source directory has been processed
+Invoke the option ``--remove-empty-dirs`` to delete empty dirs once the processing is finished
+
+## using notification (OSX only)
+To get a notification once directory has been processed use ``--notify``
+![Notify](notify.png)
+
+## forcing a locale
+When directories are created they use the python default locale. The result is that you get directory name in english as default.
+Using ``--set-locale`` will force a locale to get directory name in your prefered language.
+ex: ``--set-locale fr_FR`` will force for the French names for months.
+
 <!-- ## choose which file types to search for
 You can restrict what types of files SortPhotos looks for in your source directory.  By default it only looks for the most common photo and video containers ('jpg', 'jpeg', 'tiff', 'arw', 'avi', 'mov', 'mp4', 'mts').  You can change this behavior through the ``extensions`` argument.  Note that it is not case sensitive so if you specify 'jpg' as an extension it will search for both jpg and JPG files or even jPg files.  For example say you want to copy and sort only the *.gif and *.avi files you would call
 
@@ -138,11 +155,32 @@ and you should see the Agent listed (I grep the results because you will typical
 
     $ launchctl unload com.andrewning.sortphotos.plist
 
+#File watcher
+As an alternate way, a ``com.sortphotos.file_watcher.plist`` is provided to invoke the file_watcher.py script.
+This script invoke sortphotos in ``-w`` watch mode.
+In this mode the script waits on its stdin input to process the directory. Combined with file_watcher, this is an efficient way to automatically get your file processed 5 seconds after any IO are done on the watched directory.
+You can tune the watched dir,sorted dir ans sortphotos options setting the parameters ``WATCH_DIR``, ``SORTED_DIR`` and ``USER_OPTIONS`` into file_watcher.py that is a warapper script that setup everything for you.
+
 # Acknowledgments
 
 SortPhotos grabs EXIF data from the photos/videos using the very excellent [ExifTool](http://www.sno.phy.queensu.ca/~phil/exiftool/) written by Phil Harvey.
 
+Filewatcher binary from:
+https://github.com/thomasfl/filewatcher
+
+Terminal-notifier recompiled to change default icon , original from:
+https://github.com/julienXX/terminal-notifier
+
 # ChangeLog (of major changes)
+
+### 9/19/2015
+
+- file_watcher script
+- locales support
+- new options to filter and clean source directory
+- OSX notification support
+- fix for exif field with "HH:MM:SS" only format
+- fix for str/buffer python3 compatibility
 
 ### 7/17/2015
 
