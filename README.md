@@ -159,6 +159,7 @@ and you should see the Agent listed (I grep the results because you will typical
 #File watcher
 As an alternate way, a ``com.sortphotos.file_watcher.plist`` is provided to invoke the file_watcher.py script.
 This script invoke sortphotos in ``-w`` watch mode.
+Fswatch from https://github.com/emcrisostomo/fswatch must be installed prior to use file_watcher.py
 In this mode the script waits on its stdin input to process the directory. Combined with file_watcher, this is an efficient way to automatically get your file processed 5 seconds after any IO are done on the watched directory.
 You can tune the watched dir,sorted dir ans sortphotos options setting the parameters ``WATCH_DIR``, ``SORTED_DIR`` and ``USER_OPTIONS`` into file_watcher.py that is a warapper script that setup everything for you.
 
@@ -166,8 +167,9 @@ You can tune the watched dir,sorted dir ans sortphotos options setting the param
 
 SortPhotos grabs EXIF data from the photos/videos using the very excellent [ExifTool](http://www.sno.phy.queensu.ca/~phil/exiftool/) written by Phil Harvey.
 
-Filewatcher binary from:
-https://github.com/thomasfl/filewatcher
+Fswatch from:
+https://github.com/emcrisostomo/fswatch
+Must be installed prior to use file_watcher.py
 
 Terminal-notifier recompiled to change default icon , original from:
 https://github.com/julienXX/terminal-notifier
