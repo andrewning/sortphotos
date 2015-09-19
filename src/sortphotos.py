@@ -48,8 +48,8 @@ def parse_date_exif(date_string):
     # parse year, month, day
     date_entries = elements[0].split(':')  # ['YYYY', 'MM', 'DD']
 
-    # check if three entries, nonzero data, and no decimal (which occurs for timestamps with only time but no date)
-    if len(date_entries) == 3 and date_entries[0] > '0000' and '.' not in ''.join(date_entries):
+    # check if three entries, nonzero data, and no decimal (which occurs for timestamps with only time but no date), and len year = 4 to workaround 'HH:MM:SS' entries
+    if len(date_entries) == 3 and date_entries[0] > '0000' and '.' not in ''.join(date_entries) and len(date_entries[0]) == 4:
         year = int(date_entries[0])
         month = int(date_entries[1])
         day = int(date_entries[2])
