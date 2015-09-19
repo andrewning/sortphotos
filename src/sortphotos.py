@@ -478,7 +478,7 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
     return num_files
 
 def run_stdin_watcher(args):
-    verbose = args.verbose
+    verbose = not args.silent
     file_present = []
     while True:
         try:
@@ -489,7 +489,7 @@ def run_stdin_watcher(args):
                     if os.path.exists(new_file):
                         if verbose:
                             print("New file present:", new_file)
-                            file_present.append(new_file)
+                        file_present.append(new_file)
             else:
                 if verbose:
                     print("No activity detected.")
