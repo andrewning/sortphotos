@@ -563,7 +563,7 @@ def main():
                     help='specify a restricted set of tags to search for date information\n\
     e.g., EXIF:CreateDate')
     parser.add_argument('--ignore', type=str,
-                    default=None,
+                    default="",
                     help="a list of files to be ignored separated by ','\n\
     example: --ignore '.*,*.db' \n\
     (be aware to put the filter between bracket to avoid side effect with command line)")
