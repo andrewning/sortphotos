@@ -432,6 +432,7 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
 
 def main():
     import argparse
+    import locale
 
     # setup command line parsing
     parser = argparse.ArgumentParser(formatter_class=argparse.RawTextHelpFormatter,
@@ -475,8 +476,16 @@ def main():
                     help='specify a restricted set of tags to search for date information\n\
     e.g., EXIF:CreateDate')
 
+    parser.add_argument('--locale', type=str,
+                    default=None,
+                    help='specify what locale to use, will for example affect the month names\n\
+    e.g. sv_SE.UTF-8 for Swedish month names')
+
     # parse command line arguments
     args = parser.parse_args()
+
+    if args.locale is not None:
+        locale.setlocale(locale.LC_ALL, args.locale)
 
     sortPhotos(args.src_dir, args.dest_dir, args.sort, args.rename, args.recursive,
         args.copy, args.test, not args.keep_duplicates, args.day_begins,
