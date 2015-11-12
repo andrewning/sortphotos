@@ -188,20 +188,20 @@ class ExifTool(object):
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
-        self.process.stdin.write("-stay_open\nFalse\n")
+        self.process.stdin.write(b'-stay_open\nFalse\n')
         self.process.stdin.flush()
 
     def execute(self, *args):
         args = args + ("-execute\n",)
-        self.process.stdin.write(str.join("\n", args))
+        self.process.stdin.write(str.join("\n", args).encode('utf-8'))
         self.process.stdin.flush()
         output = ""
         fd = self.process.stdout.fileno()
         while not output.rstrip(' \t\n\r').endswith(self.sentinel):
             increment = os.read(fd, 4096)
             if self.verbose:
-                sys.stdout.write(increment)
-            output += increment
+                sys.stdout.write(increment.decode('utf-8'))
+            output += increment.decode('utf-8')
         return output.rstrip(' \t\n\r')[:-len(self.sentinel)]
 
     def get_metadata(self, *args):
