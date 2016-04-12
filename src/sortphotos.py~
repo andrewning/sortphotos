@@ -1,6 +1,5 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
+# encoding: utf-8
 """
 sortphotos.py
 
@@ -14,8 +13,6 @@ from __future__ import with_statement
 import subprocess
 import os
 import sys
-reload(sys);
-sys.setdefaultencoding("utf8")
 import shutil
 try:
     import json
