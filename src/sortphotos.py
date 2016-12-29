@@ -366,7 +366,8 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
 
         if rename_format is not None:
             _, ext = os.path.splitext(filename)
-            filename = date.strftime(rename_format) + ext
+            rename_format_final = rename_format.replace('#f',os.path.split(os.path.splitext(filename)[0])[1])
+            filename = date.strftime(rename_format_final) + ext
 
         # setup destination file
         dest_file = os.path.join(dest_file, filename)
@@ -454,6 +455,7 @@ def main():
     parser.add_argument('--rename', type=str, default=None,
                         help="rename file using format codes \n\
     https://docs.python.org/2/library/datetime.html#strftime-and-strptime-behavior. \n\
+    you can use '#f' to add the filename (without extension) \n\
     default is None which just uses original filename")
     parser.add_argument('--keep-duplicates', action='store_true',
                         help='If file is a duplicate keep it anyway (after renaming).')
