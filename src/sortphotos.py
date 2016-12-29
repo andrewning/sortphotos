@@ -385,15 +385,10 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
                     dest_compare = test_file_dict[dest_file]
                 else:
                     dest_compare = dest_file
-                if filecmp.cmp(src_file, dest_compare):  # check for identical files
-                    if remove_duplicates:
-                        fileIsIdentical = True
-                        if verbose:
-                            print('Identical file already exists.  Duplicate will be ignored.\n')
-                            # sys.stdout.flush()
-                    else:
-                        if verbose:
-                            print('Identical file already exists.  Duplicate will be overwritten.')
+                if remove_duplicates and filecmp.cmp(src_file, dest_compare):  # check for identical files
+                    fileIsIdentical = True
+                    if verbose:
+                        print('Identical file already exists.  Duplicate will be ignored.\n')
                     break
 
                 else:  # name is same, but file is different
@@ -413,16 +408,12 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
         else:
 
             if fileIsIdentical:
-                continue    # if file is the same, do not copy/move file
-            if copy_files:
-                if verbose:
-                    print("Copying file...")
-                shutil.copy2(src_file, dest_file)
+                continue  # ignore identical files
             else:
-                if verbose:
-                    print("Moving file...")
-                shutil.move(src_file, dest_file)
-
+                if copy_files:
+                    shutil.copy2(src_file, dest_file)
+                else:
+                    shutil.move(src_file, dest_file)
 
 
 
