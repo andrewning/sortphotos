@@ -316,9 +316,9 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
         # extract timestamp date for photo
         src_file, date, keys = get_oldest_timestamp(data, additional_groups_to_ignore, additional_tags_to_ignore)
 
-        # fixes further errors when using unicode characters like "\u20AC" 
+        # fixes further errors when using unicode characters like "\u20AC"
         src_file.encode('utf-8')
-        
+
         if verbose:
         # write out which photo we are at
             ending = ']'
@@ -372,7 +372,7 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
             filename = date.strftime(rename_format) + ext.lower()
 
         # setup destination file
-        dest_file = os.path.join(dest_file, filename)
+        dest_file = os.path.join(dest_file, filename.encode('utf-8'))
         root, ext = os.path.splitext(dest_file)
 
         if verbose:
