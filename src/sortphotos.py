@@ -62,7 +62,7 @@ def parse_date_exif(date_string):
 
     if len(elements) > 1:
         time_entries = re.split('(\+|-|Z)', elements[1])  # ['HH:MM:SS', '+', 'HH:MM']
-        time = time_entries[0].rstrip(':').split(':')  # ['HH', 'MM', 'SS']  rstrip is there to handle malformed tag with a colon at the end
+        time = time_entries[0].split(':')  # ['HH', 'MM', 'SS']
 
         if len(time) == 3:
             hour = int(time[0])
@@ -142,7 +142,11 @@ def get_oldest_timestamp(data, additional_groups_to_ignore, additional_tags_to_i
             if isinstance(date, list):
                 date = date[0]
 
-            exifdate = parse_date_exif(date)
+            try:
+                exifdate = parse_date_exif(date)  # check for poor-formed exif data, but allow continuation
+            except Exception as e:
+                exifdate = None
+
             if exifdate and exifdate < oldest_date:
                 date_available = True
                 oldest_date = exifdate
