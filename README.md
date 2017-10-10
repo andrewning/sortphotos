@@ -100,6 +100,10 @@ The first five are different EXIF data tags, and the last two are file stamp dat
 
 These five are commonly used tags, but there are a wide range of EXIF and other tags available (listed [here](http://www.sno.phy.queensu.ca/~phil/exiftool/TagNames/index.html)).  For the specific file types you use, you should rearrange or add the corresponding EXIF tags you need.   -->
 
+## time zone adjust
+Time zone adjust is meant to be done against UTC, however, some devices store local time. If this is the case and the local time stored is already correct, you can disable the time zone adjust.
+
+    python sortphotos.py --disable-time-zone-adjust /source /destination
 
 ## duplicate removal
 SortPhotos will *always* check to make sure something with the same file name doesn't already exist where it's trying to write, so that you don't unintentionally overwrite a file. It this occurs it will append a number on the end of the file.  So for example if photo.jpg was taken on June 1, 2010 but 2010 > June > photo.jpg already exists then the new file will be moved as photo_1.jpg and so on.  SortPhotos will go one step further and if it finds a file of the same name, it will then run a file compare to see if the files are actually the same.  If they are *exactly* the same, it will just skip the copy (or move) operation.  This will prevent you from having duplicate files.  However you have the option of turning this off (not the name comparison, that will always happen, just the weeding out of duplicates).  This option would be useful, for example, if you are copying over a bunch of new photos that you are sure don't already exist in your organized collection of photos.  Invoke the option ``--keep-duplicates`` in order to skip duplicate detection.
