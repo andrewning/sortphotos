@@ -443,7 +443,7 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
         dest_file = dest_dir
         for thedir in dirs:
             dest_file = os.path.join(dest_file, thedir)
-            if not os.path.exists(dest_file):
+            if not os.path.exists(dest_file) and not test:
                 os.makedirs(dest_file)
 
         # rename file if necessary
