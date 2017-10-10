@@ -112,6 +112,61 @@ def parse_date_exif(date_string):
 
 
 
+def get_prioritized_timestamp(data, prioritized_groups, prioritized_tags, additional_groups_to_ignore, additional_tags_to_ignore):
+    # loop through user specified prioritized groups/tags
+    prioritized_date = None
+    prioritized_keys = []
+
+    # save src file
+    src_file = data['SourceFile']
+
+    # start with tags as they are more specific
+    if prioritized_tags:
+        for tag in prioritized_tags:
+            date = None
+            
+            # create a hash slice of data with just the specified tag
+            subdata = {key:value for key,value in data.iteritems() if tag in key}
+            if subdata:
+                # re-use get_oldest_timestamp to get the data needed
+                subdata['SourceFile'] = src_file
+                src_file, date, keys = get_oldest_timestamp(subdata, additional_groups_to_ignore, additional_tags_to_ignore)
+
+            if not date:
+                continue
+        
+            prioritized_date = date
+            prioritized_keys = keys
+
+            # return as soon as a match is found
+            return src_file, prioritized_date, prioritized_keys
+
+    # if no matching tags are found, look for matching groups
+    if prioritized_groups:
+        for group in prioritized_groups:
+            date = None
+            
+            # create a hash slice of data to find the oldest date within the specified group
+            subdata = {key:value for key,value in data.iteritems() if key.startswith(group)}
+            if subdata:
+                # find the oldest date for that group
+                subdata['SourceFile'] = src_file
+                src_file, date, keys = get_oldest_timestamp(subdata, additional_groups_to_ignore, additional_tags_to_ignore)
+
+            if not date:
+                continue
+        
+            prioritized_date = date
+            prioritized_keys = keys
+
+            # return as soon as a match is found
+            return src_file, prioritized_date, prioritized_keys
+        
+    # reaching here means no matches were found
+    return src_file, prioritized_date, prioritized_keys
+
+
+
 def get_oldest_timestamp(data, additional_groups_to_ignore, additional_tags_to_ignore, print_all_tags=False):
     """data as dictionary from json.  Should contain only time stamps except SourceFile"""
 
@@ -123,7 +178,7 @@ def get_oldest_timestamp(data, additional_groups_to_ignore, additional_tags_to_i
     # save src file
     src_file = data['SourceFile']
 
-    # ssetup tags to ignore
+    # setup tags to ignore
     ignore_groups = ['ICC_Profile'] + additional_groups_to_ignore
     ignore_tags = ['SourceFile', 'XMP:HistoryWhen'] + additional_tags_to_ignore
 
@@ -229,7 +284,9 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
         copy_files=False, test=False, remove_duplicates=True, day_begins=0,
         additional_groups_to_ignore=['File'], additional_tags_to_ignore=[],
         use_only_groups=None, use_only_tags=None, rename_with_camera_model=False,
-        show_warnings=True, src_file_regex=None, src_file_extension=[], verbose=True, keep_filename=False):
+        show_warnings=True, src_file_regex=None, src_file_extension=[],
+		prioritize_groups=None, prioritize_tags=None,
+		verbose=True, keep_filename=False):
     """
     This function is a convenience wrapper around ExifTool based on common usage scenarios for sortphotos.py
 
@@ -276,6 +333,10 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
         pick your source file using regex
     src_file_extension: list(str)
         Limit your script to process only specific files
+    prioritize_groups : list(str)
+        a list of groups that will be prioritized for date info
+    prioritize_tags : list(str)
+        a list of tags that will be prioritized for date info
     verbose : bool
         True if you want to see details of file processing
 
@@ -343,7 +404,11 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
     for idx, data in enumerate(metadata):
 
         # extract timestamp date for photo
-        src_file, date, keys = get_oldest_timestamp(data, additional_groups_to_ignore, additional_tags_to_ignore)
+        date = None
+        if prioritize_groups or prioritize_tags:
+            src_file, date, keys = get_prioritized_timestamp(data, prioritize_groups, prioritize_tags, additional_groups_to_ignore, additional_tags_to_ignore)
+        if not date:
+            src_file, date, keys = get_oldest_timestamp(data, additional_groups_to_ignore, additional_tags_to_ignore)
 
         # fixes further errors when using unicode characters like "\u20AC"
         src_file.encode('utf-8')
@@ -528,6 +593,14 @@ def main():
                     default=None,
                     help='specify a restricted set of tags to search for date information\n\
     e.g., EXIF:CreateDate')
+    parser.add_argument('--prioritize-groups', type=str, nargs='+',
+                    default=None,
+                    help='specify a prioritized set of groups to search for date information\n\
+    e.g., EXIF File')
+    parser.add_argument('--prioritize-tags', type=str, nargs='+',
+                    default=None,
+                    help='specify a prioritized set of tags to search for date information\n\
+    e.g., EXIF:CreateDate EXIF:ModifyDate')
 
     # MHB
     parser.add_argument('--rename-with-camera-model', action='store_true',
@@ -546,7 +619,9 @@ def main():
         args.copy, args.test, not args.keep_duplicates, args.day_begins,
         args.ignore_groups, args.ignore_tags, args.use_only_groups,
         args.use_only_tags, args.rename_with_camera_model, args.show_warnings,
-        args.src_file_regex, args.src_file_extension, not args.silent, args.keep_filename)
+        args.src_file_regex, args.src_file_extension,
+        args.prioritize_groups, args.prioritize_tags,
+        not args.silent, args.keep_filename)
 
 if __name__ == '__main__':
     main()
