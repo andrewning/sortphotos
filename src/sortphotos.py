@@ -404,6 +404,10 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
     if test:
         test_file_dict = {}
 
+    # track files modified/skipped
+    files_modified = []
+    files_skipped = []
+
     # parse output extracting oldest relevant date
     for idx, data in enumerate(metadata):
 
@@ -437,12 +441,14 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
                 print('No valid dates were found using the specified tags.  File will remain where it is.')
                 print()
                 # sys.stdout.flush()
+            files_skipped.append(src_file)
             continue
 
         # ignore hidden files
         if os.path.basename(src_file).startswith('.'):
             print('hidden file.  will be skipped')
             print()
+            files_skipped.append(src_file)
             continue
 
         # ignore specified file extensions
@@ -450,6 +456,7 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
         if fileextension in map(str.upper, ignore_file_types):
             print(fileextension + ' files ignored.  will be skipped')
             print()
+            files_skipped.append(src_file)
             continue
         
         if verbose:
@@ -512,10 +519,17 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
                     dest_compare = dest_file
                 if remove_duplicates and filecmp.cmp(src_file, dest_compare):  # check for identical files
                     fileIsIdentical = True
+<<<<<<< HEAD
                     if show_warnings:
                         print("Identical file already exists.  Duplicate will be ignored.\n\
                                Source: " + src_file + "\n\
                                Dest:   " + dest_file)
+                    files_skipped.append(src_file)
+=======
+                    if verbose:
+                        print('Identical file already exists.  Duplicate will be ignored.\n')
+                        files_skipped.append(src_file)
+>>>>>>> 4620171 (Added summary/count of files modified/skipped)
                     break
 
                 else:  # name is same, but file is different
@@ -527,6 +541,7 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
                     append += 1
                     if show_warnings:
                         print('Same name already exists...renaming to: ' + dest_file)
+                        files_modified.append(dest_file)
 
             else:
                 break
@@ -536,17 +551,18 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
         if test:
             test_file_dict[dest_file] = src_file
 
+        if fileIsIdentical:
+            files_skipped.append(src_file)
+            continue  # ignore identical files
         else:
-
-            if fileIsIdentical:
-                continue  # ignore identical files
-            else:
-                if copy_files:
+            if copy_files:
+                files_modified.append(dest_file)
+                if not test:
                     shutil.copy2(src_file, dest_file)
-                else:
+            else:
+                files_modified.append(dest_file)
+                if not test:
                     shutil.move(src_file, dest_file)
-
-
 
         if verbose:
             print()
@@ -555,6 +571,13 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
 
     if not verbose:
         print()
+
+    print('Files modified (' + str(len(files_modified)) + '): ')
+    for modified in files_modified:
+        print('\t' + str(modified))
+    print('Files skipped (' + str(len(files_skipped)) + '): ')
+    for skipped in files_skipped:
+        print('\t' + str(skipped))
 
 
 def main():
