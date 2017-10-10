@@ -104,6 +104,12 @@ SortPhotos will *always* check to make sure something with the same file name do
 
     python sortphotos.py --keep-duplicates /source /destination
 
+## ignore file types
+
+You can ignore specified file extensions by specifying a list
+
+    python sortphotos.py --ignore-file-types MOV MP4 /source /destination
+
 <!-- ## choose which file types to search for
 You can restrict what types of files SortPhotos looks for in your source directory.  By default it only looks for the most common photo and video containers ('jpg', 'jpeg', 'tiff', 'arw', 'avi', 'mov', 'mp4', 'mts').  You can change this behavior through the ``extensions`` argument.  Note that it is not case sensitive so if you specify 'jpg' as an extension it will search for both jpg and JPG files or even jPg files.  For example say you want to copy and sort only the *.gif and *.avi files you would call
 
