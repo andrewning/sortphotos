@@ -281,8 +281,8 @@ class ExifTool(object):
 
 
 def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
-        copy_files=False, test=False, remove_duplicates=True, disable_time_zone_adjust=False, day_begins=0,
-        additional_groups_to_ignore=['File'], additional_tags_to_ignore=[],
+        copy_files=False, test=False, ignore_file_types=[], remove_duplicates=True, disable_time_zone_adjust=False,
+        day_begins=0, additional_groups_to_ignore=['File'], additional_tags_to_ignore=[],
         use_only_groups=None, use_only_tags=None, rename_with_camera_model=False,
         show_warnings=True, src_file_regex=None, src_file_extension=[],
 		prioritize_groups=None, prioritize_tags=None,
@@ -309,6 +309,8 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
         True if you want files to be copied over from src_dir to dest_dir rather than moved
     test : bool
         True if you just want to simulate how the files will be moved without actually doing any moving/copying
+    ignore_file_types : list(str)
+        file types to be ignored. By default, hidden files (.*) are ignored
     remove_duplicates : bool
         True to remove files that are exactly the same in name and a file hash
     keep_filename : bool
@@ -443,6 +445,13 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
             print()
             continue
 
+        # ignore specified file extensions
+        fileextension = os.path.splitext(src_file)[-1].upper().replace('.', '')
+        if fileextension in map(str.upper, ignore_file_types):
+            print(fileextension + ' files ignored.  will be skipped')
+            print()
+            continue
+        
         if verbose:
             print('Date/Time: ' + str(date))
             print('Corresponding Tags: ' + ', '.join(keys))
@@ -574,6 +583,10 @@ def main():
     parser.add_argument('--keep-filename', action='store_true',
                         help='In case of duplicated output filenames an increasing number and the original file name will be appended',
                         default=False)
+    parser.add_argument('--ignore-file-types', type=str, nargs='+',
+                        default=[],
+                        help="ignore file types\n\
+    default is to only ignore hidden files (.*)")
     parser.add_argument('--keep-duplicates', action='store_true',
                         help='If file is a duplicate keep it anyway (after renaming).')
     parser.add_argument('--day-begins', type=int, default=0, help='hour of day that new day begins (0-23), \n\
@@ -619,7 +632,7 @@ def main():
     args = parser.parse_args()
 
     sortPhotos(args.src_dir, args.dest_dir, args.sort, args.rename, args.recursive,
-        args.copy, args.test, not args.keep_duplicates, args.disable_time_zone_adjust, args.day_begins,
+        args.copy, args.test, args.ignore_file_types, not args.keep_duplicates, args.disable_time_zone_adjust, args.day_begins,
         args.ignore_groups, args.ignore_tags, args.use_only_groups,
         args.use_only_tags, args.rename_with_camera_model, args.show_warnings,
         args.src_file_regex, args.src_file_extension,
