@@ -31,7 +31,7 @@ exiftool_location = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'I
 
 # -------- convenience methods -------------
 
-def parse_date_exif(date_string):
+def parse_date_exif(date_string, disable_time_zone_adjust):
     """
     extract date info from EXIF data
     YYYY:MM:DD HH:MM:SS
@@ -104,14 +104,14 @@ def parse_date_exif(date_string):
         return None  # errors in time format
 
     # adjust for time zone if necessary
-    if time_zone_adjust:
+    if not disable_time_zone_adjust and time_zone_adjust:
         date += dateadd
 
     return date
 
 
 
-def get_prioritized_timestamp(data, prioritized_groups, prioritized_tags, additional_groups_to_ignore, additional_tags_to_ignore):
+def get_prioritized_timestamp(data, prioritized_groups, prioritized_tags, additional_groups_to_ignore, additional_tags_to_ignore, disable_time_zone_adjust=False):
     # loop through user specified prioritized groups/tags
     prioritized_date = None
     prioritized_keys = []
@@ -129,7 +129,7 @@ def get_prioritized_timestamp(data, prioritized_groups, prioritized_tags, additi
             if subdata:
                 # re-use get_oldest_timestamp to get the data needed
                 subdata['SourceFile'] = src_file
-                src_file, date, keys = get_oldest_timestamp(subdata, additional_groups_to_ignore, additional_tags_to_ignore)
+                src_file, date, keys = get_oldest_timestamp(subdata, additional_groups_to_ignore, additional_tags_to_ignore, disable_time_zone_adjust)
 
             if not date:
                 continue
@@ -150,7 +150,7 @@ def get_prioritized_timestamp(data, prioritized_groups, prioritized_tags, additi
             if subdata:
                 # find the oldest date for that group
                 subdata['SourceFile'] = src_file
-                src_file, date, keys = get_oldest_timestamp(subdata, additional_groups_to_ignore, additional_tags_to_ignore)
+                src_file, date, keys = get_oldest_timestamp(subdata, additional_groups_to_ignore, additional_tags_to_ignore, disable_time_zone_adjust)
 
             if not date:
                 continue
@@ -166,7 +166,7 @@ def get_prioritized_timestamp(data, prioritized_groups, prioritized_tags, additi
 
 
 
-def get_oldest_timestamp(data, additional_groups_to_ignore, additional_tags_to_ignore, print_all_tags=False):
+def get_oldest_timestamp(data, additional_groups_to_ignore, additional_tags_to_ignore, disable_time_zone_adjust=False, print_all_tags=False):
     """data as dictionary from json.  Should contain only time stamps except SourceFile"""
 
     # save only the oldest date
@@ -201,7 +201,7 @@ def get_oldest_timestamp(data, additional_groups_to_ignore, additional_tags_to_i
                 date = date[0]
 
             try:
-                exifdate = parse_date_exif(date)  # check for poor-formed exif data, but allow continuation
+                exifdate = parse_date_exif(date, disable_time_zone_adjust)  # check for poor-formed exif data, but allow continuation
             except Exception as e:
                 exifdate = None
 
@@ -280,7 +280,7 @@ class ExifTool(object):
 
 
 def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
-        copy_files=False, test=False, remove_duplicates=True, day_begins=0,
+        copy_files=False, test=False, remove_duplicates=True, disable_time_zone_adjust=False, day_begins=0,
         additional_groups_to_ignore=['File'], additional_tags_to_ignore=[],
         use_only_groups=None, use_only_tags=None, prioritize_groups=None, prioritize_tags=None,
         verbose=True):
@@ -308,6 +308,8 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
         True if you just want to simulate how the files will be moved without actually doing any moving/copying
     remove_duplicates : bool
         True to remove files that are exactly the same in name and a file hash
+    disable_time_zone_adjust : bool
+		True to disable time zone adjustments
     day_begins : int
         what hour of the day you want the day to begin (only for classification purposes).  Defaults at 0 as midnight.
         Can be used to group early morning photos with the previous day.  must be a number between 0-23
@@ -376,9 +378,9 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
         # extract timestamp date for photo
         date = None
         if prioritize_groups or prioritize_tags:
-            src_file, date, keys = get_prioritized_timestamp(data, prioritize_groups, prioritize_tags, additional_groups_to_ignore, additional_tags_to_ignore)
+            src_file, date, keys = get_prioritized_timestamp(data, prioritize_groups, prioritize_tags, additional_groups_to_ignore, additional_tags_to_ignore, disable_time_zone_adjust)
         if not date:
-            src_file, date, keys = get_oldest_timestamp(data, additional_groups_to_ignore, additional_tags_to_ignore)
+            src_file, date, keys = get_oldest_timestamp(data, additional_groups_to_ignore, additional_tags_to_ignore, disable_time_zone_adjust)
 
         # fixes further errors when using unicode characters like "\u20AC"
         src_file.encode('utf-8')
@@ -512,6 +514,7 @@ def main():
     parser.add_argument('-c', '--copy', action='store_true', help='copy files instead of move')
     parser.add_argument('-s', '--silent', action='store_true', help='don\'t display parsing details.')
     parser.add_argument('-t', '--test', action='store_true', help='run a test.  files will not be moved/copied\ninstead you will just a list of would happen')
+    parser.add_argument('-z', '--disable-time-zone-adjust', action='store_true', help='disables time zone adjust\nuseful for devices that store local time + time zone instead of UTC + time zone')
     parser.add_argument('--sort', type=str, default='%Y/%m-%b',
                         help="choose destination folder structure using datetime format \n\
     https://docs.python.org/2/library/datetime.html#strftime-and-strptime-behavior. \n\
@@ -557,7 +560,7 @@ def main():
     args = parser.parse_args()
 
     sortPhotos(args.src_dir, args.dest_dir, args.sort, args.rename, args.recursive,
-        args.copy, args.test, not args.keep_duplicates, args.day_begins,
+        args.copy, args.test, not args.keep_duplicates, args.disable_time_zone_adjust, args.day_begins,
         args.ignore_groups, args.ignore_tags, args.use_only_groups,
         args.use_only_tags, args.prioritize_groups, args.prioritize_tags,
         not args.silent)
