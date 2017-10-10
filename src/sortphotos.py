@@ -481,7 +481,6 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
                     fileIsIdentical = True
                     if verbose:
                         print('Identical file already exists.  Duplicate will be ignored.\n')
-                        files_skipped.append(src_file)
                     break
 
                 else:  # name is same, but file is different
@@ -489,7 +488,6 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
                     append += 1
                     if verbose:
                         print('Same name already exists...renaming to: ' + dest_file)
-                        files_modified.append(dest_file)
 
             else:
                 break
