@@ -80,6 +80,14 @@ and this would only look for date tags in EXIF, XMP, IPTC.  Or you could restric
 
     python sortphotos.py source destination --use-only-tags EXIF:CreateDate EXIF:DateTimeOriginal
 
+You can also prioritize specific tags so as to not always use the oldest date
+
+    python sortphotos.py source destination --prioritize-tags EXIF:CreateDate EXIF:ModifyDate
+
+or prioritize by group
+
+    python sortphotos.py source destination --prioritize-tags EXIF
+
 <!-- ## selected what to sort by (defining the tags)
 
 sortphotos.py takes a list of tags you want to search for.  This list should be ordered in terms of precedence.  The default list is
