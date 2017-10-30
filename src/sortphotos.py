@@ -2,14 +2,20 @@
 # encoding: utf-8
 """
 sortphotos.py
-
 Created on 3/2/2013
 Copyright (c) S. Andrew Ning. All rights reserved.
-
 """
 
 from __future__ import print_function
 from __future__ import with_statement
+from __future__ import unicode_literals
+from __future__ import division
+from __future__ import absolute_import
+from future import standard_library
+standard_library.install_aliases()
+from builtins import *
+from builtins import str
+from builtins import object
 import subprocess
 import os
 import sys
@@ -131,7 +137,7 @@ def get_oldest_timestamp(data, additional_groups_to_ignore, additional_tags_to_i
         print('All relevant tags:')
 
     # run through all keys
-    for key in data.keys():
+    for key in list(data.keys()):
 
         # check if this key needs to be ignored, or is in the set of tags that must be used
         if (key not in ignore_tags) and (key.split(':')[0] not in ignore_groups) and 'GPS' not in key:
@@ -230,7 +236,6 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
         use_only_groups=None, use_only_tags=None, verbose=True):
     """
     This function is a convenience wrapper around ExifTool based on common usage scenarios for sortphotos.py
-
     Parameters
     ---------------
     src_dir : str
@@ -265,7 +270,6 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
         a list of tags that will be exclusived searched across for date info
     verbose : bool
         True if you want to see details of file processing
-
     """
 
     # some error checking
@@ -390,7 +394,7 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
 
         while True:
 
-            if (not test and os.path.isfile(dest_file)) or (test and dest_file in test_file_dict.keys()):  # check for existing name
+            if (not test and os.path.isfile(dest_file)) or (test and dest_file in list(test_file_dict.keys())):  # check for existing name
                 if test:
                     dest_compare = test_file_dict[dest_file]
                 else:
