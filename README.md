@@ -144,6 +144,12 @@ SortPhotos grabs EXIF data from the photos/videos using the very excellent [Exif
 
 # ChangeLog (of major changes)
 
+### 11/20/2017
+- Added options to add camera make and model number while renaming
+- Added control over warnings and verbose log
+- Above two patches are from [mtt](https://github.com/m4tt/sortphotos)
+
+
 ### 7/17/2015
 
 - @nueh fix for Python 2.5 (which you might be stuck with on a NAS for example).  
