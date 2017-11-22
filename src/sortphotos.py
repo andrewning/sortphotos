@@ -8,20 +8,21 @@ Copyright (c) S. Andrew Ning. All rights reserved.
 
 """
 
-from __future__ import print_function
-from __future__ import with_statement
-import subprocess
+from __future__ import print_function, with_statement
+
+import filecmp
+import locale
 import os
-import sys
+import re
 import shutil
+import subprocess
+import sys
+from datetime import datetime, timedelta
+
 try:
     import json
 except:
     import simplejson as json
-import filecmp
-from datetime import datetime, timedelta
-import re
-import locale
 
 # Setting locale to the 'local' value
 locale.setlocale(locale.LC_ALL, '')
@@ -240,9 +241,11 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
     sort_format : str
         date format code for how you want your photos sorted
         (https://docs.python.org/2/library/datetime.html#strftime-and-strptime-behavior)
+        use {{exif.tag}} for given exif tag
     rename_format : str
         date format code for how you want your files renamed
         (https://docs.python.org/2/library/datetime.html#strftime-and-strptime-behavior)
+        use {{exif.tag}} for given exif tag
         None to not rename file
     recursive : bool
         True if you want src_dir to be searched recursively for files (False to search only in top-level of src_dir)
