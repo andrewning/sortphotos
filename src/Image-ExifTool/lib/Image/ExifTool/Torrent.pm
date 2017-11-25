@@ -14,7 +14,7 @@ use strict;
 use vars qw($VERSION);
 use Image::ExifTool qw(:DataAccess :Utils);
 
-$VERSION = '1.02';
+$VERSION = '1.03';
 
 sub ReadBencode($$);
 sub ExtractTags($$$;$$@);
@@ -111,7 +111,7 @@ sub ReadBencode($$)
 
     # read next token
     $$dataPt =~ /(.)/sg or return undef;
-    
+
     my $val;
     my $tok = $1;
     if ($tok eq 'i') {      # integer
@@ -269,7 +269,7 @@ sub ProcessTorrent($$)
     my $err = $$raf{BencodeError};
     $et->Warn("Bencode error: $err") if $err;
     if (ref $dict eq 'HASH' and $$dict{announce}) {
-        $et->SetFileType('TORRENT');
+        $et->SetFileType();
         my $tagTablePtr = GetTagTable('Image::ExifTool::Torrent::Main');
         ExtractTags($et, $dict, $tagTablePtr) and $success = 1;
     }
@@ -295,7 +295,7 @@ bencoded information from BitTorrent files.
 
 =head1 AUTHOR
 
-Copyright 2003-2014, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2017, Phil Harvey (phil at owl.phy.queensu.ca)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

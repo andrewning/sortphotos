@@ -17,7 +17,7 @@ use Image::ExifTool qw(:DataAccess :Utils);
 use Image::ExifTool::Exif;
 use Image::ExifTool::RIFF;
 
-$VERSION = '1.21';
+$VERSION = '1.23';
 
 sub ProcessASF($$;$);
 sub ProcessContentDescription($$$);
@@ -131,7 +131,7 @@ my %advancedContentEncryption = (
     PROCESS_PROC => \&ProcessContentDescription,
     GROUPS => { 2 => 'Video' },
     0 => 'Title',
-    1 => { Name => 'Author', Groups => { 2 => 'Author' } },
+    1 => { Name => 'Author',    Groups => { 2 => 'Author' } },
     2 => { Name => 'Copyright', Groups => { 2 => 'Author' } },
     3 => 'Description',
     4 => 'Rating',
@@ -149,7 +149,7 @@ my %advancedContentEncryption = (
             3 => 'GIF',
         },
     },
-    1 => { Name => 'BannerImage', Binary => 1 },
+    1 => { Name => 'BannerImage', Groups => { 2 => 'Preview' }, Binary => 1 },
     2 => 'BannerImageURL',
     3 => 'CopyrightURL',
 );
@@ -268,7 +268,7 @@ my %advancedContentEncryption = (
     Mood => {},
     OriginalAlbumTitle => {},
     OriginalArtist => {},
-    OriginalFilename => {},
+    OriginalFilename => 'OriginalFileName',
     OriginalLyricist => {},
     OriginalReleaseTime => { Groups => { 2 => 'Time' } },
     OriginalReleaseYear => { Groups => { 2 => 'Time' } },
@@ -296,8 +296,8 @@ my %advancedContentEncryption = (
     SharedUserRating => {},
     StreamTypeInfo => {},
     SubscriptionContentID => {},
-    SubTitle => {},
-    SubTitleDescription => {},
+    SubTitle            => 'Subtitle',
+    SubTitleDescription => 'SubtitleDescription',
     Text => {},
     ToolName => {},
     ToolVersion => {},
@@ -317,7 +317,7 @@ my %advancedContentEncryption = (
     WMCollectionID => {},
     WMContentID => {},
     Writer => { Groups => { 2 => 'Author' } },
-    Year => { Groups => { 2 => 'Time' } },
+    Year   => { Groups => { 2 => 'Time' } },
 );
 
 %Image::ExifTool::ASF::Picture = (
@@ -349,10 +349,11 @@ my %advancedContentEncryption = (
             20 => 'Publisher Logo',
         },
     },
-    1 => 'PictureMimeType',
+    1 => 'PictureMIMEType',
     2 => 'PictureDescription',
     3 => {
         Name => 'Picture',
+        Groups => { 2 => 'Preview' },
         Binary => 1,
     },
 );
@@ -862,7 +863,7 @@ Windows Media Audio (WMA) and Windows Media Video (WMV) files.
 
 =head1 AUTHOR
 
-Copyright 2003-2014, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2017, Phil Harvey (phil at owl.phy.queensu.ca)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

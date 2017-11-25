@@ -8,7 +8,7 @@
 package Image::ExifTool::XMP;
 
 use strict;
-use vars qw(%specialStruct %dateTimeInfo $xlatNamespace);
+use vars qw(%specialStruct %dateTimeInfo %stdXlatNS);
 
 use Image::ExifTool qw(:DataAccess :Utils);
 
@@ -56,7 +56,7 @@ sub XMPOpen($)
     my $nv = $$et{NEW_VALUE}{$Image::ExifTool::XMP::x{xmptk}};
     my $tk;
     if (defined $nv) {
-        $tk = $et->GetNewValues($nv);
+        $tk = $et->GetNewValue($nv);
         $et->VerboseValue(($tk ? '+' : '-') . ' XMP-x:XMPToolkit', $tk);
         ++$$et{CHANGED};
     } else {
@@ -130,7 +130,10 @@ sub CheckXMP($$$)
         unless (ref $$valPtr) {
             ($$valPtr, $warn) = InflateStruct($valPtr);
             # expect a structure HASH ref or ARRAY of structures
-            ref $$valPtr or return 'Improperly formed structure';
+            unless (ref $$valPtr) {
+                $$valPtr eq '' and $$valPtr = { }, return undef; # allow empty structures
+                return 'Improperly formed structure';
+            }
         }
         if (ref $$valPtr eq 'ARRAY') {
             return 'Not a list tag' unless $$tagInfo{List};
@@ -180,7 +183,7 @@ sub CheckXMP($$$)
             ($format eq 'rational' and ($$valPtr eq 'inf' or
              $$valPtr eq 'undef' or Image::ExifTool::IsRational($$valPtr))))
         {
-            return 'Not a floating point number' 
+            return 'Not a floating point number';
         }
         if ($format eq 'rational') {
             $$valPtr = join('/', Image::ExifTool::Rationalize($$valPtr));
@@ -235,13 +238,25 @@ sub SetPropertyPath($$;$$$$)
     my ($tagTablePtr, $tagID, $parentID, $structPtr, $propList, $isType) = @_;
     my $table = $structPtr || $tagTablePtr;
     my $tagInfo = $$table{$tagID};
+    my $flatInfo;
 
-    return if ref($tagInfo) ne 'HASH' or $$tagInfo{PropertyPath};
+    return if ref($tagInfo) ne 'HASH'; # (shouldn't happen)
 
-    # don't override existing main table entry if already set by a Struct
     if ($structPtr) {
+        my $flatID = $parentID . ucfirst($tagID);
+        $flatInfo = $$tagTablePtr{$flatID};
+        if ($flatInfo) {
+            return if $$flatInfo{PropertyPath};
+        } else {
+            # flattened tag doesn't exist, so create it now
+            # (could happen if we were just writing a structure)
+            $flatInfo = { Name => ucfirst($flatID), Flat => 1 };
+            AddTagToTable($tagTablePtr, $flatID, $flatInfo);
+        }
         $isType = 1 if $$structPtr{TYPE};
     } else {
+        # don't override existing main table entry if already set by a Struct
+        return if $$tagInfo{PropertyPath};
         # use property path from original tagInfo if this is an alternate-language tag
         my $srcInfo = $$tagInfo{SrcTagInfo};
         $$tagInfo{PropertyPath} = GetPropertyPath($srcInfo) if $srcInfo;
@@ -294,14 +309,7 @@ sub SetPropertyPath($$;$$$$)
     # if this was a structure field and not a normal tag,
     # we set PropertyPath in the corresponding flattened tag
     if ($structPtr) {
-        my $flatID = $parentID . ucfirst($tagID);
-        $tagInfo = $$tagTablePtr{$flatID};
-        # create flattened tag now if necessary
-        # (could happen if we were just writing a structure)
-        unless ($tagInfo) {
-            $tagInfo = { Name => ucfirst($flatID), Flat => 1 };
-            AddTagToTable($tagTablePtr, $flatID, $tagInfo);
-        }
+        $tagInfo = $flatInfo;
         # set StructType flag if any containing structure has a TYPE
         $$tagInfo{StructType} = 1 if $isType;
     }
@@ -609,7 +617,7 @@ sub WriteXMP($$;$)
     my ($et, $dirInfo, $tagTablePtr) = @_;
     $et or return 1;    # allow dummy access to autoload this package
     my $dataPt = $$dirInfo{DataPt};
-    my (%capture, %nsUsed, $xmpErr, $tagInfo, $about);
+    my (%capture, %nsUsed, $xmpErr, $about);
     my $changed = 0;
     my $xmpFile = (not $tagTablePtr);   # this is an XMP data file if no $tagTablePtr
     # prefer XMP over other metadata formats in some types of files
@@ -633,6 +641,12 @@ sub WriteXMP($$;$)
     delete $$et{XMP_IS_XML};
     delete $$et{XMP_IS_SVG};
 
+    # get value for new rdf:about
+    my $tagInfo = $Image::ExifTool::XMP::rdf{about};
+    if (defined $$et{NEW_VALUE}{$tagInfo}) {
+        $about = $et->GetNewValue($$et{NEW_VALUE}{$tagInfo}) || '';
+    }
+
     if ($xmpFile or $dirLen) {
         delete $$et{XMP_ERROR};
         delete $$et{XMP_ABOUT};
@@ -654,15 +668,14 @@ sub WriteXMP($$;$)
                     }
                 }
             } else {
+                $success = 2 if $success and $success eq '1';
                 if ($et->Warn($err, $success)) {
                     delete $$et{XMP_CAPTURE};
                     return undef;
                 }
             }
         }
-        $tagInfo = $Image::ExifTool::XMP::rdf{about};
-        if (defined $$et{NEW_VALUE}{$tagInfo}) {
-            $about = $et->GetNewValues($$et{NEW_VALUE}{$tagInfo}) || '';
+        if (defined $about) {
             if ($verbose > 1) {
                 my $wasAbout = $$et{XMP_ABOUT};
                 $et->VerboseValue('- XMP-rdf:About', UnescapeXML($wasAbout)) if defined $wasAbout;
@@ -675,6 +688,16 @@ sub WriteXMP($$;$)
         }
         delete $$et{XMP_ERROR};
         delete $$et{XMP_ABOUT};
+
+        # call InitWriteDirs to initialize FORCE_WRITE flags if necessary
+        $et->InitWriteDirs({}, 'XMP') if $xmpFile and $et->GetNewValue('ForceWrite');
+        # set changed if we are ForceWrite tag was set to "XMP"
+        ++$changed if $$et{FORCE_WRITE}{XMP};
+
+    } elsif (defined $about) {
+        $et->VerboseValue('+ XMP-rdf:About', $about);
+        $about = EscapeXML($about); # must escape for XML
+        # (don't increment $changed here because we need another tag to be written)
     } else {
         $about = '';
     }
@@ -685,7 +708,7 @@ sub WriteXMP($$;$)
         $tagInfo = $Image::ExifTool::Extra{XMP};
         if ($tagInfo and $$et{NEW_VALUE}{$tagInfo}) {
             my $rtnVal = 1;
-            my $newVal = $et->GetNewValues($$et{NEW_VALUE}{$tagInfo});
+            my $newVal = $et->GetNewValue($$et{NEW_VALUE}{$tagInfo});
             if (defined $newVal and length $newVal) {
                 $et->VPrint(0, "  Writing XMP as a block\n");
                 ++$$et{CHANGED};
@@ -708,7 +731,7 @@ sub WriteXMP($$;$)
             my @propList = split('/',$path); # get property list
             my ($tag, $ns) = GetXMPTagID(\@propList);
             # translate namespace if necessary
-            $ns = $$xlatNamespace{$ns} if $$xlatNamespace{$ns};
+            $ns = $stdXlatNS{$ns} if $stdXlatNS{$ns};
             my ($grp, @g);
             # no "XMP-" added to most groups in exiftool RDF/XML output file
             if ($nsUsed{$ns} and (@g = ($nsUsed{$ns} =~ m{^http://ns.exiftool.ca/(.*?)/(.*?)/}))) {
@@ -772,7 +795,7 @@ sub WriteXMP($$;$)
         # to the ones used in this file
         $path = ConformPathToNamespace($et, $path);
         # find existing property
-        my $cap = $capture{$path}; 
+        my $cap = $capture{$path};
         # MicrosoftPhoto screws up the case of some tags, and some other software,
         # including Adobe software, has been known to write the wrong list type or
         # not properly enclose properties in a list, so we check for this
@@ -802,7 +825,7 @@ sub WriteXMP($$;$)
                 my $regex = quotemeta($fixPath);
                 $regex =~ s/ \d+/ \\d\+/g;  # match any list index
                 my $ok = $regex;
-                my ($ok2, $match, $i, @fixed, %fixed, $fixed, $changed);
+                my ($ok2, $match, $i, @fixed, %fixed, $fixed);
                 # check for incorrect list types
                 if ($regex =~ s{\\/rdf\\:(Bag|Seq|Alt)\\/}{/rdf:(Bag|Seq|Alt)/}g) {
                     # also look for missing bottom-level list
@@ -849,6 +872,7 @@ sub WriteXMP($$;$)
                     $et->Warn("Incorrect $wrn for existing $tg (not changed)");
                 } else {
                     # fix the incorrect property paths for all values of this tag
+                    my $didFix;
                     foreach $fixed (@fixed) {
                         my $match = shift @matches;
                         next if $fixed eq $match;
@@ -856,10 +880,13 @@ sub WriteXMP($$;$)
                         delete $capture{$match};
                         # remove xml:lang attribute from incorrect lang-alt list if necessary
                         delete $capture{$fixed}[1]{'xml:lang'} if $ok2 and $match !~ /^$ok2$/;
-                        $changed = 1;
+                        $didFix = 1;
                     }
                     $cap = $capture{$path} || $capture{$fixed[0]} unless @fixInfo;
-                    $et->Warn("Fixed incorrect $wrn for $tg", 1) if $changed;
+                    if ($didFix) {
+                        $et->Warn("Fixed incorrect $wrn for $tg", 1);
+                        ++$changed;
+                    }
                 }
             }
             last;
@@ -1019,7 +1046,7 @@ sub WriteXMP($$;$)
             (not $cap and $isCreating);
 
         # get list of new values (all done if no new values specified)
-        my @newValues = $et->GetNewValues($nvHash) or next;
+        my @newValues = $et->GetNewValue($nvHash) or next;
 
         # set language attribute for lang-alt lists
         $attrs{'xml:lang'} = $$tagInfo{LangCode} || 'x-default' if $writable eq 'lang-alt';
@@ -1095,6 +1122,7 @@ sub WriteXMP($$;$)
     my $maxDataLen = $$dirInfo{MaxDataLen};
     # get DataPt again because it may have been set by ProcessXMP
     $dataPt = $$dirInfo{DataPt};
+
     # return now if we didn't change anything
     unless ($changed or ($maxDataLen and $dataPt and defined $$dataPt and
         length($$dataPt) > $maxDataLen))
@@ -1230,7 +1258,7 @@ sub WriteXMP($$;$)
         my ($val, $attrs) = @{$capture{$path}};
         $debug and print "$path = $val\n";
         # open new properties
-        my $attr;
+        my ($attr, $dummy);
         for ($n=@curPropList; $n<$#propList; ++$n) {
             $prop = $propList[$n];
             push @curPropList, $prop;
@@ -1242,19 +1270,29 @@ sub WriteXMP($$;$)
             {
                 # need parseType='Resource' to avoid new 'rdf:Description'
                 $attr = " rdf:parseType='Resource'";
+                # check for empty structure
+                if ($propList[$n+1] =~ /:~dummy~$/) {
+                    $newData .= (' ' x scalar(@curPropList)) . "<$prop$attr/>\n";
+                    pop @curPropList;
+                    $dummy = 1;
+                    last;
+                }
             }
             $newData .= (' ' x scalar(@curPropList)) . "<$prop$attr>\n";
         }
         my $prop2 = pop @propList;  # get new property name
-        $prop2 =~ s/ .*//;          # remove list index if it exists
-        $newData .= (' ' x scalar(@curPropList)) . " <$prop2";
-        # write out attributes
-        foreach $attr (sort keys %$attrs) {
-            my $attrVal = $$attrs{$attr};
-            my $quot = ($attrVal =~ /'/) ? '"' : "'";
-            $newData .= " $attr=$quot$attrVal$quot";
+        # add element unless it was a dummy structure field
+        unless ($dummy or ($val eq '' and $prop2 =~ /:~dummy~$/)) {
+            $prop2 =~ s/ .*//;          # remove list index if it exists
+            $newData .= (' ' x scalar(@curPropList)) . " <$prop2";
+            # write out attributes
+            foreach $attr (sort keys %$attrs) {
+                my $attrVal = $$attrs{$attr};
+                my $quot = ($attrVal =~ /'/) ? '"' : "'";
+                $newData .= " $attr=$quot$attrVal$quot";
+            }
+            $newData .= length $val ? ">$val</$prop2>\n" : "/>\n";
         }
-        $newData .= length $val ? ">$val</$prop2>\n" : "/>\n";
     }
     # close off any open elements
     while ($prop = pop @curPropList) {
@@ -1345,7 +1383,7 @@ This file contains routines to write XMP metadata.
 
 =head1 AUTHOR
 
-Copyright 2003-2014, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2017, Phil Harvey (phil at owl.phy.queensu.ca)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

@@ -23,8 +23,9 @@ use strict;
 use vars qw($VERSION %convMake);
 use Image::ExifTool qw(:DataAccess :Utils);
 use Image::ExifTool::Exif;
+use Image::ExifTool::GPS;
 
-$VERSION = '1.12';
+$VERSION = '1.14';
 
 sub ProcessSEI($$);
 
@@ -100,15 +101,16 @@ my $parsePictureTiming; # flag to enable parsing of picture timing information (
         Combine => 1,   # the next tag (0x19) contains the rest of the date
         # first byte is timezone information:
         #   0x80 - unused
-        #   0x40 - DST flag (currently not decoded)
+        #   0x40 - DST flag
         #   0x20 - TimeZoneSign
         #   0x1e - TimeZoneValue
         #   0x01 - half-hour flag
         ValueConv => q{
             my ($tz, @a) = unpack('C*',$val);
-            return sprintf('%.2x%.2x:%.2x:%.2x %.2x:%.2x:%.2x%s%.2d:%s', @a,
+            return sprintf('%.2x%.2x:%.2x:%.2x %.2x:%.2x:%.2x%s%.2d:%s%s', @a,
                            $tz & 0x20 ? '-' : '+', ($tz >> 1) & 0x0f,
-                           $tz & 0x01 ? '30' : '00');
+                           $tz & 0x01 ? '30' : '00',
+                           $tz & 0x40 ? ' DST' : '');
         },
         PrintConv => '$self->ConvertDateTime($val)',
     },
@@ -389,7 +391,7 @@ my $parsePictureTiming; # flag to enable parsing of picture timing information (
     },
     0xe4 => { #PH
         Name => 'Model',
-        Condition => '$$self{Make} eq "Sony"',
+        Condition => '$$self{Make} eq "Sony"', # (possibly also Canon models?)
         Description => 'Camera Model Name',
         Notes => 'Sony cameras only, combined with tags 0xe5 and 0xe6',
         Format => 'string',
@@ -519,6 +521,8 @@ my $parsePictureTiming; # flag to enable parsing of picture timing information (
     #       0x0345 - Panasonic HC-V7272
     #       0x0414 - Panasonic AG-AF100
     #       0x0591 - various Panasonic DMC models
+    #       0x0802 - Panasonic DMC-TZ60 with GPS information off
+    #       0x0803 - Panasonic DMC-TZ60 with GPS information on
     #       0x3001 - various Sony DSC, HDR, NEX and SLT models
     #       0x3003 - various Sony DSC models
     #       0x3100 - various Sony DSC, ILCE, NEX and SLT models
@@ -927,10 +931,6 @@ sub ProcessSEI($$)
     # - plus "GA94" for closed-caption data (currently not decoded)
     return 0 unless $size > 20 and substr($$dataPt, $pos, 20) eq
         "\x17\xee\x8c\x60\xf8\x4d\x11\xd9\x8c\xd6\x08\0\x20\x0c\x9a\x66MDPM";
-
-    # load the GPS module because it contains conversion routines and
-    # Composite tags needed for a number of tags we may be extracting
-    require Image::ExifTool::GPS;
 #
 # parse the MDPM records in the UUID 17ee8c60f84d11d98cd60800200c9a66
 # unregistered user data payload (ref PH)
@@ -1086,7 +1086,7 @@ information from H.264 video streams.
 
 =head1 AUTHOR
 
-Copyright 2003-2014, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2017, Phil Harvey (phil at owl.phy.queensu.ca)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

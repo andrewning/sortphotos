@@ -19,7 +19,7 @@ use Image::ExifTool qw(:DataAccess :Utils);
 use Image::ExifTool::Exif;
 use Image::ExifTool::ASF;   # for GetGUID()
 
-$VERSION = '1.25';
+$VERSION = '1.29';
 
 sub ProcessFPX($$);
 sub ProcessFPXR($$$);
@@ -79,7 +79,7 @@ my %oleFormat = (
 #   29 => 'VT_USERDEFINED',
     30 => 'VT_LPSTR',   # VT_LPSTR (int32u count, followed by string)
     31 => 'VT_LPWSTR',  # VT_LPWSTR (int32u word count, followed by Unicode string)
-    64 => 'VT_FILETIME',# VT_FILETIME (int64u, number of nanoseconds since Jan 1, 1601)
+    64 => 'VT_FILETIME',# VT_FILETIME (int64u, 100 ns increments since Jan 1, 1601)
     65 => 'VT_BLOB',    # VT_BLOB
 #   66 => 'VT_STREAM',
 #   67 => 'VT_STORAGE',
@@ -427,6 +427,7 @@ my %fpxFileType = (
     },
     Preview => {
         Name => 'PreviewImage',
+        Groups => { 2 => 'Preview' },
         Binary => 1,
         Notes => 'written by some FujiFilm models',
         # skip 47-byte Fuji header
@@ -482,7 +483,11 @@ my %fpxFileType = (
     0x0e => 'Pages',
     0x0f => 'Words',
     0x10 => 'Characters',
-    0x11 => { Name => 'ThumbnailClip',  Binary => 1 },
+    0x11 => {
+        Name => 'ThumbnailClip',
+        # (not a displayable format, so not in the "Preview" group)
+        Binary => 1,
+    },
     0x12 => {
         Name => 'Software',
         RawConv => '$$self{Software} = $val', # (use to determine file type)
@@ -492,12 +497,17 @@ my %fpxFileType = (
         # see http://msdn.microsoft.com/en-us/library/aa379255(VS.85).aspx
         PrintConv => {
             0 => 'None',
-            1 => 'Password protected',
-            2 => 'Read-only recommended',
-            4 => 'Read-only enforced',
-            8 => 'Locked for annotations',
+            BITMASK => {
+                0 => 'Password protected',
+                1 => 'Read-only recommended',
+                2 => 'Read-only enforced',
+                3 => 'Locked for annotations',
+            },
         },
     },
+    0x22 => { Name => 'CreatedBy', Groups => { 2 => 'Author' } }, #PH (guess) (MAX files)
+    0x23 => 'DocumentID', # PH (guess) (MAX files)
+  # 0x25 ? seen values 1.0-1.97 (MAX files)
     0x80000000 => { Name => 'LocaleIndicator', Groups => { 2 => 'Other' } },
 );
 
@@ -525,7 +535,14 @@ my %fpxFileType = (
         PrintConv => { 0 => 'No', 1 => 'Yes' },
     },
     0x0c => 'HeadingPairs',
-    0x0d => 'TitleOfParts',
+    0x0d => {
+        Name => 'TitleOfParts',
+        # look for "3ds Max" software name at beginning of TitleOfParts
+        RawConv => q{
+            (ref $val eq 'ARRAY' ? $$val[0] : $val) =~ /^(3ds Max)/ and $$self{Software} = $1;
+            return $val;
+        }
+    },
     0x0e => 'Manager',
     0x0f => 'Company',
     0x10 => {
@@ -533,21 +550,32 @@ my %fpxFileType = (
         PrintConv => { 0 => 'No', 1 => 'Yes' },
     },
     0x11 => 'CharCountWithSpaces',
-  # 0x12 ?
+  # 0x12 ? seen -32.1850395202637,-386.220672607422,-9.8100004196167,-9810,...
     0x13 => { #PH (unconfirmed)
         Name => 'SharedDoc',
         PrintConv => { 0 => 'No', 1 => 'Yes' },
     },
-  # 0x14 ?
-  # 0x15 ?
+  # 0x14 ? seen -1
+  # 0x15 ? seen 1
     0x16 => {
         Name => 'HyperlinksChanged',
         PrintConv => { 0 => 'No', 1 => 'Yes' },
     },
-    0x17 => { #PH (unconfirmed handling of lower 16 bits)
+    0x17 => { #PH (unconfirmed handling of lower 16 bits, not valid for MAX files)
         Name => 'AppVersion',
         ValueConv => 'sprintf("%d.%.4d",$val >> 16, $val & 0xffff)',
     },
+  # 0x18 ? seen -1
+  # 0x19 ? seen 0
+  # 0x1a ? seen 0
+  # 0x1b ? seen 0
+  # 0x1c ? seen 0,1
+  # 0x1d ? seen 1
+  # 0x1e ? seen 1
+  # 0x1f ? seen 1,5
+  # 0x20 ? seen 0,5
+  # 0x21 ? seen -1
+  # 0x22 ? seen 0
    '_PID_LINKBASE' => {
         Name => 'HyperlinkBase',
         ValueConv => '$self->Decode($val, "UCS2","II")',
@@ -1027,6 +1055,7 @@ my %fpxFileType = (
 %Image::ExifTool::FlashPix::Composite = (
     GROUPS => { 2 => 'Image' },
     PreviewImage => {
+        Groups => { 2 => 'Preview' },
         # extract JPEG preview from ScreenNail if possible
         Require => {
             0 => 'ScreenNail',
@@ -1034,6 +1063,7 @@ my %fpxFileType = (
         Binary => 1,
         RawConv => q{
             return undef unless $val[0] =~ /\xff\xd8\xff/g;
+            @grps = $self->GetGroup($$val{0});  # set groups from ScreenNail
             return substr($val[0], pos($val[0])-3);
         },
     },
@@ -1162,7 +1192,7 @@ sub ReadFPXValue($$$$$;$$)
                     if ($charset) {
                         $val = $et->Decode($val, $charset);
                     } elsif ($codePage eq 1200) {   # UTF-16, little endian
-                        $val = $et->Decode(undef, 'UCS2', 'II');
+                        $val = $et->Decode($val, 'UCS2', 'II');
                     }
                 }
                 $val =~ s/\0.*//s;  # truncate at null terminator
@@ -1210,13 +1240,13 @@ sub ProcessContents($$$)
     my $dataPt = $$dirInfo{DataPt};
     my $isFLA;
 
-    # all of my FLA samples contain "Contents" data, an no other FPX-like samples have
+    # all of my FLA samples contain "Contents" data, and no other FPX-like samples have
     # this, but check the data for a familiar pattern to be sure this is FLA: the
     # Contents of all of my FLA samples start with two bytes (0x29,0x38,0x3f,0x43 or 0x47,
     # then 0x01) followed by a number of zero bytes (from 0x18 to 0x26 of them, related
     # somehow to the value of the first byte), followed by the string "DocumentPage"
     $isFLA = 1 if $$dataPt =~ /^..\0+\xff\xff\x01\0\x0d\0CDocumentPage/s;
-    
+
     # do a brute-force scan of the "Contents" for UTF-16 XMP
     # (this may always be little-endian, but allow for either endianness)
     if ($$dataPt =~ /<\0\?\0x\0p\0a\0c\0k\0e\0t\0 \0b\0e\0g\0i\0n\0=\0['"](\0\xff\xfe|\xfe\xff)/g) {
@@ -1595,7 +1625,7 @@ sub SetDocNum($$;$$$)
         } elsif (@subDoc) {
             $subDoc[-1] = ++$$used[$#subDoc];
         }
-        SetDocNum($hier, $$obj{Child}, \@subDoc, $used, not $meta) 
+        SetDocNum($hier, $$obj{Child}, \@subDoc, $used, not $meta);
     }
 }
 
@@ -1608,7 +1638,7 @@ sub ProcessFPX($$)
     my ($et, $dirInfo) = @_;
     my $raf = $$dirInfo{RAF};
     my ($buff, $out, %dumpParms, $oldIndent, $miniStreamBuff);
-    my ($tag, %hier, %objIndex);
+    my ($tag, %hier, %objIndex, %loadedDifSect);
 
     # read header
     return 0 unless $raf->Read($buff,HDR_SIZE) == HDR_SIZE;
@@ -1651,12 +1681,15 @@ sub ProcessFPX($$)
     my $endPos = length($buff);
     my $fat = '';
     my $fatCountCheck = 0;
+    my $difCountCheck = 0;
+    my $hdrSize = $sectSize > HDR_SIZE ? $sectSize : HDR_SIZE;
+
     for (;;) {
         while ($pos <= $endPos - 4) {
             my $sect = Get32u(\$buff, $pos);
             $pos += 4;
             next if $sect == FREE_SECT;
-            my $offset = $sect * $sectSize + HDR_SIZE;
+            my $offset = $sect * $sectSize + $hdrSize;
             my $fatSect;
             unless ($raf->Seek($offset, 0) and
                     $raf->Read($fatSect, $sectSize) == $sectSize)
@@ -1669,11 +1702,20 @@ sub ProcessFPX($$)
         }
         last if $difStart >= END_OF_CHAIN;
         # read next DIF (Dual Indirect FAT) sector
-        my $offset = $difStart * $sectSize + HDR_SIZE;
+        if (++$difCountCheck > $difCount) {
+            $et->Warn('Unterminated DIF FAT');
+            last;
+        }
+        if ($loadedDifSect{$difStart}) {
+            $et->Warn('Cyclical reference in DIF FAT');
+            last;
+        }
+        my $offset = $difStart * $sectSize + $hdrSize;
         unless ($raf->Seek($offset, 0) and $raf->Read($buff, $sectSize) == $sectSize) {
             $et->Error("Error reading DIF sector $difStart");
             return 1;
         }
+        $loadedDifSect{$difStart} = 1;
         # set end of sector information in this DIF
         $pos = 0;
         $endPos = $sectSize - 4;
@@ -1686,8 +1728,8 @@ sub ProcessFPX($$)
 #
 # load the mini-FAT and the directory
 #
-    my $miniFat = LoadChain($raf, $miniStart, \$fat, $sectSize, HDR_SIZE);
-    my $dir = LoadChain($raf, $dirStart, \$fat, $sectSize, HDR_SIZE);
+    my $miniFat = LoadChain($raf, $miniStart, \$fat, $sectSize, $hdrSize);
+    my $dir = LoadChain($raf, $dirStart, \$fat, $sectSize, $hdrSize);
     unless (defined $miniFat and defined $dir) {
         $et->Error('Error reading mini-FAT or directory stream');
         return 1;
@@ -1735,7 +1777,7 @@ sub ProcessFPX($$)
 
         # load Ministream (referenced from first directory entry)
         unless ($miniStream) {
-            $miniStreamBuff = LoadChain($raf, $sect, \$fat, $sectSize, HDR_SIZE);
+            $miniStreamBuff = LoadChain($raf, $sect, \$fat, $sectSize, $hdrSize);
             unless (defined $miniStreamBuff) {
                 $et->Warn('Error loading Mini-FAT stream');
                 last;
@@ -1776,7 +1818,7 @@ sub ProcessFPX($$)
         if ($typeStr eq 'STREAM') {
             if ($size >= $miniCutoff) {
                 # stream is in the main FAT
-                $buff = LoadChain($raf, $sect, \$fat, $sectSize, HDR_SIZE);
+                $buff = LoadChain($raf, $sect, \$fat, $sectSize, $hdrSize);
             } elsif ($size) {
                 # stream is in the mini-FAT
                 $buff = LoadChain($miniStream, $sect, \$miniFat, $miniSize, 0);
@@ -1868,7 +1910,7 @@ sub ProcessFPX($$)
     if ($$et{VALUE}{FileType} eq 'FPX') {
         my $val = $$et{CompObjUserType} || $$et{Software};
         if ($val) {
-            my %type = ( Word => 'DOC', PowerPoint => 'PPT', Excel => 'XLS' );
+            my %type = ( '^3ds Max' => 'MAX', Word => 'DOC', PowerPoint => 'PPT', Excel => 'XLS' );
             my $pat;
             foreach $pat (sort keys %type) {
                 next unless $val =~ /$pat/;
@@ -1900,7 +1942,7 @@ JPEG images.
 
 =head1 AUTHOR
 
-Copyright 2003-2014, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2017, Phil Harvey (phil at owl.phy.queensu.ca)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

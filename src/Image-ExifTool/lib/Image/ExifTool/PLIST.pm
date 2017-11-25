@@ -19,8 +19,9 @@ use strict;
 use vars qw($VERSION);
 use Image::ExifTool qw(:DataAccess :Utils);
 use Image::ExifTool::XMP;
+use Image::ExifTool::GPS;
 
-$VERSION = '1.05';
+$VERSION = '1.07';
 
 sub ExtractObject($$;$);
 sub Get24u($$);
@@ -75,18 +76,12 @@ my %readProc = (
     'MetaDataList//Geolocation/Latitude' => {
         Name => 'GPSLatitude',
         Groups => { 2 => 'Location' },
-        PrintConv => q{
-            require Image::ExifTool::GPS;
-            Image::ExifTool::GPS::ToDMS($self, $val, 1, 'N');
-        },
+        PrintConv => 'Image::ExifTool::GPS::ToDMS($self, $val, 1, "N")',
     },
     'MetaDataList//Geolocation/Longitude' => {
         Name => 'GPSLongitude',
         Groups => { 2 => 'Location' },
-        PrintConv => q{
-            require Image::ExifTool::GPS;
-            Image::ExifTool::GPS::ToDMS($self, $val, 1, 'E');
-        },
+        PrintConv => 'Image::ExifTool::GPS::ToDMS($self, $val, 1, "E")',
     },
     'MetaDataList//Geolocation/MapDatum' => {
         Name => 'GPSMapDatum',
@@ -323,7 +318,7 @@ sub ExtractObject($$;$)
 #------------------------------------------------------------------------------
 # Process binary PLIST data (ref 2)
 # Inputs: 0) ExifTool object ref, 1) DirInfo ref, 2) tag table ref
-# Returns: 1 on success
+# Returns: 1 on success (and returns plist value as $$dirInfo{Value})
 sub ProcessBinaryPLIST($$$)
 {
     my ($et, $dirInfo, $tagTablePtr) = @_;
@@ -333,8 +328,15 @@ sub ProcessBinaryPLIST($$$)
     SetByteOrder('MM');
 
     unless ($$dirInfo{RAF}) {
-        my $buf2 = substr(${$$dirInfo{DataPt}}, $$dirInfo{DirStart} || 0, $$dirInfo{DirLen});
-        $$dirInfo{RAF} = new File::RandomAccess(\$buf2);
+        my $dataPt = $$dirInfo{DataPt};
+        my $start = $$dirInfo{DirStart};
+        if ($start or ($$dirInfo{DirLen} and $$dirInfo{DirLen} != length $$dataPt)) {
+            my $buf2 = substr($$dataPt, $start || 0, $$dirInfo{DirLen});
+            $$dirInfo{RAF} = new File::RandomAccess(\$buf2);
+        } else {
+            $$dirInfo{RAF} = new File::RandomAccess($dataPt);
+        }
+        my $strt = $$dirInfo{DirStart} || 0;
     }
     # read and parse the trailer
     my $raf = $$dirInfo{RAF};
@@ -364,8 +366,8 @@ sub ProcessBinaryPLIST($$$)
     );
     # position file pointer at the top object, and extract it
     $raf->Seek($table[$topObj], 0) or return 0;
-    my $result = ExtractObject($et, \%plistInfo);
-    return defined $result ? 1 : 0;
+    $$dirInfo{Value} = ExtractObject($et, \%plistInfo);
+    return defined $$dirInfo{Value} ? 1 : 0;
 }
 
 #------------------------------------------------------------------------------
@@ -429,7 +431,7 @@ This module decodes both the binary and XML-based PLIST format.
 
 =head1 AUTHOR
 
-Copyright 2003-2014, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2017, Phil Harvey (phil at owl.phy.queensu.ca)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.
