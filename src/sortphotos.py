@@ -229,7 +229,7 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
         copy_files=False, test=False, remove_duplicates=True, day_begins=0,
         additional_groups_to_ignore=['File'], additional_tags_to_ignore=[],
         use_only_groups=None, use_only_tags=None, rename_with_camera_model=False,
-        show_warnings=True, verbose=True, keep_filename=False):
+        show_warnings=True, src_file_regex=None, src_file_extension=[], verbose=True, keep_filename=False):
     """
     This function is a convenience wrapper around ExifTool based on common usage scenarios for sortphotos.py
 
@@ -272,6 +272,10 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
         is None. (MHB: added this)
     show_warnings : bool
         True if you want to see warnings
+    src_file_regex: str
+        pick your source file using regex
+    src_file_extension: list(str)
+        Limit your script to process only specific files
     verbose : bool
         True if you want to see details of file processing
 
@@ -309,8 +313,18 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
             raise Exception('"--rename-with-camera-model" option not valid without "--rename"')
         args += ['-Make', '-Model']
 
-    args += [src_dir]
+    #sasi07eee
+    if src_file_extension is not None:
+        for f in src_file_extension:
+            args += [ '-ext']
+            args += [ f ]
 
+    if src_file_regex is not None:
+            print (src_file_regex)
+            args += [ '-if']
+            args += ['$filename=~/' + src_file_regex + '/' ]
+
+    args += [src_dir]
 
     # get all metadata
     with ExifTool(verbose=verbose) as e:
@@ -521,6 +535,10 @@ def main():
     )
     parser.add_argument('-w', '--show-warnings', action='store_true', help='display warnings.')
 
+    #sasi07eee
+    parser.add_argument('-x', '--src-file-regex', type=str, default=None, help='source file regular expression')
+    parser.add_argument('-e', '--src-file-extension', type=str, default=[], nargs='+',  help='source file format (comma seperated)')
+
     # parse command line arguments
     args = parser.parse_args()
 
@@ -528,7 +546,7 @@ def main():
         args.copy, args.test, not args.keep_duplicates, args.day_begins,
         args.ignore_groups, args.ignore_tags, args.use_only_groups,
         args.use_only_tags, args.rename_with_camera_model, args.show_warnings,
-        not args.silent, args.keep_filename)
+        args.src_file_regex, args.src_file_extension, not args.silent, args.keep_filename)
 
 if __name__ == '__main__':
     main()
