@@ -224,6 +224,13 @@ class ExifTool(object):
 # ---------------------------------------
 
 
+def findTags(format_string):
+    """
+    Find tags between {{ and }} and return them with the brackets in a list.
+    """
+    tag_re = re.compile('{{.*?}}')
+    return tag_re.findall(format_string)
+
 
 def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
         copy_files=False, test=False, remove_duplicates=True, day_begins=0,
