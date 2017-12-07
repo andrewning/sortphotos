@@ -331,6 +331,8 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
     # parse output extracting oldest relevant date
     for idx, data in enumerate(metadata):
 
+        this_sort_format = sort_format
+        this_rename_format = rename_format
         for original_tag in original_tags:
             tag = original_tag[2:-2].strip()
 
@@ -341,10 +343,10 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
 
             value = data[key] if key else ''
 
-            if sort_format:
-                sort_format = sort_format.replace(original_tag, value)
-            if rename_format:
-                rename_format = rename_format.replace(original_tag, value)
+            if this_sort_format:
+                this_sort_format = this_sort_format.replace(original_tag, value)
+            if this_rename_format:
+                this_rename_format = this_rename_format.replace(original_tag, value)
 
         # extract timestamp date for photo
         src_file, date, keys = get_oldest_timestamp(data, additional_groups_to_ignore, additional_tags_to_ignore)
@@ -389,7 +391,7 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
 
 
         # create folder structure
-        dir_structure = date.strftime(sort_format)
+        dir_structure = date.strftime(this_sort_format)
         dirs = dir_structure.split('/')
         dest_file = dest_dir
         for thedir in dirs:
@@ -400,9 +402,9 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
         # rename file if necessary
         filename = os.path.basename(src_file)
 
-        if rename_format is not None:
+        if this_rename_format is not None:
             _, ext = os.path.splitext(filename)
-            filename = date.strftime(rename_format) + ext.lower()
+            filename = date.strftime(this_rename_format) + ext.lower()
 
         # setup destination file
         dest_file = os.path.join(dest_file, filename.encode('utf-8'))
