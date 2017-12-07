@@ -228,6 +228,9 @@ def findTags(format_string):
     """
     Find tags between {{ and }} and return them with the brackets in a list.
     """
+    if not format_string:
+        return []
+
     tag_re = re.compile('{{.*?}}')
     return tag_re.findall(format_string)
 
@@ -304,6 +307,11 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
     if recursive:
         args += ['-r']
 
+    original_tags = findTags(sort_format) + findTags(rename_format)
+    for original_tag in original_tags:
+        tag = original_tag[2:-2].strip()
+        args.append('-'+tag)
+
     args += [src_dir]
 
 
@@ -322,6 +330,21 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
 
     # parse output extracting oldest relevant date
     for idx, data in enumerate(metadata):
+
+        for original_tag in original_tags:
+            tag = original_tag[2:-2].strip()
+
+            key = None
+            for k in data.keys():
+                if k.lower() == tag.lower():
+                    key = k
+
+            value = data[key] if key else ''
+
+            if sort_format:
+                sort_format = sort_format.replace(original_tag, value)
+            if rename_format:
+                rename_format = rename_format.replace(original_tag, value)
 
         # extract timestamp date for photo
         src_file, date, keys = get_oldest_timestamp(data, additional_groups_to_ignore, additional_tags_to_ignore)
