@@ -1,6 +1,6 @@
 # SortPhotos
 
-# Download
+## Download
 Find the lastest releases here:
 https://github.com/TeaWithLucas/sortphotos/releases
 
