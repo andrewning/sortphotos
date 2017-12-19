@@ -15,7 +15,7 @@ use vars qw($VERSION);
 use Image::ExifTool qw(:DataAccess :Utils);
 use Image::ExifTool::Import;
 
-$VERSION = '1.01';
+$VERSION = '1.02';
 
 sub ExtractTags($$$);
 
@@ -36,7 +36,7 @@ sub ExtractTags($$$);
     },
     EmbeddedImage => {
         Notes => 'JPEG image embedded in LFP files written by Lytro Desktop',
-        Groups => { 2 => 'Image' },
+        Groups => { 2 => 'Preview' },
         Binary => 1,
     },
     Type                => { Name => 'CameraType' },
@@ -112,7 +112,7 @@ sub ExtractTags($$$)
             $tagTablePtr or $tagTablePtr = GetTagTable('Image::ExifTool::Lytro::Main');
             unless ($$tagTablePtr{$tag}) {
                 ($name = $tag) =~ s/[^-_a-zA-Z0-9](.?)/\U$1/g;
-                $name =~ s/ParametersVendorContentComLytroTags//; 
+                $name =~ s/ParametersVendorContentComLytroTags//;
                 my %tagInfo;
                 $tagInfo{Groups} = { 2 => 'Image' } unless $name =~ s/^Devices//;
                 $tagInfo{List} = 1 if ref $$meta{$key} eq 'ARRAY';
@@ -195,7 +195,7 @@ from Lytro Light Field Picture (LFP) files.
 
 =head1 AUTHOR
 
-Copyright 2003-2014, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2017, Phil Harvey (phil at owl.phy.queensu.ca)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

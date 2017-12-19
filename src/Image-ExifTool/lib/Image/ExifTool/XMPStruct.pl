@@ -9,7 +9,7 @@
 package Image::ExifTool::XMP;
 
 use strict;
-use vars qw(%specialStruct $xlatNamespace);
+use vars qw(%specialStruct %stdXlatNS);
 
 use Image::ExifTool qw(:Utils);
 use Image::ExifTool::XMP;
@@ -281,12 +281,18 @@ Key:
             foreach $item (@{$$struct{$key}}) {
                 if (not ref $item) {
                     $item = '' unless defined $item; # use empty string for missing items
-                    $$fieldInfo{Struct} and $warn = "$tag items are not valid structures", next Key;
-                    $et->Sanitize(\$item);
-                    ($copy[$i],$err) = $et->ConvInv($item,$fieldInfo,$tag,$strName,$type,'');
-                    $err and $warn = $err, next Key;
-                    $err = CheckXMP($et, $fieldInfo, \$copy[$i]);
-                    $err and $warn = "$err in $strName $tag", next Key;
+                    if ($$fieldInfo{Struct}) {
+                        # (allow empty structures)
+                        $item =~ /^\s*$/ or $warn = "$tag items are not valid structures", next Key;
+                        $copy[$i] = { }; # create hash for empty structure
+                    } else {
+                        $et->Sanitize(\$item);
+                        ($copy[$i],$err) = $et->ConvInv($item,$fieldInfo,$tag,$strName,$type,'');
+                        $copy[$i] = '' unless defined $copy[$i];    # avoid undefined item
+                        $err and $warn = $err, next Key;
+                        $err = CheckXMP($et, $fieldInfo, \$copy[$i]);
+                        $err and $warn = "$err in $strName $tag", next Key;
+                    }
                 } elsif (ref $item eq 'HASH') {
                     $$fieldInfo{Struct} or $warn = "$tag is not a structure in $strName", next Key;
                     ($copy[$i], $err) = CheckStruct($et, $item, $$fieldInfo{Struct});
@@ -304,18 +310,19 @@ Key:
             $et->Sanitize(\$$struct{$key});
             ($val,$err) = $et->ConvInv($$struct{$key},$fieldInfo,$tag,$strName,$type,'');
             $err and $warn = $err, next Key;
+            next Key unless defined $val;   # check for undefined
             $err = CheckXMP($et, $fieldInfo, \$val);
             $err and $warn = "$err in $strName $tag", next Key;
             # turn this into a list if necessary
             $copy{$tag} = $$fieldInfo{List} ? [ $val ] : $val;
         }
     }
-    if (%copy) {
+    if (%copy or not $warn) {
         $rtnVal = \%copy;
         undef $err;
         $$et{CHECK_WARN} = $warn if $warn;
     } else {
-        $err = $warn || 'Structure has no fields';
+        $err = $warn;
     }
     return wantarray ? ($rtnVal, $err) : $rtnVal;
 }
@@ -474,8 +481,16 @@ sub AddNewStruct($$$$$$)
     my $ns = $$strTable{NAMESPACE} || '';
     my $changed = 0;
 
+    # add dummy field to allow empty structures (name starts with '~' so it will come
+    # after all valid structure fields, which is necessary when serializing the XMP later)
+    %$struct or $$struct{'~dummy~'} = '';
+
     foreach $tag (sort keys %$struct) {
-        my $fieldInfo = $$strTable{$tag} or next;
+        my $fieldInfo = $$strTable{$tag};
+        unless ($fieldInfo) {
+            next unless $tag eq '~dummy~'; # check for dummy field
+            $fieldInfo = { }; # create dummy field info for dummy structure
+        }
         my $val = $$struct{$tag};
         my $propPath = $$fieldInfo{PropertyPath};
         unless ($propPath) {
@@ -584,7 +599,7 @@ sub ConvertStruct($$$$;$)
             return $val;
         } else {
             my (@list, $val);
-            foreach $val (@$value) {    
+            foreach $val (@$value) {
                 my $v = ConvertStruct($et, $tagInfo, $val, $type, $parentID);
                 push @list, $v if defined $v;
             }
@@ -623,17 +638,19 @@ sub RestoreStruct($;$)
                 # this could happen for invalid XMP containing mixed lists
                 # (or for something like this -- what should we do here?:
                 # <meta:user-defined meta:name="License">test</meta:user-defined>)
-                $et->Warn("$$strInfo{Name} is not a structure!");
+                $et->Warn("$$strInfo{Name} is not a structure!") unless $$et{NO_STRUCT_WARN};
                 next;
             }
         } else {
             # create new entry in tag table for this structure
             my $g1 = $$table{GROUPS}{0} || 'XMP';
             my $name = $tag;
+            # tag keys will have a group 1 prefix when coming from import of XML from -X option
             if ($tag =~ /(.+):(.+)/) {
                 my $ns;
                 ($ns, $name) = ($1, $2);
-                $ns = $$xlatNamespace{$ns} if $$xlatNamespace{$ns};
+                $ns =~ s/^XMP-//; # remove leading "XMP-" if it exists because we add it later
+                $ns = $stdXlatNS{$ns} if $stdXlatNS{$ns};
                 $g1 .= "-$ns";
             }
             $strInfo = {
@@ -725,7 +742,7 @@ sub RestoreStruct($;$)
                 # XMP namespace on the tag name.  In this case, add
                 # the corresponding group1 name to the tag ID.
                 my ($ns, $name) = ($1, $2);
-                $ns = $$xlatNamespace{$ns} if $$xlatNamespace{$ns};
+                $ns = $stdXlatNS{$ns} if $stdXlatNS{$ns};
                 $tag = "XMP-$ns:" . ucfirst $name;
             } else {
                 $tag = ucfirst $tag;
@@ -734,8 +751,10 @@ sub RestoreStruct($;$)
         if ($err) {
             # this may happen if we have a structural error in the XMP
             # (like an improperly contained list for example)
-            my $ns = $$tagInfo{Namespace} || $$tagInfo{Table}{NAMESPACE} || '';
-            $et->Warn("Error $err placing $ns:$$tagInfo{TagID} in structure or list", 1);
+            unless ($$et{NO_STRUCT_WARN}) {
+                my $ns = $$tagInfo{Namespace} || $$tagInfo{Table}{NAMESPACE} || '';
+                $et->Warn("Error $err placing $ns:$$tagInfo{TagID} in structure or list", 1);
+            }
             delete $structs{$strInfo} unless $oldStruct;
         } elsif ($tagInfo eq $strInfo) {
             # just a regular list tag
@@ -811,7 +830,7 @@ information.
 
 =head1 AUTHOR
 
-Copyright 2003-2014, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2017, Phil Harvey (phil at owl.phy.queensu.ca)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

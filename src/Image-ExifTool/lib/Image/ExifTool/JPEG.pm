@@ -11,7 +11,7 @@ use strict;
 use vars qw($VERSION);
 use Image::ExifTool qw(:DataAccess :Utils);
 
-$VERSION = '1.24';
+$VERSION = '1.25';
 
 sub ProcessOcad($$$);
 sub ProcessJPEG_HDR($$$);
@@ -371,7 +371,11 @@ sub ProcessJPEG_HDR($$$);
     alp => { Name => 'Alpha' }, # (Alpha/Beta are saturation parameters)
     bet => { Name => 'Beta' },
     cor => { Name => 'CorrectionMethod' },
-    RatioImage => { Binary => 1, Notes => 'the embedded JPEG-compressed ratio image' },
+    RatioImage => {
+        Groups => { 2 => 'Preview' },
+        Notes => 'the embedded JPEG-compressed ratio image',
+        Binary => 1,
+    },
 );
 
 # AdobeCM APP13 (no references)
@@ -448,7 +452,7 @@ sub ProcessJPEG_HDR($$$);
             1 => 'Odd',
             2 => 'Even',
         },
-    },    
+    },
 );
 
 # Ocad APP0 segment (ref PH)
@@ -587,7 +591,7 @@ segments are included in the Image::ExifTool module itself.
 
 =head1 AUTHOR
 
-Copyright 2003-2014, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2017, Phil Harvey (phil at owl.phy.queensu.ca)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.
