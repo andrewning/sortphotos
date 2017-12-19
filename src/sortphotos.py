@@ -3,8 +3,7 @@
 """
 sortphotos.py
 
-Created on 3/2/2013
-Copyright (c) S. Andrew Ning. All rights reserved.
+Version 1.3 Alpha
 
 """
 
@@ -15,13 +14,14 @@ import os
 import sys
 import shutil
 try:
-	import json
+    import json
 except:
-	import simplejson as json
+    import simplejson as json
 import filecmp
-from datetime import datetime, timedelta
+import datetime as dt
 import re
 import locale
+import exiftool
 
 
 # Setting locale to the 'local' value
@@ -33,247 +33,206 @@ exiftool_location = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'I
 # -------- convenience methods -------------
 
 def parse_date_exif(date_string, disable_time_zone_adjust):
-	"""
-	extract date info from EXIF data
-	YYYY:MM:DD HH:MM:SS
-	or YYYY:MM:DD HH:MM:SS+HH:MM
-	or YYYY:MM:DD HH:MM:SS-HH:MM
-	or YYYY:MM:DD HH:MM:SSZ
-	"""
+    """
+    extract date info from EXIF data
+    YYYY:MM:DD HH:MM:SS
+    or YYYY:MM:DD HH:MM:SS+HH:MM
+    or YYYY:MM:DD HH:MM:SS-HH:MM
+    or YYYY:MM:DD HH:MM:SSZ
+    """
 
-	# split into date and time
-	elements = str(date_string).strip().split()  # ['YYYY:MM:DD', 'HH:MM:SS']
+    # split into date and time
+    elements = str(date_string).strip().split()  # ['YYYY:MM:DD', 'HH:MM:SS']
 
-	if len(elements) < 1:
-		return None
+    if len(elements) < 1:
+        return None
 
-	# parse year, month, day
-	date_entries = elements[0].split(':')  # ['YYYY', 'MM', 'DD']
+    # parse year, month, day
+    date_entries = elements[0].split(':')  # ['YYYY', 'MM', 'DD']
 
-	# check if three entries, nonzero data, and no decimal (which occurs for timestamps with only time but no date)
-	if len(date_entries) == 3 and date_entries[0] > '0000' and '.' not in ''.join(date_entries):
-		year = int(date_entries[0])
-		month = int(date_entries[1])
-		day = int(date_entries[2])
-	else:
-		return None
+    # check if three entries, nonzero data, and no decimal (which occurs for timestamps with only time but no date)
+    if len(date_entries) == 3 and date_entries[0] > '0000' and '.' not in ''.join(date_entries):
+        year = int(date_entries[0])
+        month = int(date_entries[1])
+        day = int(date_entries[2])
+    else:
+        return None
 
-	# parse hour, min, second
-	time_zone_adjust = False
-	hour = 12  # defaulting to noon if no time data provided
-	minute = 0
-	second = 0
+    # parse hour, min, second
+    time_zone_adjust = False
+    hour = 12  # defaulting to noon if no time data provided
+    minute = 0
+    second = 0
 
-	if len(elements) > 1:
-		time_entries = re.split('(\+|-|Z)', elements[1])  # ['HH:MM:SS', '+', 'HH:MM']
-		time = time_entries[0].split(':')  # ['HH', 'MM', 'SS']
+    if len(elements) > 1:
+        time_entries = re.split('(\+|-|Z)', elements[1])  # ['HH:MM:SS', '+', 'HH:MM']
+        time = time_entries[0].split(':')  # ['HH', 'MM', 'SS']
 
-		if len(time) == 3:
-			hour = int(time[0])
-			minute = int(time[1])
-			second = int(time[2].split('.')[0])
-		elif len(time) == 2:
-			hour = int(time[0])
-			minute = int(time[1])
+        if len(time) == 3:
+            hour = int(time[0])
+            minute = int(time[1])
+            second = int(time[2].split('.')[0])
+        elif len(time) == 2:
+            hour = int(time[0])
+            minute = int(time[1])
 
-		# adjust for time-zone if needed
-		if len(time_entries) > 2:
-			time_zone = time_entries[2].split(':')  # ['HH', 'MM']
+        # adjust for time-zone if needed
+        if len(time_entries) > 2:
+            time_zone = time_entries[2].split(':')  # ['HH', 'MM']
 
-			if len(time_zone) == 2:
-				time_zone_hour = int(time_zone[0])
-				time_zone_min = int(time_zone[1])
+            if len(time_zone) == 2:
+                time_zone_hour = int(time_zone[0])
+                time_zone_min = int(time_zone[1])
 
-				# check if + or -
-				if time_entries[1] == '-':
-					time_zone_hour *= -1
+                # check if + or -
+                if time_entries[1] == '-':
+                    time_zone_hour *= -1
 
-				dateadd = timedelta(hours=time_zone_hour, minutes=time_zone_min)
-				time_zone_adjust = True
+                dateadd = dt.timedelta(hours=time_zone_hour, minutes=time_zone_min)
+                time_zone_adjust = True
 
 
-	# form date object
-	try:
-		date = datetime(year, month, day, hour, minute, second)
-	except ValueError:
-		return None  # errors in time format
+    # form date object
+    try:
+        date = dt.datetime(year, month, day, hour, minute, second)
+    except ValueError:
+        return None  # errors in time format
 
-	# try converting it (some "valid" dates are way before 1900 and cannot be parsed by strtime later)
-	try:
-		date.strftime('%Y/%m-%b')  # any format with year, month, day, would work here.
-	except ValueError:
-		return None  # errors in time format
+    # try converting it (some "valid" dates are way before 1900 and cannot be parsed by strtime later)
+    try:
+        date.strftime('%Y/%m-%b')  # any format with year, month, day, would work here.
+    except ValueError:
+        return None  # errors in time format
 
-	# adjust for time zone if necessary
-	if not disable_time_zone_adjust and time_zone_adjust:
-		date += dateadd
+    # adjust for time zone if necessary
+    if not disable_time_zone_adjust and time_zone_adjust:
+        date += dateadd
 
-	return date
+    return date
 
 
 
 def get_prioritized_timestamp(data, prioritized_groups, prioritized_tags, additional_groups_to_ignore, additional_tags_to_ignore, disable_time_zone_adjust=False):
-	# loop through user specified prioritized groups/tags
-	prioritized_date = None
-	prioritized_keys = []
+    # loop through user specified prioritized groups/tags
+    prioritized_date = None
+    prioritized_keys = []
 
-	# save src file
-	src_file = data['SourceFile']
+    # save src file
+    src_file = data['SourceFile']
 
-	# start with tags as they are more specific
-	if prioritized_tags:
-		for tag in prioritized_tags:
-			date = None
-			
-			# create a hash slice of data with just the specified tag
-			subdata = {key:value for key,value in data.items() if tag in key}
-			if subdata:
-				# re-use get_oldest_timestamp to get the data needed
-				subdata['SourceFile'] = src_file
-				src_file, date, keys = get_oldest_timestamp(subdata, additional_groups_to_ignore, additional_tags_to_ignore, disable_time_zone_adjust)
+    # start with tags as they are more specific
+    if prioritized_tags:
+        for tag in prioritized_tags:
+            date = None
+            
+            # create a hash slice of data with just the specified tag
+            subdata = {key:value for key,value in data.iteritems() if tag in key}
+            if subdata:
+                # re-use get_oldest_timestamp to get the data needed
+                subdata['SourceFile'] = src_file
+                src_file, date, keys = get_oldest_timestamp(subdata, additional_groups_to_ignore, additional_tags_to_ignore, disable_time_zone_adjust)
 
-			if not date:
-				continue
-		
-			prioritized_date = date
-			prioritized_keys = keys
+            if not date:
+                continue
+        
+            prioritized_date = date
+            prioritized_keys = keys
 
-			# return as soon as a match is found
-			return src_file, prioritized_date, prioritized_keys
+            # return as soon as a match is found
+            return src_file, prioritized_date, prioritized_keys
 
-	# if no matching tags are found, look for matching groups
-	if prioritized_groups:
-		for group in prioritized_groups:
-			date = None
-			
-			# create a hash slice of data to find the oldest date within the specified group
-			subdata = {key:value for key,value in data.items() if key.startswith(group)}
-			if subdata:
-				# find the oldest date for that group
-				subdata['SourceFile'] = src_file
-				src_file, date, keys = get_oldest_timestamp(subdata, additional_groups_to_ignore, additional_tags_to_ignore, disable_time_zone_adjust)
+    # if no matching tags are found, look for matching groups
+    if prioritized_groups:
+        for group in prioritized_groups:
+            date = None
+            
+            # create a hash slice of data to find the oldest date within the specified group
+            subdata = {key:value for key,value in data.iteritems() if key.startswith(group)}
+            if subdata:
+                # find the oldest date for that group
+                subdata['SourceFile'] = src_file
+                src_file, date, keys = get_oldest_timestamp(subdata, additional_groups_to_ignore, additional_tags_to_ignore, disable_time_zone_adjust)
 
-			if not date:
-				continue
-		
-			prioritized_date = date
-			prioritized_keys = keys
+            if not date:
+                continue
+        
+            prioritized_date = date
+            prioritized_keys = keys
 
-			# return as soon as a match is found
-			return src_file, prioritized_date, prioritized_keys
-		
-	# reaching here means no matches were found
-	return src_file, prioritized_date, prioritized_keys
+            # return as soon as a match is found
+            return src_file, prioritized_date, prioritized_keys
+        
+    # reaching here means no matches were found
+    return src_file, prioritized_date, prioritized_keys
 
 
 
 def get_oldest_timestamp(data, additional_groups_to_ignore, additional_tags_to_ignore, disable_time_zone_adjust=False, print_all_tags=False):
-	"""data as dictionary from json.  Should contain only time stamps except SourceFile"""
+    """data as dictionary from json.  Should contain only time stamps except SourceFile"""
 
-	# save only the oldest date
-	date_available = False
-	oldest_date = datetime.now()
-	oldest_keys = []
+    # save only the oldest date
+    date_available = False
+    oldest_date = dt.datetime.now()
+    sanity_date = dt.datetime(year=1901, month=1, day=1)
+    oldest_keys = []
 
-	# save src file
-	src_file = data['SourceFile']
+    # save src file
+    src_file = data['SourceFile']
 
-	# setup tags to ignore
-	ignore_groups = ['ICC_Profile'] + additional_groups_to_ignore
-	ignore_tags = ['SourceFile', 'XMP:HistoryWhen'] + additional_tags_to_ignore
+    # setup tags to ignore
+    ignore_groups = ['ICC_Profile'] + additional_groups_to_ignore
+    ignore_tags = ['SourceFile', 'XMP:HistoryWhen'] + additional_tags_to_ignore
 
 
-	if print_all_tags:
-		print('All relevant tags:')
+    if print_all_tags:
+        print('All relevant tags:')
 
-	# run through all keys
-	for key in data.keys():
+    # run through all keys
+    for key in data.keys():
 
-		# check if this key needs to be ignored, or is in the set of tags that must be used
-		if (key not in ignore_tags) and (key.split(':')[0] not in ignore_groups) and 'GPS' not in key:
+        # check if this key needs to be ignored, or is in the set of tags that must be used
+        if (key not in ignore_tags) and (key.split(':')[0] not in ignore_groups) and 'GPS' not in key:
 
-			date = data[key]
+            date = data[key]
 
-			if print_all_tags:
-				print(str(key) + ', ' + str(date))
+            if print_all_tags:
+                print(str(key) + ', ' + str(date))
 
-			# (rare) check if multiple dates returned in a list, take the first one which is the oldest
-			if isinstance(date, list):
-				date = date[0]
+            # (rare) check if multiple dates returned in a list, take the first one which is the oldest
+            if isinstance(date, list):
+                date = date[0]
 
-			try:
-				exifdate = parse_date_exif(date, disable_time_zone_adjust)  # check for poor-formed exif data, but allow continuation
-			except Exception as e:
-				exifdate = None
+            try:
+                exifdate = parse_date_exif(date, disable_time_zone_adjust)  # check for poor-formed exif data, but allow continuation
+            except Exception as e:
+                exifdate = None
 
-			if exifdate and exifdate < oldest_date:
-				date_available = True
-				oldest_date = exifdate
-				oldest_keys = [key]
+            if exifdate and exifdate < oldest_date and exifdate > sanity_date:
+                date_available = True
+                oldest_date = exifdate
+                oldest_keys = [key]
 
-			elif exifdate and exifdate == oldest_date:
-				oldest_keys.append(key)
+            elif exifdate and exifdate == oldest_date and exifdate > sanity_date:
+                oldest_keys.append(key)
 
-	if not date_available:
-		oldest_date = None
+    if not date_available:
+        oldest_date = None
 
-	if print_all_tags:
-		print()
+    if print_all_tags:
+        print()
 
-	return src_file, oldest_date, oldest_keys
+    return src_file, oldest_date, oldest_keys
 
 
 
 def check_for_early_morning_photos(date, day_begins):
-	"""check for early hour photos to be grouped with previous day"""
+    """check for early hour photos to be grouped with previous day"""
 
-	if date.hour < day_begins:
-		print('moving this photo to the previous day for classification purposes (day_begins=' + str(day_begins) + ')')
-		date = date - timedelta(hours=date.hour+1)  # push it to the day before for classificiation purposes
+    if date.hour < day_begins:
+        print('moving this photo to the previous day for classification purposes (day_begins=' + str(day_begins) + ')')
+        date = date - dt.timedelta(hours=date.hour+1)  # push it to the day before for classificiation purposes
 
-	return date
-
-
-#  this class is based on code from Sven Marnach (http://stackoverflow.com/questions/10075115/call-exiftool-from-a-python-script)
-class ExifTool(object):
-	"""used to run ExifTool from Python and keep it open"""
-
-	sentinel = "{ready}"
-
-	def __init__(self, executable=exiftool_location, verbose=False):
-		self.executable = executable
-		self.verbose = verbose
-
-	def __enter__(self):
-		self.process = subprocess.Popen(
-			['perl', self.executable, "-stay_open", "True",  "-@", "-"],
-			stdin=subprocess.PIPE, stdout=subprocess.PIPE)
-		return self
-
-	def __exit__(self, exc_type, exc_value, traceback):
-		self.process.stdin.write(b'-stay_open\nFalse\n')
-		self.process.stdin.flush()
-
-	def execute(self, *args):
-		args = args + ("-execute\n",)
-		self.process.stdin.write(str.join("\n", args).encode('utf-8'))
-		self.process.stdin.flush()
-		output = ""
-		fd = self.process.stdout.fileno()
-		while not output.rstrip(' \t\n\r').endswith(self.sentinel):
-			increment = os.read(fd, 4096)
-			if self.verbose:
-				sys.stdout.write(increment.decode('utf-8'))
-			output += increment.decode('utf-8')
-		return output.rstrip(' \t\n\r')[:-len(self.sentinel)]
-
-	def get_metadata(self, *args):
-
-		try:
-			return json.loads(self.execute(*args))
-		except ValueError:
-			sys.stdout.write('No files to parse or invalid data\n')
-			exit()
+    return date
 
 
 # ---------------------------------------
@@ -285,8 +244,8 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
         day_begins=0, additional_groups_to_ignore=['File'], additional_tags_to_ignore=[],
         use_only_groups=None, use_only_tags=None, rename_with_camera_model=False,
         show_warnings=True, src_file_regex=None, src_file_extension=[],
-		prioritize_groups=None, prioritize_tags=None,
-		verbose=True, keep_filename=False):
+        prioritize_groups=None, prioritize_tags=None,
+        verbose=True, keep_filename=False):
     """
     This function is a convenience wrapper around ExifTool based on common usage scenarios for sortphotos.py
 
@@ -316,7 +275,7 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
     keep_filename : bool
         True to append original filename in case of duplicates instead of increasing number
     disable_time_zone_adjust : bool
-		True to disable time zone adjustments
+        True to disable time zone adjustments
     day_begins : int
         what hour of the day you want the day to begin (only for classification purposes).  Defaults at 0 as midnight.
         Can be used to group early morning photos with the previous day.  must be a number between 0-23
@@ -392,10 +351,10 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
     args += [src_dir]
 
     # get all metadata
-    with ExifTool(verbose=verbose) as e:
+    with exiftool.ExifTool() as et:
         print('Preprocessing with ExifTool.  May take a while for a large number of files.')
         sys.stdout.flush()
-        metadata = e.get_metadata(*args)
+        metadata = et.get_metadata_batch(args)
 
     # setup output to screen
     num_files = len(metadata)
@@ -655,4 +614,4 @@ def main():
         not args.silent, args.keep_filename)
 
 if __name__ == '__main__':
-	main()
+    main()
