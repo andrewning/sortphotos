@@ -31,7 +31,7 @@ exiftool_location = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'I
 
 # -------- convenience methods -------------
 
-def parse_date_exif(date_string):
+def parse_date_exif(date_string, disable_time_zone_adjust):
     """
     extract date info from EXIF data
     YYYY:MM:DD HH:MM:SS
@@ -104,14 +104,69 @@ def parse_date_exif(date_string):
         return None  # errors in time format
 
     # adjust for time zone if necessary
-    if time_zone_adjust:
+    if not disable_time_zone_adjust and time_zone_adjust:
         date += dateadd
 
     return date
 
 
 
-def get_oldest_timestamp(data, additional_groups_to_ignore, additional_tags_to_ignore, print_all_tags=False):
+def get_prioritized_timestamp(data, prioritized_groups, prioritized_tags, additional_groups_to_ignore, additional_tags_to_ignore, disable_time_zone_adjust=False):
+    # loop through user specified prioritized groups/tags
+    prioritized_date = None
+    prioritized_keys = []
+
+    # save src file
+    src_file = data['SourceFile']
+
+    # start with tags as they are more specific
+    if prioritized_tags:
+        for tag in prioritized_tags:
+            date = None
+            
+            # create a hash slice of data with just the specified tag
+            subdata = {key:value for key,value in data.iteritems() if tag in key}
+            if subdata:
+                # re-use get_oldest_timestamp to get the data needed
+                subdata['SourceFile'] = src_file
+                src_file, date, keys = get_oldest_timestamp(subdata, additional_groups_to_ignore, additional_tags_to_ignore, disable_time_zone_adjust)
+
+            if not date:
+                continue
+        
+            prioritized_date = date
+            prioritized_keys = keys
+
+            # return as soon as a match is found
+            return src_file, prioritized_date, prioritized_keys
+
+    # if no matching tags are found, look for matching groups
+    if prioritized_groups:
+        for group in prioritized_groups:
+            date = None
+            
+            # create a hash slice of data to find the oldest date within the specified group
+            subdata = {key:value for key,value in data.iteritems() if key.startswith(group)}
+            if subdata:
+                # find the oldest date for that group
+                subdata['SourceFile'] = src_file
+                src_file, date, keys = get_oldest_timestamp(subdata, additional_groups_to_ignore, additional_tags_to_ignore, disable_time_zone_adjust)
+
+            if not date:
+                continue
+        
+            prioritized_date = date
+            prioritized_keys = keys
+
+            # return as soon as a match is found
+            return src_file, prioritized_date, prioritized_keys
+        
+    # reaching here means no matches were found
+    return src_file, prioritized_date, prioritized_keys
+
+
+
+def get_oldest_timestamp(data, additional_groups_to_ignore, additional_tags_to_ignore, disable_time_zone_adjust=False, print_all_tags=False):
     """data as dictionary from json.  Should contain only time stamps except SourceFile"""
 
     # save only the oldest date
@@ -122,7 +177,7 @@ def get_oldest_timestamp(data, additional_groups_to_ignore, additional_tags_to_i
     # save src file
     src_file = data['SourceFile']
 
-    # ssetup tags to ignore
+    # setup tags to ignore
     ignore_groups = ['ICC_Profile'] + additional_groups_to_ignore
     ignore_tags = ['SourceFile', 'XMP:HistoryWhen'] + additional_tags_to_ignore
 
@@ -146,7 +201,7 @@ def get_oldest_timestamp(data, additional_groups_to_ignore, additional_tags_to_i
                 date = date[0]
 
             try:
-                exifdate = parse_date_exif(date)  # check for poor-formed exif data, but allow continuation
+                exifdate = parse_date_exif(date, disable_time_zone_adjust)  # check for poor-formed exif data, but allow continuation
             except Exception as e:
                 exifdate = None
 
@@ -219,16 +274,8 @@ class ExifTool(object):
             sys.stdout.write('No files to parse or invalid data\n')
             exit()
 
-
-# ---------------------------------------
-
-
-
-def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
-        copy_files=False, test=False, remove_duplicates=True, day_begins=0,
-        additional_groups_to_ignore=['File'], additional_tags_to_ignore=[],
-        use_only_groups=None, use_only_tags=None, rename_with_camera_model=False,
-        show_warnings=True, src_file_regex=None, src_file_extension=[], verbose=True):
+def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False, day_begins=0, copy_files=False, test=False, remove_duplicates=True, verbose=True, disable_time_zone_adjust=False, ignore_file_types=[], additional_groups_to_ignore=['File'], additional_tags_to_ignore=[], use_only_groups=None, use_only_tags=None, rename_with_camera_model=False, show_warnings=True, src_file_regex=None, src_file_extension=[], prioritize_groups=None, prioritize_tags=None):
+	   
     """
     This function is a convenience wrapper around ExifTool based on common usage scenarios for sortphotos.py
 
@@ -251,8 +298,12 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
         True if you want files to be copied over from src_dir to dest_dir rather than moved
     test : bool
         True if you just want to simulate how the files will be moved without actually doing any moving/copying
+    ignore_file_types : list(str)
+        file types to be ignored. By default, hidden files (.*) are ignored
     remove_duplicates : bool
         True to remove files that are exactly the same in name and a file hash
+    disable_time_zone_adjust : bool
+		True to disable time zone adjustments
     day_begins : int
         what hour of the day you want the day to begin (only for classification purposes).  Defaults at 0 as midnight.
         Can be used to group early morning photos with the previous day.  must be a number between 0-23
@@ -273,6 +324,10 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
         pick your source file using regex
     src_file_extension: list(str)
         Limit your script to process only specific files
+    prioritize_groups : list(str)
+        a list of groups that will be prioritized for date info
+    prioritize_tags : list(str)
+        a list of tags that will be prioritized for date info
     verbose : bool
         True if you want to see details of file processing
 
@@ -336,11 +391,19 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
     if test:
         test_file_dict = {}
 
+    # track files modified/skipped
+    files_modified = []
+    files_skipped = []
+
     # parse output extracting oldest relevant date
     for idx, data in enumerate(metadata):
 
         # extract timestamp date for photo
-        src_file, date, keys = get_oldest_timestamp(data, additional_groups_to_ignore, additional_tags_to_ignore)
+        date = None
+        if prioritize_groups or prioritize_tags:
+            src_file, date, keys = get_prioritized_timestamp(data, prioritize_groups, prioritize_tags, additional_groups_to_ignore, additional_tags_to_ignore, disable_time_zone_adjust)
+        if not date:
+            src_file, date, keys = get_oldest_timestamp(data, additional_groups_to_ignore, additional_tags_to_ignore, disable_time_zone_adjust)
 
         # fixes further errors when using unicode characters like "\u20AC"
         src_file.encode('utf-8')
@@ -365,14 +428,24 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
                 print('No valid dates were found using the specified tags.  File will remain where it is.')
                 print()
                 # sys.stdout.flush()
+            files_skipped.append(src_file)
             continue
 
         # ignore hidden files
         if os.path.basename(src_file).startswith('.'):
             print('hidden file.  will be skipped')
             print()
+            files_skipped.append(src_file)
             continue
 
+        # ignore specified file extensions
+        fileextension = os.path.splitext(src_file)[-1].upper().replace('.', '')
+        if fileextension in map(str.upper, ignore_file_types):
+            print(fileextension + ' files ignored.  will be skipped')
+            print()
+            files_skipped.append(src_file)
+            continue
+        
         if verbose:
             print('Date/Time: ' + str(date))
             print('Corresponding Tags: ' + ', '.join(keys))
@@ -387,7 +460,7 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
         dest_file = dest_dir
         for thedir in dirs:
             dest_file = os.path.join(dest_file, thedir)
-            if not os.path.exists(dest_file):
+            if not os.path.exists(dest_file) and not test:
                 os.makedirs(dest_file)
 
         # rename file if necessary
@@ -452,18 +525,19 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
         # finally move or copy the file
         if test:
             test_file_dict[dest_file] = src_file
-
+		
+        if fileIsIdentical:
+            files_skipped.append(src_file)
+            continue  # ignore identical files
         else:
-
-            if fileIsIdentical:
-                continue  # ignore identical files
-            else:
-                if copy_files:
+            if copy_files:
+                files_modified.append(dest_file)
+                if not test:
                     shutil.copy2(src_file, dest_file)
-                else:
+            else:
+                files_modified.append(dest_file)
+                if not test:
                     shutil.move(src_file, dest_file)
-
-
 
         if verbose:
             print()
@@ -472,6 +546,13 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
 
     if not verbose:
         print()
+
+    print('Files modified (' + str(len(files_modified)) + '): ')
+    for modified in files_modified:
+        print('\t' + str(modified))
+    print('Files skipped (' + str(len(files_skipped)) + '): ')
+    for skipped in files_skipped:
+        print('\t' + str(skipped))
 
 
 def main():
@@ -486,6 +567,7 @@ def main():
     parser.add_argument('-c', '--copy', action='store_true', help='copy files instead of move')
     parser.add_argument('-s', '--silent', action='store_true', help='don\'t display parsing details.')
     parser.add_argument('-t', '--test', action='store_true', help='run a test.  files will not be moved/copied\ninstead you will just a list of would happen')
+    parser.add_argument('-z', '--disable-time-zone-adjust', action='store_true', help='disables time zone adjust\nuseful for devices that store local time + time zone instead of UTC + time zone')
     parser.add_argument('--sort', type=str, default='%Y/%m-%b',
                         help="choose destination folder structure using datetime format \n\
     https://docs.python.org/2/library/datetime.html#strftime-and-strptime-behavior. \n\
@@ -496,6 +578,11 @@ def main():
                         help="rename file using format codes \n\
     https://docs.python.org/2/library/datetime.html#strftime-and-strptime-behavior. \n\
     default is None which just uses original filename")
+
+    parser.add_argument('--ignore-file-types', type=str, nargs='+',
+                        default=None,
+                        help="ignore file types\n\
+    default is to only ignore hidden files (.*)")
     parser.add_argument('--keep-duplicates', action='store_true',
                         help='If file is a duplicate keep it anyway (after renaming).')
     parser.add_argument('--day-begins', type=int, default=0, help='hour of day that new day begins (0-23), \n\
@@ -518,6 +605,14 @@ def main():
                     default=None,
                     help='specify a restricted set of tags to search for date information\n\
     e.g., EXIF:CreateDate')
+    parser.add_argument('--prioritize-groups', type=str, nargs='+',
+                    default=None,
+                    help='specify a prioritized set of groups to search for date information\n\
+    e.g., EXIF File')
+    parser.add_argument('--prioritize-tags', type=str, nargs='+',
+                    default=None,
+                    help='specify a prioritized set of tags to search for date information\n\
+    e.g., EXIF:CreateDate EXIF:ModifyDate')
 
     # MHB
     parser.add_argument('--rename-with-camera-model', action='store_true',
@@ -530,13 +625,19 @@ def main():
     parser.add_argument('-e', '--src-file-extension', type=str, default=[], nargs='+',  help='source file format (comma seperated)')
 
     # parse command line arguments
-    args = parser.parse_args()
+    temp_args = parser.parse_args()
+	
+	args={}
+	
+	args['src_dir'], args['dest_dir'], args['sort_format'], args['rename_format'], args['recursive args'] = temp_args.src_dir, temp_args.dest_dir, temp_args.sort, temp_args.rename, temp_args.recursive
+	args['day_begins'], args['copy_files'], args['test'] = temp_args.day_begins, temp_args.copy, temp_args.test
+	args['remove_duplicates'], args['verbose'], args['disable_time_zone_adjust'] = not temp_args.keep_duplicates,  not temp_args.silent, temp_args.disable_time_zone_adjust
+	args['ignore_file_types'], args['additional_groups_to_ignore'], args['additional_tags_to_ignore'] = temp_args.ignore_file_types, temp_args.ignore_groups, temp_args.ignore_tags
+	args['use_only_groups'], args['use_only_tags'], args['rename_with_camera_model'] = temp_args.use_only_groups, temp_args.use_only_tags,  temp_args.rename_with_camera_model
+	args['show_warnings'], args['src_file_regex'], args['src_file_extension'] = temp_args.show_warnings, temp_args.src_file_regex,  temp_args.src_file_extension
+	args['prioritize_groups'], args['prioritize_tags'] = temp_args.prioritize_groups, temp_args.prioritize_tags
 
-    sortPhotos(args.src_dir, args.dest_dir, args.sort, args.rename, args.recursive,
-        args.copy, args.test, not args.keep_duplicates, args.day_begins,
-        args.ignore_groups, args.ignore_tags, args.use_only_groups,
-        args.use_only_tags, args.rename_with_camera_model, args.show_warnings,
-        args.src_file_regex, args.src_file_extension, not args.silent)
+    sortPhotos(**args)
 
 if __name__ == '__main__':
     main()
