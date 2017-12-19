@@ -58,7 +58,7 @@ This would create files like: 2003_1031_1544.jpg.  By default the script keeps t
 
 ## restrict which groups/tags to search through
 
-sortphotos.py uses Exiftool.py to search through all metadata that has date information and uses the metadata with the oldest date (which may be more than one metadata tag).  For example, if "EXIF:CreateDate" is the tag with the oldest date it is automatically used.  There are several filters you can use to restrict which grouops/tags to search through for the oldest date.  All the groups/tags are described [here](http://www.sno.phy.queensu.ca/~phil/exiftool/TagNames/) (with a few extra ones [here](http://www.sno.phy.queensu.ca/~phil/exiftool/TagNames/Extra.html)). One common usage is to ignore all file metadata which is not persistent (i.e., FileModifyDate, FileCreateDate, etc.).  This is accomplished with:
+sortphotos.py uses Exiftool.py to search through all metadata that has date information and uses the metadata with the oldest date (which may be more than one metadata tag).  For example, if "EXIF:CreateDate" is the tag with the oldest date it is automatically used.  There are several filters you can use to restrict which groups/tags to search through for the oldest date.  All the groups/tags are described [here](http://www.sno.phy.queensu.ca/~phil/exiftool/TagNames/) (with a few extra ones [here](http://www.sno.phy.queensu.ca/~phil/exiftool/TagNames/Extra.html)). One common usage is to ignore all file metadata which is not persistent (i.e., FileModifyDate, FileCreateDate, etc.).  This is accomplished with:
 
     python sortphotos.py source destination --ignore-groups File
 
@@ -74,6 +74,14 @@ and this would only look for date tags in EXIF, XMP, IPTC.  Or you could restric
 
     python sortphotos.py source destination --use-only-tags EXIF:CreateDate EXIF:DateTimeOriginal
 
+You can also prioritize specific tags so as to not always use the oldest date
+
+    python sortphotos.py source destination --prioritize-tags EXIF:CreateDate EXIF:ModifyDate
+
+or prioritize by group
+
+    python sortphotos.py source destination --prioritize-tags EXIF
+
 <!-- ## selected what to sort by (defining the tags)
 
 sortphotos.py takes a list of tags you want to search for.  This list should be ordered in terms of precedence.  The default list is
@@ -86,11 +94,21 @@ The first five are different EXIF data tags, and the last two are file stamp dat
 
 These five are commonly used tags, but there are a wide range of EXIF and other tags available (listed [here](http://www.sno.phy.queensu.ca/~phil/exiftool/TagNames/index.html)).  For the specific file types you use, you should rearrange or add the corresponding EXIF tags you need.   -->
 
+## time zone adjust
+Time zone adjust is meant to be done against UTC, however, some devices store local time. If this is the case and the local time stored is already correct, you can disable the time zone adjust.
+
+    python sortphotos.py --disable-time-zone-adjust /source /destination
 
 ## duplicate removal
 SortPhotos will *always* check to make sure something with the same file name doesn't already exist where it's trying to write, so that you don't unintentionally overwrite a file. It this occurs it will append a number on the end of the file.  So for example if photo.jpg was taken on June 1, 2010 but 2010 > June > photo.jpg already exists then the new file will be moved as photo_1.jpg and so on.  SortPhotos will go one step further and if it finds a file of the same name, it will then run a file compare to see if the files are actually the same.  If they are *exactly* the same, it will just skip the copy (or move) operation.  This will prevent you from having duplicate files.  However you have the option of turning this off (not the name comparison, that will always happen, just the weeding out of duplicates).  This option would be useful, for example, if you are copying over a bunch of new photos that you are sure don't already exist in your organized collection of photos.  Invoke the option ``--keep-duplicates`` in order to skip duplicate detection.
 
     python sortphotos.py --keep-duplicates /source /destination
+
+## ignore file types
+
+You can ignore specified file extensions by specifying a list
+
+    python sortphotos.py --ignore-file-types MOV MP4 /source /destination
 
 <!-- ## choose which file types to search for
 You can restrict what types of files SortPhotos looks for in your source directory.  By default it only looks for the most common photo and video containers ('jpg', 'jpeg', 'tiff', 'arw', 'avi', 'mov', 'mp4', 'mts').  You can change this behavior through the ``extensions`` argument.  Note that it is not case sensitive so if you specify 'jpg' as an extension it will search for both jpg and JPG files or even jPg files.  For example say you want to copy and sort only the *.gif and *.avi files you would call
