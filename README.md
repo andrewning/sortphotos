@@ -1,9 +1,3 @@
-# SortPhotos
-
-## Download
-Find the lastest releases here:
-https://github.com/TeaWithLucas/sortphotos/releases
-
 
 # Description
 
@@ -26,6 +20,7 @@ SortPhotos is intended to be used primarily from the command line.  To see all t
 The simplest usage is to specify a source directory (the directory where your mess of files is currently located) and a destination directory (where you want the files and directories to go).  By default the source directory is not searched recursively but that can be changed with a flag as discussed below.
 
     python sortphotos.py /Users/Me/MessyDirectory /Users/Me/Pictures
+    
 
 ## copy rather than move
 There are several options that can be invoked.  For example the default behavior is to move files from your source directory to your destination directory.  Note that it is  **much** faster to move the files rather than copy them (especially if videos are involved).  However, if you want to copy this is done with the ``-c`` or ``--copy`` flag.
