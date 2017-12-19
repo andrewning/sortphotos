@@ -15,7 +15,7 @@ use strict;
 use vars qw($VERSION $AUTOLOAD %iptcCharset);
 use Image::ExifTool qw(:DataAccess :Utils);
 
-$VERSION = '1.52';
+$VERSION = '1.54';
 
 %iptcCharset = (
     "\x1b%G"  => 'UTF8',
@@ -638,7 +638,7 @@ my %fileFormat = (
     },
     202 => {
         Name => 'ObjectPreviewData',
-        Groups => { 2 => 'Image' },
+        Groups => { 2 => 'Preview' },
         Format => 'undef[0,256000]',
         Binary => 1,
     },
@@ -1073,11 +1073,18 @@ sub ProcessIPTC($$$)
                 }
                 $et->FoundTag('CurrentIPTCDigest', $md5);
             }
-        } elsif ($Image::ExifTool::MWG::strict and $$et{FILE_TYPE} =~ /^(JPEG|TIFF|PSD)$/) {
-            # ignore non-standard IPTC while in strict MWG compatibility mode
-            $et->Warn("Ignored non-standard IPTC at $path");
-            return 1;
         } else {
+            if (($Image::ExifTool::MWG::strict or $et->Options('Validate')) and
+                $$et{FILE_TYPE} =~ /^(JPEG|TIFF|PSD)$/)
+            {
+                if ($Image::ExifTool::MWG::strict) {
+                    # ignore non-standard IPTC while in strict MWG compatibility mode
+                    $et->Warn("Ignored non-standard IPTC at $path");
+                    return 1;
+                } else {
+                    $et->Warn("Non-standard IPTC at $path", 1);
+                }
+            }
             # extract non-standard IPTC
             my $count = ($$et{DIR_COUNT}{IPTC} || 0) + 1;  # count non-standard IPTC
             $$et{DIR_COUNT}{IPTC} = $count;
@@ -1243,7 +1250,7 @@ image files.
 
 =head1 AUTHOR
 
-Copyright 2003-2014, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2017, Phil Harvey (phil at owl.phy.queensu.ca)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

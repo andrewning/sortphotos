@@ -23,7 +23,7 @@ use strict;
 use vars qw($VERSION);
 use Image::ExifTool qw(:DataAccess :Utils);
 
-$VERSION = '1.29';
+$VERSION = '1.31';
 
 sub ProcessICC($$);
 sub ProcessICC_Profile($$$);
@@ -274,6 +274,7 @@ my %profileClass = (
     4 => {
         Name => 'ProfileCMMType',
         Format => 'string[4]',
+        # seen: "    ",ACMS,ADBE,APPLE,KCMS,Lino,NKON,UCCM,appl,etc2,lino,none
     },
     8 => {
         Name => 'ProfileVersion',
@@ -327,6 +328,18 @@ my %profileClass = (
         Name => 'DeviceManufacturer',
         Format => 'string[4]',
         # KODA = Kodak
+        # ADBE = Adobe ...?
+        # appl = Apple
+        # HP   = HP
+        # CANO = Canon
+        # ISL  = ?
+        # JPEG = JPEG
+        # Leaf = Leaf
+        # MNLT = ?
+        # MSFT = Microsoft
+        # POne = ?
+        # etc2 = ?
+        # lcms = ?
     },
     52 => {
         Name => 'DeviceModel',
@@ -633,7 +646,7 @@ sub ProcessMetadata($$$)
     my $dirStart = $$dirInfo{DirStart};
     my $dirLen = $$dirInfo{DirLen};
     my $dirEnd = $dirStart + $dirLen;
-    
+
     if ($dirLen < 16 or substr($$dataPt, $dirStart, 4) ne 'dict') {
         $et->Warn('Invalid ICC meta dictionary');
         return 0;
@@ -716,7 +729,7 @@ sub WriteICC_Profile($$;$)
     # (don't write AsShotICCProfile or CurrentICCProfile here)
     return undef unless $dirName eq 'ICC_Profile';
     my $nvHash = $et->GetNewValueHash($Image::ExifTool::Extra{$dirName});
-    my $val = $et->GetNewValues($nvHash);
+    my $val = $et->GetNewValue($nvHash);
     $val = '' unless defined $val;
     return undef unless $et->IsOverwriting($nvHash, $val);
     ++$$et{CHANGED};
@@ -761,7 +774,7 @@ sub ProcessICC($$)
         return 1;
     }
     $raf->Seek(0, 0);
-    unless ($raf->Read($buff, $size)) {
+    unless ($raf->Read($buff, $size) == $size) {
         $et->Error('Truncated ICC profile');
         return 1;
     }
@@ -882,7 +895,7 @@ sub ProcessICC_Profile($$$)
                     }
                     my $strLen = Get32u($dataPt, $recPos + 4);
                     my $strPos = Get32u($dataPt, $recPos + 8);
-                    last if $strPos + $strLen > $size; 
+                    last if $strPos + $strLen > $size;
                     my $str = substr($$dataPt, $valuePtr + $strPos, $strLen);
                     $str = $et->Decode($str, 'UTF16');
                     $et->HandleTag($tagTablePtr, $tagID, $str,
@@ -977,7 +990,7 @@ data created on one device into another device's native color space.
 
 =head1 AUTHOR
 
-Copyright 2003-2014, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2017, Phil Harvey (phil at owl.phy.queensu.ca)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

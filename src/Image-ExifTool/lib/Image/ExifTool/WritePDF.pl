@@ -399,7 +399,7 @@ sub WritePDF($$)
 
     # must encrypt all values in dictionary if they came from an encrypted stream
     CryptObject($infoDict) if $$infoDict{_needCrypt};
-    
+
     # must set line separator before calling WritePDFValue()
     local $/ = $capture{newline};
 
@@ -443,9 +443,9 @@ sub WritePDF($$)
         # decide whether we want to write this tag
         # (native PDF information is always preferred, so don't check IsCreating)
         next unless $deleted or $$tagInfo{List} or not exists $$infoDict{$tagID};
-        
+
         # add new values to existing ones
-        my @newVals = $et->GetNewValues($nvHash);
+        my @newVals = $et->GetNewValue($nvHash);
         if (@newVals) {
             push @vals, @newVals;
             ++$infoChanged;
@@ -635,8 +635,11 @@ sub WritePDF($$)
             if ($id =~ /^<([0-9a-f]{2})/i) {
                 my $byte = unpack('H2',chr((hex($1) + 1) & 0xff));
                 substr($id, 1, 2) = $byte;
-            } elsif ($id =~ /^\((.)/s) {
-                substr($id, 1, 1) = chr((ord($1) + 1) & 0xff);
+            } elsif ($id =~ /^\((.)/s and $1 ne '\\' and $1 ne ')' and $1 ne '(') {
+                my $ch = chr((ord($1) + 1) & 0xff);
+                # avoid generating characters that could cause problems
+                $ch = 'a' if $ch =~ /[()\\\x00-\x08\x0a-\x1f\x7f\xff]/;
+                substr($id, 1, 1) = $ch;
             }
             $mainDict->{ID}->[1] = $id;
         }
@@ -747,7 +750,7 @@ C<PDF-update> pseudo group).
 
 =head1 AUTHOR
 
-Copyright 2003-2014, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2017, Phil Harvey (phil at owl.phy.queensu.ca)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

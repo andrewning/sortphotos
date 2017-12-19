@@ -9,7 +9,7 @@
 # References:   1) CPAN forum post by 'hardloaf' (http://www.cpanforum.com/threads/2183)
 #               2) http://www.cybercom.net/~dcoffin/dcraw/
 #               3) http://syscall.eu/#pana
-#               4) Iliah Borg private communication (LibRaw)
+#              IB) Iliah Borg private communication (LibRaw)
 #              JD) Jens Duttke private communication (TZ3,FZ30,FZ50)
 #------------------------------------------------------------------------------
 
@@ -20,7 +20,7 @@ use vars qw($VERSION);
 use Image::ExifTool qw(:DataAccess :Utils);
 use Image::ExifTool::Exif;
 
-$VERSION = '1.08';
+$VERSION = '1.11';
 
 sub ProcessJpgFromRaw($$$);
 sub WriteJpgFromRaw($$$);
@@ -68,7 +68,7 @@ my %wbTypeInfo = (
     # 0x08: 1
     # 0x09: 1,3,4
     # 0x0a: 12
-    0x08 => { #4
+    0x08 => { #IB
         Name => 'BlackLevel1',
         Writable => 'int16u',
         Notes => q{
@@ -76,15 +76,15 @@ my %wbTypeInfo = (
             the BlackLevelRed/Green/Blue tags below
         },
     },
-    0x09 => { Name => 'BlackLevel2', Writable => 'int16u' }, #4
-    0x0a => { Name => 'BlackLevel3', Writable => 'int16u' }, #4
+    0x09 => { Name => 'BlackLevel2', Writable => 'int16u' }, #IB
+    0x0a => { Name => 'BlackLevel3', Writable => 'int16u' }, #IB
     # 0x0b: 0x860c,0x880a,0x880c
     # 0x0c: 2 (only Leica Digilux 2)
     # 0x0d: 0,1
     # 0x0e,0x0f,0x10: 4095
-    0x0e => { Name => 'LinearityLimitRed',   Writable => 'int16u' }, #4
-    0x0f => { Name => 'LinearityLimitGreen', Writable => 'int16u' }, #4
-    0x10 => { Name => 'LinearityLimitBlue',  Writable => 'int16u' }, #4
+    0x0e => { Name => 'LinearityLimitRed',   Writable => 'int16u' }, #IB
+    0x0f => { Name => 'LinearityLimitGreen', Writable => 'int16u' }, #IB
+    0x10 => { Name => 'LinearityLimitBlue',  Writable => 'int16u' }, #IB
     0x11 => { #JD
         Name => 'RedBalance',
         Writable => 'int16u',
@@ -98,7 +98,7 @@ my %wbTypeInfo = (
         ValueConv => '$val / 256',
         ValueConvInv => 'int($val * 256 + 0.5)',
     },
-    0x13 => { #4
+    0x13 => { #IB
         Name => 'WBInfo',
         SubDirectory => { TagTable => 'Image::ExifTool::PanasonicRaw::WBInfo' },
     },
@@ -107,29 +107,29 @@ my %wbTypeInfo = (
         Writable => 'int16u',
     },
     # 0x18,0x19,0x1a: 0
-    0x18 => { #4
-        Name => 'HighISOMultiplierRed', 
+    0x18 => { #IB
+        Name => 'HighISOMultiplierRed',
         Writable => 'int16u',
         ValueConv => '$val / 256',
         ValueConvInv => 'int($val * 256 + 0.5)',
     },
-    0x19 => { #4
-        Name => 'HighISOMultiplierGreen', 
+    0x19 => { #IB
+        Name => 'HighISOMultiplierGreen',
         Writable => 'int16u',
         ValueConv => '$val / 256',
         ValueConvInv => 'int($val * 256 + 0.5)',
     },
-    0x1a => { #4
-        Name => 'HighISOMultiplierBlue', 
+    0x1a => { #IB
+        Name => 'HighISOMultiplierBlue',
         Writable => 'int16u',
         ValueConv => '$val / 256',
         ValueConvInv => 'int($val * 256 + 0.5)',
     },
     # 0x1b: [binary data] (something to do with the camera ISO cababilities: int16u count N,
-    #                      followed by table of  N entries: int16u ISO, int16u[3] RGB gains - ref 4)
-    0x1c => { Name => 'BlackLevelRed',   Writable => 'int16u' }, #4
-    0x1d => { Name => 'BlackLevelGreen', Writable => 'int16u' }, #4
-    0x1e => { Name => 'BlackLevelBlue',  Writable => 'int16u' }, #4
+    #                      followed by table of  N entries: int16u ISO, int16u[3] RGB gains - ref IB)
+    0x1c => { Name => 'BlackLevelRed',   Writable => 'int16u' }, #IB
+    0x1d => { Name => 'BlackLevelGreen', Writable => 'int16u' }, #IB
+    0x1e => { Name => 'BlackLevelBlue',  Writable => 'int16u' }, #IB
     0x24 => { #2
         Name => 'WBRedLevel',
         Writable => 'int16u',
@@ -142,7 +142,7 @@ my %wbTypeInfo = (
         Name => 'WBBlueLevel',
         Writable => 'int16u',
     },
-    0x27 => { #4
+    0x27 => { #IB
         Name => 'WBInfo2',
         SubDirectory => { TagTable => 'Image::ExifTool::PanasonicRaw::WBInfo2' },
     },
@@ -150,6 +150,7 @@ my %wbTypeInfo = (
     # 0x2d: 2,3
     0x2e => { #JD
         Name => 'JpgFromRaw', # (writable directory!)
+        Groups => { 2 => 'Preview' },
         Writable => 'undef',
         # protect this tag because it contains all the metadata
         Flags => [ 'Binary', 'Protected', 'NestedHtmlDump', 'BlockExtract' ],
@@ -166,6 +167,10 @@ my %wbTypeInfo = (
             ProcessProc => \&ProcessJpgFromRaw,
         },
     },
+    0x2f => { Name => 'CropTop',    Writable => 'int16u' },
+    0x30 => { Name => 'CropLeft',   Writable => 'int16u' },
+    0x31 => { Name => 'CropBottom', Writable => 'int16u' },
+    0x32 => { Name => 'CropRight',  Writable => 'int16u' },
     0x10f => {
         Name => 'Make',
         Groups => { 2 => 'Camera' },
@@ -218,6 +223,14 @@ my %wbTypeInfo = (
         SubDirectory => { TagTable => 'Image::ExifTool::PanasonicRaw::DistortionInfo' },
     },
     # 0x11b - chromatic aberration correction (ref 3)
+    0x120 => {
+        Name => 'CameraIFD',
+        SubDirectory => {
+            TagTable => 'Image::ExifTool::PanasonicRaw::CameraIFD',
+            Base => '$start',
+            ProcessProc => \&Image::ExifTool::ProcessTIFF,
+        },
+    },
     0x2bc => { # PH Extension!!
         Name => 'ApplicationNotes', # (writable directory!)
         Writable => 'int8u',
@@ -259,9 +272,10 @@ my %wbTypeInfo = (
             Start => '$val',
         },
     },
+    # 0xffff => 'DCSHueShiftValues', #exifprobe (NC)
 );
 
-# white balance information (ref 4)
+# white balance information (ref IB)
 # (PanasonicRawVersion<200: Digilux 2)
 %Image::ExifTool::PanasonicRaw::WBInfo = (
     PROCESS_PROC => \&Image::ExifTool::ProcessBinaryData,
@@ -287,7 +301,7 @@ my %wbTypeInfo = (
     20 => { Name => 'WB_RBLevels7', Format => 'int16u[2]' },
 );
 
-# white balance information (ref 4)
+# white balance information (ref IB)
 # (PanasonicRawVersion>=200: D-Lux2, D-Lux3, DMC-FZ18/FZ30/LX1/L10)
 %Image::ExifTool::PanasonicRaw::WBInfo2 = (
     PROCESS_PROC => \&Image::ExifTool::ProcessBinaryData,
@@ -373,6 +387,21 @@ my %wbTypeInfo = (
     # 14,15 - checksums
 );
 
+# Panasonic RW2 camera IFD written by GH5 (ref PH)
+# (doesn't seem to be valid for the GF7 or GM5 -- encrypted?)
+%Image::ExifTool::PanasonicRaw::CameraIFD = (
+    GROUPS => { 0 => 'PanasonicRaw', 1 => 'CameraIFD', 2 => 'Camera'},
+    # (don't know what format codes 0x101 and 0x102 are for, so just
+    #  map them into 4 = int32u for now)
+    VARS => { MAP_FORMAT => { 0x101 => 4, 0x102 => 4 } },
+    0x1101 => { #forum8484 (Metabones EF-M43-BT2 adapter with Canon lenses)
+        Name => 'FocusDistance',
+        Writable => 'int16u',
+        ValueConv => '$val / 200',
+        PrintConv => '$val > 65534.5/200 ? "inf" : "$val m"',
+    },
+);
+
 # PanasonicRaw composite tags
 %Image::ExifTool::PanasonicRaw::Composite = (
     ImageWidth => {
@@ -419,7 +448,7 @@ sub ProcessDistortionInfo($$$)
     my ($et, $dirInfo, $tagTablePtr) = @_;
     my $dataPt = $$dirInfo{DataPt};
     my $start = $$dirInfo{DirStart} || 0;
-    my $size = $$dirInfo{DataLen} || (length($$dataPt) - $start);
+    my $size = $$dirInfo{DirLen} || (length($$dataPt) - $start);
     if ($size == 32) {
         # verify the checksums (ref 3)
         my $csum1 = Checksum($dataPt, $start +  4, 12, 1);
@@ -616,7 +645,7 @@ write meta information in Panasonic/Leica RAW, RW2 and RWL images.
 
 =head1 AUTHOR
 
-Copyright 2003-2014, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2017, Phil Harvey (phil at owl.phy.queensu.ca)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

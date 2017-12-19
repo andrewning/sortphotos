@@ -223,14 +223,14 @@ sub ProcessRTF($$)
     my ($et, $dirInfo) = @_;
     my $raf = $$dirInfo{RAF};
     my ($buff, $buf2, $cs);
-    
+
     return 0 unless $raf->Read($buff, 64) and $raf->Seek(0,0);
     return 0 unless $buff =~ /^[\n\r]*\{[\n\r]*\\rtf[^a-zA-Z]/;
     $et->SetFileType();
 #
 # determine the RTF character set
 #
-    if ($buff=~ /\\ansicpg(\d*)/) { 
+    if ($buff=~ /\\ansicpg(\d*)/) {
         $cs = "cp$1";
     } elsif ($buff=~ /\\(ansi|mac|pc|pca)[^a-zA-Z]/) {
         my %trans = (
@@ -359,7 +359,7 @@ information from RTF (Rich Text Format) documents.
 
 =head1 AUTHOR
 
-Copyright 2003-2014, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2017, Phil Harvey (phil at owl.phy.queensu.ca)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

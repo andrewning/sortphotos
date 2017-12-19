@@ -1248,7 +1248,7 @@ sub MakeNameAndDesc($$)
     # convert underlines to spaces in description
     if ($desc =~ tr/_/ /) {
         # remove unnecessary underlines from tag name...
-        s/_([A-Z][a-z])/$1/g; 
+        s/_([A-Z][a-z])/$1/g;
         s/([a-z0-9])_([A-Z])/$1$2/g;
         s/([A-Za-z])_(\d)/$1$2/g;
     }
@@ -1331,7 +1331,7 @@ information from the Qualcomm APP7 segment in JPEG images.
 
 =head1 AUTHOR
 
-Copyright 2003-2014, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2017, Phil Harvey (phil at owl.phy.queensu.ca)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

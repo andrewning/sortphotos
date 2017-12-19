@@ -227,7 +227,8 @@ class ExifTool(object):
 def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
         copy_files=False, test=False, remove_duplicates=True, day_begins=0,
         additional_groups_to_ignore=['File'], additional_tags_to_ignore=[],
-        use_only_groups=None, use_only_tags=None, verbose=True):
+        use_only_groups=None, use_only_tags=None, rename_with_camera_model=False,
+        show_warnings=True, src_file_regex=None, src_file_extension=[], verbose=True):
     """
     This function is a convenience wrapper around ExifTool based on common usage scenarios for sortphotos.py
 
@@ -263,6 +264,15 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
         a list of groups that will be exclusived searched across for date info
     use_only_tags : list(str)
         a list of tags that will be exclusived searched across for date info
+    rename_with_camera_model : bool
+        True if you want to append the camera model or brand name to the renamed file. Does nothing if rename_format
+        is None. (MHB: added this)
+    show_warnings : bool
+        True if you want to see warnings
+    src_file_regex: str
+        pick your source file using regex
+    src_file_extension: list(str)
+        Limit your script to process only specific files
     verbose : bool
         True if you want to see details of file processing
 
@@ -294,8 +304,24 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
     if recursive:
         args += ['-r']
 
-    args += [src_dir]
+    # MHB
+    if rename_with_camera_model:
+        if rename_format is None:
+            raise Exception('"--rename-with-camera-model" option not valid without "--rename"')
+        args += ['-Make', '-Model']
 
+    #sasi07eee
+    if src_file_extension is not None:
+        for f in src_file_extension:
+            args += [ '-ext']
+            args += [ f ]
+
+    if src_file_regex is not None:
+            print (src_file_regex)
+            args += [ '-if']
+            args += ['$filename=~/' + src_file_regex + '/' ]
+
+    args += [src_dir]
 
     # get all metadata
     with ExifTool(verbose=verbose) as e:
@@ -335,7 +361,7 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
 
         # check if no valid date found
         if not date:
-            if verbose:
+            if show_warnings:
                 print('No valid dates were found using the specified tags.  File will remain where it is.')
                 print()
                 # sys.stdout.flush()
@@ -368,8 +394,18 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
         filename = os.path.basename(src_file)
 
         if rename_format is not None:
-            _, ext = os.path.splitext(filename)
-            filename = date.strftime(rename_format) + ext.lower()
+            # MHB: get camera model (else camera brand) and add to file name if specified
+            camera_model = data.get('EXIF:Model', None)
+            if not camera_model:
+                camera_model = data.get('EXIF:Make', None)
+
+            if rename_with_camera_model and camera_model:
+                _, ext = os.path.splitext(filename)
+                filename = date.strftime(rename_format) + '_'\
+                           + ''.join([c for c in camera_model if c.isalnum()]) + ext.lower()
+            else:
+                _, ext = os.path.splitext(filename)
+                filename = date.strftime(rename_format) + ext.lower()
 
         # setup destination file
         dest_file = os.path.join(dest_file, filename)
@@ -397,14 +433,16 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
                     dest_compare = dest_file
                 if remove_duplicates and filecmp.cmp(src_file, dest_compare):  # check for identical files
                     fileIsIdentical = True
-                    if verbose:
-                        print('Identical file already exists.  Duplicate will be ignored.\n')
+                    if show_warnings:
+                        print("Identical file already exists.  Duplicate will be ignored.\n\
+                               Source: " + src_file + "\n\
+                               Dest:   " + dest_file)
                     break
 
                 else:  # name is same, but file is different
                     dest_file = root + '_' + str(append) + ext
                     append += 1
-                    if verbose:
+                    if show_warnings:
                         print('Same name already exists...renaming to: ' + dest_file)
 
             else:
@@ -481,13 +519,24 @@ def main():
                     help='specify a restricted set of tags to search for date information\n\
     e.g., EXIF:CreateDate')
 
+    # MHB
+    parser.add_argument('--rename-with-camera-model', action='store_true',
+                    help='append the camera model or brand name to the renamed file.\n\''
+    )
+    parser.add_argument('-w', '--show-warnings', action='store_true', help='display warnings.')
+
+    #sasi07eee
+    parser.add_argument('-x', '--src-file-regex', type=str, default=None, help='source file regular expression')
+    parser.add_argument('-e', '--src-file-extension', type=str, default=[], nargs='+',  help='source file format (comma seperated)')
+
     # parse command line arguments
     args = parser.parse_args()
 
     sortPhotos(args.src_dir, args.dest_dir, args.sort, args.rename, args.recursive,
         args.copy, args.test, not args.keep_duplicates, args.day_begins,
         args.ignore_groups, args.ignore_tags, args.use_only_groups,
-        args.use_only_tags, not args.silent)
+        args.use_only_tags, args.rename_with_camera_model, args.show_warnings,
+        args.src_file_regex, args.src_file_extension, not args.silent)
 
 if __name__ == '__main__':
     main()

@@ -14,7 +14,7 @@ use Image::ExifTool qw(:DataAccess :Utils);
 use Image::ExifTool::Exif;
 use Image::ExifTool::GPS;
 
-$VERSION = '1.42';
+$VERSION = '1.46';
 
 sub ProcessMIE($$);
 sub ProcessMIEGroup($$$);
@@ -298,7 +298,7 @@ my %offOn = ( 0 => 'Off', 1 => 'On' );
     Contributors=> { Groups => { 2 => 'Author' }, List => 1 },
     Copyright   => { Groups => { 2 => 'Author' } },
     CreateDate  => { Groups => { 2 => 'Time' }, %dateInfo },
-    EMail       => { Groups => { 2 => 'Author' } },
+    EMail       => { Name => 'Email', Groups => { 2 => 'Author' } },
     Keywords    => { List => 1 },
     ModifyDate  => { Groups => { 2 => 'Time' }, %dateInfo },
     OriginalDate=> {
@@ -466,6 +466,7 @@ my %offOn = ( 0 => 'Off', 1 => 'On' );
     },
     data => {
         Name => 'FullSizeImage',
+        Groups => { 2 => 'Preview' },
         %binaryConv,
         RawConv => '$self->ValidateImage(\$val,$tag)',
     },
@@ -488,6 +489,7 @@ my %offOn = ( 0 => 'Off', 1 => 'On' );
     },
     data => {
         Name => 'PreviewImage',
+        Groups => { 2 => 'Preview' },
         %binaryConv,
         RawConv => '$self->ValidateImage(\$val,$tag)',
     },
@@ -510,6 +512,7 @@ my %offOn = ( 0 => 'Off', 1 => 'On' );
     },
     data => {
         Name => 'ThumbnailImage',
+        Groups => { 2 => 'Preview' },
         %binaryConv,
         RawConv => '$self->ValidateImage(\$val,$tag)',
     },
@@ -567,7 +570,7 @@ my %offOn = ( 0 => 'Off', 1 => 'On' );
     ExposureTime    => {
         Writable => 'rational64u',
         PrintConv => 'Image::ExifTool::Exif::PrintExposureTime($val)',
-        PrintConvInv => 'Image::ExifTool::Exif::ConvertFraction($val)',
+        PrintConvInv => '$val',
     },
     Flash => {
         SubDirectory => {
@@ -1239,7 +1242,7 @@ sub WriteMIEGroup($$$)
                         and not $$nvHash{EditOnly}));
                 }
                 # get the new value to write (undef to delete)
-                push @newVals, $et->GetNewValues($nvHash);
+                push @newVals, $et->GetNewValue($nvHash);
                 next unless @newVals;
                 $writable = $$newInfo{Writable} || $$tagTablePtr{WRITABLE};
                 if ($writable eq 'string') {
@@ -2538,7 +2541,7 @@ tag name.  For example:
 
 =head1 AUTHOR
 
-Copyright 2003-2014, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2017, Phil Harvey (phil at owl.phy.queensu.ca)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.  The MIE format itself is also

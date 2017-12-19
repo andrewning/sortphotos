@@ -18,12 +18,12 @@ my %movMap = (
 );
 my %mp4Map = (
     # MP4 ('ftyp' compatible brand 'mp41', 'mp42' or 'f4v ') -> top level 'uuid'
-   'UUID-XMP' => 'MOV',
-    XMP       => 'UUID-XMP',
+    XMP => 'MOV',
 );
 my %dirMap = (
     MOV => \%movMap,
     MP4 => \%mp4Map,
+    HEIC => { },    # can't currently write XMP to HEIC files
 );
 
 #------------------------------------------------------------------------------
@@ -34,14 +34,14 @@ sub IsCurPath($$)
 {
     local $_;
     my ($et, $dir) = @_;
-    $dir = $$et{DirMap}{$dir} and $dir eq $_ or last foreach reverse @{$$et{PATH}}; 
-    return($dir and $dir eq 'MOV');    
+    $dir = $$et{DirMap}{$dir} and $dir eq $_ or last foreach reverse @{$$et{PATH}};
+    return($dir and $dir eq 'MOV');
 }
 
 #------------------------------------------------------------------------------
 # Write a series of QuickTime atoms from file or in memory
 # Inputs: 0) ExifTool ref, 1) dirInfo ref, 2) tag table ref
-# Returns: A) if dirInfo contains DataPt: new director data
+# Returns: A) if dirInfo contains DataPt: new directory data
 #          B) otherwise: true on success, 0 if a write error occurred
 #             (true but sets an Error on a file format error)
 sub WriteQuickTime($$$)
@@ -136,7 +136,7 @@ sub WriteQuickTime($$$)
                 undef $tagInfo;
             }
         }
-        if ($tagInfo) {
+        if ($tagInfo and (not defined $$tagInfo{Writable} or $$tagInfo{Writable})) {
             # read the atom data
             $raf->Read($buff, $size) == $size or $et->Error("Error reading $tag data"), last;
             my $subdir = $$tagInfo{SubDirectory};
@@ -146,9 +146,13 @@ sub WriteQuickTime($$$)
                 my $start = $$subdir{Start} || 0;
                 my $base = ($$dirInfo{Base} || 0) + $raf->Tell() - $size;
                 my $dPos = 0;
+                my $hdrLen = $start;
                 if ($$subdir{Base}) {
-                    $dPos -= eval $$subdir{Base};
+                    my $localBase = eval $$subdir{Base};
+                    $dPos -= $localBase;
                     $base -= $dPos;
+                    # get length of header before base offset
+                    $hdrLen -= $localBase if $localBase <= $hdrLen;
                 }
                 my %subdirInfo = (
                     Parent   => $dirName,
@@ -163,6 +167,12 @@ sub WriteQuickTime($$$)
                     Multi    => $$subdir{Multi},    # necessary?
                     OutFile  => $outfile,
                 );
+                # pass the header pointer if necessary (for EXIF IFD's
+                # where the Base offset is at the end of the header)
+                if ($hdrLen and $hdrLen < $size) {
+                    my $header = substr($buff,0,$hdrLen);
+                    $subdirInfo{HeaderPtr} = \$header;
+                }
                 SetByteOrder('II') if $$subdir{ByteOrder} and $$subdir{ByteOrder} =~ /^Little/;
                 my $oldWriteGroup = $$et{CUR_WRITE_GROUP};
                 if ($subName eq 'Track') {
@@ -172,17 +182,19 @@ sub WriteQuickTime($$$)
                 my $subTable = GetTagTable($$subdir{TagTable});
                 # demote non-QuickTime errors to warnings
                 $$et{DemoteErrors} = 1 unless $$subTable{GROUPS}{0} eq 'QuickTime';
+                my $oldChanged = $$et{CHANGED};
                 $newData = $et->WriteDirectory(\%subdirInfo, $subTable);
                 if ($$et{DemoteErrors}) {
                     # just copy existing subdirectory a non-quicktime error occurred
-                    undef $newData if $$et{DemoteErrors} > 1;
+                    $$et{CHANGED} = $oldChanged if $$et{DemoteErrors} > 1;
                     delete $$et{DemoteErrors};
                 }
+                undef $newData if $$et{CHANGED} == $oldChanged; # don't change unless necessary
                 $$et{CUR_WRITE_GROUP} = $oldWriteGroup;
                 SetByteOrder('MM');
                 # add back header if necessary
-                if ($$subdir{Start} and defined $newData and length $newData) {
-                    $newData = substr($buff,0,$$subdir{Start}) . $newData;
+                if ($start and defined $newData and length $newData) {
+                    $newData = substr($buff,0,$start) . $newData;
                 }
                 # the directory exists, so we don't need to add it
                 delete $$addDirs{$subName} if IsCurPath($et, $subName);
@@ -191,7 +203,7 @@ sub WriteQuickTime($$$)
                 # (this is such a can of worms, so don't implement this for now)
             }
             if (defined $newData) {
-                my $len = length $newData or next;
+                my $len = length $newData;
                 $len > 0x7ffffff7 and $et->Error("$tag to large to write"), last;
                 if ($len == $size or $dataPt or $foundMDAT) {
                     # write the updated directory now
@@ -201,12 +213,15 @@ sub WriteQuickTime($$$)
                     # bad things happen if 'mdat' atom is moved (eg. Adobe Bridge crashes --
                     # there must be some absolute offsets somewhere that point into mdat),
                     # so hold this atom and write it out later
-                    push @hold, Set32u($len+8), $tag, $newData;
-                    $et->VPrint(0,"  Moving '$tag' atom to after 'mdat'");
+                    if ($len) {
+                        push @hold, Set32u($len+8), $tag, $newData;
+                        $et->VPrint(0,"  Moving '$tag' atom to after 'mdat'");
+                    } else {
+                        $et->VPrint(0,"  Freeing '$tag' atom (and zeroing data)");
+                    }
                     # write a 'free' atom here to keep 'mdat' at the same offset
                     substr($hdr, 4, 4) = 'free';
-                    # could zero out old data if we wanted...
-                    # $buff = "\0" x length($buff);
+                    $buff = "\0" x length($buff);   # zero out old data
                 }
             }
             # write out the existing atom (or 'free' padding)
@@ -234,7 +249,6 @@ sub WriteQuickTime($$$)
             my $subName = $$subdir{DirName} || $$tagInfo{Name};
             # QuickTime hierarchy is complex, so check full directory path before adding
             next unless IsCurPath($et, $subName);
-            delete $$addDirs{$subName}; # add only once
             my $buff = '';  # write from scratch
             my %subdirInfo = (
                 Parent   => $dirName,
@@ -256,6 +270,7 @@ sub WriteQuickTime($$$)
                 my $newHdr = Set32u(8+length($newData)+length($uuid)) . $tag . $uuid;
                 Write($outfile, $newHdr, $newData) or $rtnVal = 0;
             }
+            delete $$addDirs{$subName}; # add only once (must delete _after_ call to WriteDirectory())
         }
     }
     # write out any atoms that we are holding until the end
@@ -296,7 +311,12 @@ sub WriteMOV($$)
         $buff !~ /^(....)+(qt  )/s)
     {
         # file is MP4 format if 'ftyp' exists without 'qt  ' as a compatible brand
-        $ftype = 'MP4';
+        if ($buff =~ /^(heic|mif1|msf1|heix|hevc|hevx)/) {
+            $ftype = 'HEIC';
+            $et->Error("Can't currently write HEIC/HEIF files");
+        } else {
+            $ftype = 'MP4';
+        }
     } else {
         $ftype = 'MOV';
     }
@@ -331,7 +351,7 @@ QuickTime-based file formats like MOV and MP4.
 
 =head1 AUTHOR
 
-Copyright 2003-2014, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2017, Phil Harvey (phil at owl.phy.queensu.ca)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.
