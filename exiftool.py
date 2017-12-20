@@ -223,7 +223,9 @@ class ExifTool(object):
         output = b""
         fd = self._process.stdout.fileno()
         while not output[-32:].strip().endswith(sentinel):
-            output += os.read(fd, block_size)
+            increment = os.read(fd, block_size)
+            output += increment
+            print(increment)
         return output.strip()[:-len(sentinel)]
 
     def execute_json(self, *params):
