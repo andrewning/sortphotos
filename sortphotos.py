@@ -9,10 +9,11 @@ Version 1.3 Alpha
 
 from __future__ import print_function
 from __future__ import with_statement
-import subprocess
+
 import os
-import sys
 import shutil
+import sys
+
 try:
     import json
 except:
@@ -21,13 +22,14 @@ import filecmp
 import datetime as dt
 import re
 import locale
+sys.path.insert(0, './exiftool')
 import exiftool
 
 
 # Setting locale to the 'local' value
 locale.setlocale(locale.LC_ALL, '')
 
-exiftool_location = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'Image-ExifTool', 'exiftool')
+exiftool_location = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'exiftool-10.82', 'exiftool(-k).exe')
 
 
 # -------- convenience methods -------------
@@ -91,7 +93,6 @@ def parse_date_exif(date_string, disable_time_zone_adjust):
                 dateadd = dt.timedelta(hours=time_zone_hour, minutes=time_zone_min)
                 time_zone_adjust = True
 
-
     # form date object
     try:
         date = dt.datetime(year, month, day, hour, minute, second)
@@ -111,8 +112,8 @@ def parse_date_exif(date_string, disable_time_zone_adjust):
     return date
 
 
-
-def get_prioritized_timestamp(data, prioritized_groups, prioritized_tags, additional_groups_to_ignore, additional_tags_to_ignore, disable_time_zone_adjust=False):
+def get_prioritized_timestamp(data, prioritized_groups, prioritized_tags, additional_groups_to_ignore,
+                              additional_tags_to_ignore, disable_time_zone_adjust=False):
     # loop through user specified prioritized groups/tags
     prioritized_date = None
     prioritized_keys = []
@@ -124,17 +125,18 @@ def get_prioritized_timestamp(data, prioritized_groups, prioritized_tags, additi
     if prioritized_tags:
         for tag in prioritized_tags:
             date = None
-            
+
             # create a hash slice of data with just the specified tag
-            subdata = {key:value for key,value in data.iteritems() if tag in key}
+            subdata = {key: value for key, value in data.iteritems() if tag in key}
             if subdata:
                 # re-use get_oldest_timestamp to get the data needed
                 subdata['SourceFile'] = src_file
-                src_file, date, keys = get_oldest_timestamp(subdata, additional_groups_to_ignore, additional_tags_to_ignore, disable_time_zone_adjust)
+                src_file, date, keys = get_oldest_timestamp(subdata, additional_groups_to_ignore,
+                                                            additional_tags_to_ignore, disable_time_zone_adjust)
 
             if not date:
                 continue
-        
+
             prioritized_date = date
             prioritized_keys = keys
 
@@ -145,29 +147,30 @@ def get_prioritized_timestamp(data, prioritized_groups, prioritized_tags, additi
     if prioritized_groups:
         for group in prioritized_groups:
             date = None
-            
+
             # create a hash slice of data to find the oldest date within the specified group
-            subdata = {key:value for key,value in data.iteritems() if key.startswith(group)}
+            subdata = {key: value for key, value in data.iteritems() if key.startswith(group)}
             if subdata:
                 # find the oldest date for that group
                 subdata['SourceFile'] = src_file
-                src_file, date, keys = get_oldest_timestamp(subdata, additional_groups_to_ignore, additional_tags_to_ignore, disable_time_zone_adjust)
+                src_file, date, keys = get_oldest_timestamp(subdata, additional_groups_to_ignore,
+                                                            additional_tags_to_ignore, disable_time_zone_adjust)
 
             if not date:
                 continue
-        
+
             prioritized_date = date
             prioritized_keys = keys
 
             # return as soon as a match is found
             return src_file, prioritized_date, prioritized_keys
-        
+
     # reaching here means no matches were found
     return src_file, prioritized_date, prioritized_keys
 
 
-
-def get_oldest_timestamp(data, additional_groups_to_ignore, additional_tags_to_ignore, disable_time_zone_adjust=False, print_all_tags=False):
+def get_oldest_timestamp(data, additional_groups_to_ignore, additional_tags_to_ignore, disable_time_zone_adjust=False,
+                         print_all_tags=False):
     """data as dictionary from json.  Should contain only time stamps except SourceFile"""
 
     # save only the oldest date
@@ -182,7 +185,6 @@ def get_oldest_timestamp(data, additional_groups_to_ignore, additional_tags_to_i
     # setup tags to ignore
     ignore_groups = ['ICC_Profile'] + additional_groups_to_ignore
     ignore_tags = ['SourceFile', 'XMP:HistoryWhen'] + additional_tags_to_ignore
-
 
     if print_all_tags:
         print('All relevant tags:')
@@ -203,7 +205,8 @@ def get_oldest_timestamp(data, additional_groups_to_ignore, additional_tags_to_i
                 date = date[0]
 
             try:
-                exifdate = parse_date_exif(date, disable_time_zone_adjust)  # check for poor-formed exif data, but allow continuation
+                exifdate = parse_date_exif(date,
+                                           disable_time_zone_adjust)  # check for poor-formed exif data, but allow continuation
             except Exception as e:
                 exifdate = None
 
@@ -224,19 +227,14 @@ def get_oldest_timestamp(data, additional_groups_to_ignore, additional_tags_to_i
     return src_file, oldest_date, oldest_keys
 
 
-
 def check_for_early_morning_photos(date, day_begins):
     """check for early hour photos to be grouped with previous day"""
 
     if date.hour < day_begins:
         print('moving this photo to the previous day for classification purposes (day_begins=' + str(day_begins) + ')')
-        date = date - dt.timedelta(hours=date.hour+1)  # push it to the day before for classificiation purposes
+        date = date - dt.timedelta(hours=date.hour + 1)  # push it to the day before for classificiation purposes
 
     return date
-
-
-# ---------------------------------------
-
 
 
 def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
@@ -246,6 +244,7 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
         show_warnings=True, src_file_regex=None, src_file_extension=[],
         prioritize_groups=None, prioritize_tags=None,
         verbose=True, keep_filename=False):
+       
     """
     This function is a convenience wrapper around ExifTool based on common usage scenarios for sortphotos.py
 
@@ -349,9 +348,10 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
             args += ['$filename=~/' + src_file_regex + '/' ]
 
     args += [src_dir]
+    args = [arg.encode('utf-8') for arg in args]
 
     # get all metadata
-    with exiftool.ExifTool() as et:
+    with exiftool.ExifTool(exiftool_location) as et:
         print('Preprocessing with ExifTool.  May take a while for a large number of files.')
         sys.stdout.flush()
         metadata = et.get_metadata_batch(args)
@@ -373,25 +373,28 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
         # extract timestamp date for photo
         date = None
         if prioritize_groups or prioritize_tags:
-            src_file, date, keys = get_prioritized_timestamp(data, prioritize_groups, prioritize_tags, additional_groups_to_ignore, additional_tags_to_ignore, disable_time_zone_adjust)
+            src_file, date, keys = get_prioritized_timestamp(data, prioritize_groups, prioritize_tags,
+                                                             additional_groups_to_ignore, additional_tags_to_ignore,
+                                                             disable_time_zone_adjust)
         if not date:
-            src_file, date, keys = get_oldest_timestamp(data, additional_groups_to_ignore, additional_tags_to_ignore, disable_time_zone_adjust)
+            src_file, date, keys = get_oldest_timestamp(data, additional_groups_to_ignore, additional_tags_to_ignore,
+                                                        disable_time_zone_adjust)
 
         # fixes further errors when using unicode characters like "\u20AC"
         src_file.encode('utf-8')
 
         if verbose:
-        # write out which photo we are at
+            # write out which photo we are at
             ending = ']'
             if test:
                 ending = '] (TEST - no files are being moved/copied)'
-            print('[' + str(idx+1) + '/' + str(num_files) + ending)
+            print('[' + str(idx + 1) + '/' + str(num_files) + ending)
             print('Source: ' + src_file)
         else:
             # progress bar
-            numdots = int(20.0*(idx+1)/num_files)
+            numdots = int(20.0 * (idx + 1) / num_files)
             sys.stdout.write('\r')
-            sys.stdout.write('[%-20s] %d of %d ' % ('='*numdots, idx+1, num_files))
+            sys.stdout.write('[%-20s] %d of %d ' % ('=' * numdots, idx + 1, num_files))
             sys.stdout.flush()
 
         # check if no valid date found
@@ -425,14 +428,13 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
         # early morning photos can be grouped with previous day (depending on user setting)
         date = check_for_early_morning_photos(date, day_begins)
 
-
         # create folder structure
         dir_structure = date.strftime(sort_format)
         dirs = dir_structure.split('/')
         dest_file = dest_dir
         for thedir in dirs:
             dest_file = os.path.join(dest_file, thedir)
-            if not test and not os.path.exists(dest_file):
+            if not os.path.exists(dest_file) and not test:
                 os.makedirs(dest_file)
 
         # rename file if necessary
@@ -446,7 +448,7 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
 
             if rename_with_camera_model and camera_model:
                 _, ext = os.path.splitext(filename)
-                filename = date.strftime(rename_format) + '_'\
+                filename = date.strftime(rename_format) + '_' \
                            + ''.join([c for c in camera_model if c.isalnum()]) + ext.lower()
             else:
                 _, ext = os.path.splitext(filename)
@@ -464,14 +466,14 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
                 name += '(move): '
             print(name + dest_file)
 
-
         # check for collisions
         append = 1
         fileIsIdentical = False
 
         while True:
 
-            if (not test and os.path.isfile(dest_file)) or (test and dest_file in test_file_dict.keys()):  # check for existing name
+            if (not test and os.path.isfile(dest_file)) or (
+                    test and dest_file in test_file_dict.keys()):  # check for existing name
                 if test:
                     dest_compare = test_file_dict[dest_file]
                 else:
@@ -497,11 +499,10 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
             else:
                 break
 
-
         # finally move or copy the file
         if test:
             test_file_dict[dest_file] = src_file
-
+        
         if fileIsIdentical:
             files_skipped.append(src_file)
             continue  # ignore identical files
@@ -518,7 +519,6 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
         if verbose:
             print()
             # sys.stdout.flush()
-
 
     if not verbose:
         print()

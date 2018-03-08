@@ -144,27 +144,10 @@ If you are taking photos for an event that goes past midnight, you might want th
 ``--day-begins 4``  
 The argument to the flag should be an integer between 0-23 corresponding to the hours of the day starting at midnight.
 
-# Automation
-
-*Note while sortphotos.py was written in a cross-platform way, the following instructions for automation are specific to OS X.  For other operating systems there are of course ways to schedule tasks or submit cron jobs, but I will leave that as an exercise for the reader.*
-
-An an optional setup, I like to automate the process of moving my photos.  This can be accomplished simply on OS X using Launch Agents.  First edit the supplied plist file ``com.andrewning.sortphotos.plist`` in any text editor.  On line 10 enter the **full path** of where ``sortphotos.py`` is stored.  On line 12 enter the full path of your source directory (I use Dropbox to transfer photos from my phone to my computer).  One line 13 enter the full path of the destination top level directory (e.g., ``/Users/Me/Pictures``).  Finally, on line 16 you can change how often the script will run (in seconds).  I have it set to run once a day, but you can set it to whatever you like.
-
-Now move the plist file to ``~/Library/LaunchAgents/``.  Switch to that directory and load it
-
-    $ launchctl load com.andrewning.sortphotos.plist
-
-That's it.  It will now run once a day automatically (or to whatever internal you picked).  Of course if there are no pictures in the source folder the script does nothing and will check again at the next interval.  There are ways to use folder listeners instead of a time-based execution, but this script is so lightweight the added complexity is unwarranted.  If you want to make sure your service is scheduled, execute
-
-    $ launchctl list | grep sortphotos
-
-and you should see the Agent listed (I grep the results because you will typically have many services running).  If you want to stop the script from running anymore just unload it.
-
-    $ launchctl unload com.andrewning.sortphotos.plist
-
 # Acknowledgments
 
 SortPhotos grabs EXIF data from the photos/videos using the very excellent [ExifTool](http://www.sno.phy.queensu.ca/~phil/exiftool/) written by Phil Harvey.
+SortPhotos uses PyExifTool by Sven Marnach (https://github.com/smarnach/pyexiftool/)
 
 # ChangeLog (of major changes)
 
@@ -192,7 +175,11 @@ SortPhotos grabs EXIF data from the photos/videos using the very excellent [Exif
 
 ### 11/28/2014
 
+<<<<<<< HEAD
 Another complete rewrite.  The script retains the powerful metadata reading capabilities of ExifTool but now uses its own file processing as it did before for more flexibility.  Specifying what tags to look for required some guesswork, so this version automates this by looking through tags for the oldest date.  Restrictions can be set on what groups/tags to search across.  Some flags have changed.  Sees rest of README.
+=======
+Another complete rewrite.  The script retains the powerful metadata reading capabilities of ExifTool but now uses its own file processing as it did before for more flexibility.  Specifying what tags to look for required some guesswork, so this version automates this by looking through tags for the oldest date.  Restrictions can be set on what groups/tags to search across.  Some flags have changed.  See rest of README.
+>>>>>>> 592cf1f (* use original PyExifTool without any edits)
 
 Main Changes
 
