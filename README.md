@@ -1,15 +1,10 @@
+# SortPhotos
 
 # Description
 
 SortPhotos is a Python script that organizes photos into folders by date and/or time (year, year/month, year/month/day, or other custom formats).  If you're like me then your growing collection of files are contained in a bunch of folders, some with a date like "Sep 2010", and others with names like "Camping Trip".  SortPhotos takes this collection of folders and files and reorganizes them into a hierarchy of folders by almost any custom date/time format (by default it is by year then month).  It will work with any file, but works best with image and video files that contain EXIF or other metadata formats because that stays with the file even if the files are modified.  The script is also useful for transferring files from your camera into your collection of nicely organized photos.
 
 ![Example](example.png)
-
-# Install
-
-    python setup.py install
- 
- Note that in addition to python you must have perl installed as the underlying exif library depends on perl.
 
 # Usage
 
@@ -20,7 +15,6 @@ SortPhotos is intended to be used primarily from the command line.  To see all t
 The simplest usage is to specify a source directory (the directory where your mess of files is currently located) and a destination directory (where you want the files and directories to go).  By default the source directory is not searched recursively but that can be changed with a flag as discussed below.
 
     python sortphotos.py /Users/Me/MessyDirectory /Users/Me/Pictures
-    
 
 ## copy rather than move
 There are several options that can be invoked.  For example the default behavior is to move files from your source directory to your destination directory.  Note that it is  **much** faster to move the files rather than copy them (especially if videos are involved).  However, if you want to copy this is done with the ``-c`` or ``--copy`` flag.
@@ -175,11 +169,7 @@ SortPhotos uses PyExifTool by Sven Marnach (https://github.com/smarnach/pyexifto
 
 ### 11/28/2014
 
-<<<<<<< HEAD
-Another complete rewrite.  The script retains the powerful metadata reading capabilities of ExifTool but now uses its own file processing as it did before for more flexibility.  Specifying what tags to look for required some guesswork, so this version automates this by looking through tags for the oldest date.  Restrictions can be set on what groups/tags to search across.  Some flags have changed.  Sees rest of README.
-=======
 Another complete rewrite.  The script retains the powerful metadata reading capabilities of ExifTool but now uses its own file processing as it did before for more flexibility.  Specifying what tags to look for required some guesswork, so this version automates this by looking through tags for the oldest date.  Restrictions can be set on what groups/tags to search across.  Some flags have changed.  See rest of README.
->>>>>>> 592cf1f (* use original PyExifTool without any edits)
 
 Main Changes
 
