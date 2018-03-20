@@ -408,10 +408,10 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
                 else:  # name is same, but file is different
                     if keep_filename:
                         orig_filename = os.path.splitext(os.path.basename(src_file))[0]
-                        dest_file = root + '_' + orig_filename + ext
+                        dest_file = root + '_' + orig_filename + '_' + str(append) + ext
                     else:
                         dest_file = root + '_' + str(append) + ext
-                        append += 1
+                    append += 1
                     if verbose:
                         print('Same name already exists...renaming to: ' + dest_file)
 
@@ -467,7 +467,7 @@ def main():
     https://docs.python.org/2/library/datetime.html#strftime-and-strptime-behavior. \n\
     default is None which just uses original filename")
     parser.add_argument('--keep-filename', action='store_true',
-                        help='In case of duplicated output filenames the original file name will be appended instead of an inreasing number',
+                        help='In case of duplicated output filenames an increasing number and the original file name will be appended',
                         default=False)
     parser.add_argument('--keep-duplicates', action='store_true',
                         help='If file is a duplicate keep it anyway (after renaming).')
