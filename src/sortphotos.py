@@ -254,8 +254,6 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
         True to remove files that are exactly the same in name and a file hash
     keep_filename : bool
         True to append original filename in case of duplicates instead of increasing number
-    disable_time_zone_adjust : bool
-        True to disable time zone adjustments
     day_begins : int
         what hour of the day you want the day to begin (only for classification purposes).  Defaults at 0 as midnight.
         Can be used to group early morning photos with the previous day.  must be a number between 0-23
