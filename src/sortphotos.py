@@ -84,7 +84,7 @@ def parse_date_exif(date_string):
                 time_zone_min = int(time_zone[1])
 
                 # check if + or -
-                if time_entries[1] == '-':
+                if time_entries[1] == '+':
                     time_zone_hour *= -1
 
                 dateadd = timedelta(hours=time_zone_hour, minutes=time_zone_min)
