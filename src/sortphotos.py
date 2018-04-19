@@ -8,20 +8,21 @@ Copyright (c) S. Andrew Ning. All rights reserved.
 
 """
 
-from __future__ import print_function
-from __future__ import with_statement
-import subprocess
+from __future__ import print_function, with_statement
+
+import filecmp
+import locale
 import os
-import sys
+import re
 import shutil
+import subprocess
+import sys
+from datetime import datetime, timedelta
+
 try:
     import json
 except:
     import simplejson as json
-import filecmp
-from datetime import datetime, timedelta
-import re
-import locale
 
 # Setting locale to the 'local' value
 locale.setlocale(locale.LC_ALL, '')
@@ -223,6 +224,16 @@ class ExifTool(object):
 # ---------------------------------------
 
 
+def findTags(format_string):
+    """
+    Find tags between {{ and }} and return them with the brackets in a list.
+    """
+    if not format_string:
+        return []
+
+    tag_re = re.compile('{{.*?}}')
+    return tag_re.findall(format_string)
+
 
 def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
         copy_files=False, test=False, remove_duplicates=True, day_begins=0,
@@ -240,9 +251,11 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
     sort_format : str
         date format code for how you want your photos sorted
         (https://docs.python.org/2/library/datetime.html#strftime-and-strptime-behavior)
+        use {{exif.tag}} for given exif tag
     rename_format : str
         date format code for how you want your files renamed
         (https://docs.python.org/2/library/datetime.html#strftime-and-strptime-behavior)
+        use {{exif.tag}} for given exif tag
         None to not rename file
     recursive : bool
         True if you want src_dir to be searched recursively for files (False to search only in top-level of src_dir)
@@ -296,6 +309,11 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
     if recursive:
         args += ['-r']
 
+    original_tags = findTags(sort_format) + findTags(rename_format)
+    for original_tag in original_tags:
+        tag = original_tag[2:-2].strip()
+        args.append('-'+tag)
+
     args += [src_dir]
 
 
@@ -314,6 +332,23 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
 
     # parse output extracting oldest relevant date
     for idx, data in enumerate(metadata):
+
+        this_sort_format = sort_format
+        this_rename_format = rename_format
+        for original_tag in original_tags:
+            tag = original_tag[2:-2].strip()
+
+            key = None
+            for k in data.keys():
+                if k.lower() == tag.lower():
+                    key = k
+
+            value = data[key] if key else ''
+
+            if this_sort_format:
+                this_sort_format = this_sort_format.replace(original_tag, value)
+            if this_rename_format:
+                this_rename_format = this_rename_format.replace(original_tag, value)
 
         # extract timestamp date for photo
         src_file, date, keys = get_oldest_timestamp(data, additional_groups_to_ignore, additional_tags_to_ignore)
@@ -358,7 +393,7 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
 
 
         # create folder structure
-        dir_structure = date.strftime(sort_format)
+        dir_structure = date.strftime(this_sort_format)
         dirs = dir_structure.split('/')
         dest_file = dest_dir
         for thedir in dirs:
@@ -369,9 +404,9 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
         # rename file if necessary
         filename = os.path.basename(src_file)
 
-        if rename_format is not None:
+        if this_rename_format is not None:
             _, ext = os.path.splitext(filename)
-            filename = date.strftime(rename_format) + ext.lower()
+            filename = date.strftime(this_rename_format) + ext.lower()
 
         # setup destination file
         dest_file = os.path.join(dest_file, filename.encode('utf-8'))
