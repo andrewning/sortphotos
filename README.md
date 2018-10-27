@@ -2,7 +2,7 @@
 
 # Description
 
-SortPhotos is a Python script that organizes photos into folders by date and/or time (year, year/month, year/month/day, or other custom formats).  If you're like me then your growing collection of files are contained in a bunch of folders, some with a date like "Sep 2010", and others which names like "Camping Trip".  SortPhotos takes this collection of folders and files and reorganizes them into a hierarchy of folders by almost any custom date/time format (by default it is by year then month).  It will work with any file, but works best with image and video files that contain EXIF or other metadata formats because that stays with the file even if the files are modified.  The script is also useful for transferring files from your camera into your collection of nicely organized photos.
+SortPhotos is a Python script that organizes photos into folders by date and/or time (year, year/month, year/month/day, or other custom formats).  If you're like me then your growing collection of files are contained in a bunch of folders, some with a date like "Sep 2010", and others with names like "Camping Trip".  SortPhotos takes this collection of folders and files and reorganizes them into a hierarchy of folders by almost any custom date/time format (by default it is by year then month).  It will work with any file, but works best with image and video files that contain EXIF or other metadata formats because that stays with the file even if the files are modified.  The script is also useful for transferring files from your camera into your collection of nicely organized photos.
 
 ![Example](example.png)
 
@@ -12,7 +12,7 @@ SortPhotos is intended to be used primarily from the command line.  To see all t
 
     python sortphotos.py -h
 
-The simplest usage is to specify a source directory (the directory where your mess of files is currently located) and a destination directory (where you want the files and directories to go).  By default the source directory it is not searched recursively but that can changed with a flag as discussed below.
+The simplest usage is to specify a source directory (the directory where your mess of files is currently located) and a destination directory (where you want the files and directories to go).  By default the source directory is not searched recursively but that can be changed with a flag as discussed below.
 
     python sortphotos.py /Users/Me/MessyDirectory /Users/Me/Pictures
 
@@ -50,7 +50,7 @@ The possibilities go on and on.
 
 ## automatic renaming of files
 
-You can setup the script to automatically rename your files according to same convention.  This uses the same conventions for directory sorting and are described [here](https://docs.python.org/2/library/datetime.html#strftime-and-strptime-behavior).  For example you could rename all your files to contain the year, month, day, hour, and minute by using
+You can setup the script to automatically rename your files according to the same convention.  This uses the same conventions for directory sorting and is described [here](https://docs.python.org/2/library/datetime.html#strftime-and-strptime-behavior).  For example you could rename all of your files to contain the year, month, day, hour, and minute by using
 
     python sortphotos.py --rename %Y_%m%d_%H%M
 
@@ -58,7 +58,7 @@ This would create files like: 2003_1031_1544.jpg.  By default the script keeps t
 
 ## restrict which groups/tags to search through
 
-sortphotos.py uses Exiftool.py to search through all metadata that has date information and uses the metadata with the oldest date (which may be more than one metadata tag).  For example, if "EXIF:CreateDate" is the tag with the oldest date it is automatically used.  There are several filters you can use to restrict which grouops/tags to search through for the oldest date.  All the groups/tags are described [here](http://www.sno.phy.queensu.ca/~phil/exiftool/TagNames/) (with a few extra ones [here](http://www.sno.phy.queensu.ca/~phil/exiftool/TagNames/Extra.html)). One common usage is to ignore all file metadata which is not persistent (i.e., FileModifyDate, FileCreateDate, etc.).  This is accomplished with:
+sortphotos.py uses Exiftool.py to search through all metadata that has date information and uses the metadata with the oldest date (which may be more than one metadata tag).  For example, if "EXIF:CreateDate" is the tag with the oldest date it is automatically used.  There are several filters you can use to restrict which groups/tags to search through for the oldest date.  All the groups/tags are described [here](http://www.sno.phy.queensu.ca/~phil/exiftool/TagNames/) (with a few extra ones [here](http://www.sno.phy.queensu.ca/~phil/exiftool/TagNames/Extra.html)). One common usage is to ignore all file metadata which is not persistent (i.e., FileModifyDate, FileCreateDate, etc.).  This is accomplished with:
 
     python sortphotos.py source destination --ignore-groups File
 
@@ -122,7 +122,7 @@ The argument to the flag should be an integer between 0-23 corresponding to the 
 
 # Automation
 
-*Note while sortphotos.py was written in a cross-platform way, the following instructions for automation are specific to OS X.  For other operating systems there are of course ways to schedule tasks or submit cron jobs, but I will leave that as an exercise to the reader.*
+*Note while sortphotos.py was written in a cross-platform way, the following instructions for automation are specific to OS X.  For other operating systems there are of course ways to schedule tasks or submit cron jobs, but I will leave that as an exercise for the reader.*
 
 An an optional setup, I like to automate the process of moving my photos.  This can be accomplished simply on OS X using Launch Agents.  First edit the supplied plist file ``com.andrewning.sortphotos.plist`` in any text editor.  On line 10 enter the **full path** of where ``sortphotos.py`` is stored.  On line 12 enter the full path of your source directory (I use Dropbox to transfer photos from my phone to my computer).  One line 13 enter the full path of the destination top level directory (e.g., ``/Users/Me/Pictures``).  Finally, on line 16 you can change how often the script will run (in seconds).  I have it set to run once a day, but you can set it to whatever you like.
 
@@ -158,7 +158,7 @@ SortPhotos grabs EXIF data from the photos/videos using the very excellent [Exif
 
 ### 11/28/2014
 
-Another complete rewrite.  The script retains the powerful metadata reading capabilities of ExifTool but now uses its own file processing as it did before for more flexibility.  Specifying what tags to look for required some guesswork, so this version automates this by looking through tags for the oldest date.  Restrictions can be set on what groups/tags to search across.  Some flags have changed.  See rest of README.
+Another complete rewrite.  The script retains the powerful metadata reading capabilities of ExifTool but now uses its own file processing as it did before for more flexibility.  Specifying what tags to look for required some guesswork, so this version automates this by looking through tags for the oldest date.  Restrictions can be set on what groups/tags to search across.  Some flags have changed.  Sees rest of README.
 
 Main Changes
 
