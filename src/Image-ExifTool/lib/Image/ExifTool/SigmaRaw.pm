@@ -16,7 +16,7 @@ use vars qw($VERSION);
 use Image::ExifTool qw(:DataAccess :Utils);
 use Image::ExifTool::Sigma;
 
-$VERSION = '1.22';
+$VERSION = '1.26';
 
 sub ProcessX3FHeader($$$);
 sub ProcessX3FDirectory($$$);
@@ -45,16 +45,19 @@ sub ProcessX3FProperties($$$);
     },
     IMAG => {
         Name => 'PreviewImage',
+        Groups => { 2 => 'Preview' },
         Binary => 1,
     },
     IMA2 => [
         {
             Name => 'PreviewImage',
             Condition => 'not $$self{IsJpgFromRaw}',
+            Groups => { 2 => 'Preview' },
             Binary => 1,
         },
         {
             Name => 'JpgFromRaw',
+            Groups => { 2 => 'Preview' },
             Binary => 1,
         },
     ]
@@ -223,9 +226,11 @@ sub ProcessX3FProperties($$$);
     LENSFRANGE  => 'LensFocalRange',
     LENSMODEL   => {
         Name => 'LensType',
-        ValueConvInv => '$val=~s/\.\d+$//; $val', # (truncate decimal part)
-        PrintConv => \%Image::ExifTool::Sigma::sigmaLensTypes,
+        ValueConv => '$val =~ /^[0-9a-f]+$/i ? hex($val) : $val',
+        ValueConvInv => '$val=~s/\.\d+$//; IsInt($val) ? sprintf("%x",$val) : $val', # (truncate decimal part)
         SeparateTable => 'Sigma LensType',
+        PrintHex => 1,
+        PrintConv => \%Image::ExifTool::Sigma::sigmaLensTypes,
     },
     PMODE => {
         Name => 'ExposureProgram',
@@ -295,12 +300,7 @@ sub ProcessX3FHeader($$$)
         my $verbose = $et->Options('Verbose');
         if ($verbose) {
             $et->VerboseDir('X3F HeaderExt', 32);
-            HexDump($dataPt, undef,
-                MaxLen => $verbose > 3 ? 1024 : 96,
-                Out    => $et->Options('TextOut'),
-                Prefix => $$et{INDENT},
-                Start  => $hdrLen,
-            ) if $verbose > 2;
+            $et->VerboseDump($dataPt, Start => $hdrLen);
         }
         $tagTablePtr = GetTagTable('Image::ExifTool::SigmaRaw::HeaderExt');
         my @tags = unpack("x${hdrLen}C32", $$dataPt);
@@ -570,7 +570,7 @@ sub ProcessX3F($$)
     # check version number
     my $ver = unpack('x4V',$buff);
     $ver = ($ver >> 16) . '.' . ($ver & 0xffff);
-    if ($ver > 4) {
+    if ($ver > 5) {
         &$warn($et, "Untested X3F version ($ver). Please submit sample for testing", 1);
     }
     # read version 2.1/2.2/2.3 extended header
@@ -643,7 +643,7 @@ Sigma and Foveon X3F images.
 
 =head1 AUTHOR
 
-Copyright 2003-2014, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

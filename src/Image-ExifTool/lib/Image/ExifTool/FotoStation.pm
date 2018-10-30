@@ -12,7 +12,7 @@ use strict;
 use vars qw($VERSION);
 use Image::ExifTool qw(:DataAccess :Utils);
 
-$VERSION = '1.02';
+$VERSION = '1.04';
 
 sub ProcessFotoStation($$);
 
@@ -38,11 +38,13 @@ sub ProcessFotoStation($$);
     },
     0x03 => {
         Name => 'ThumbnailImage',
+        Groups => { 2 => 'Preview' },
         Writable => 1,
         RawConv => '$self->ValidateImage(\$val,$tag)',
     },
     0x04 => {
         Name => 'PreviewImage',
+        Groups => { 2 => 'Preview' },
         Writable => 1,
         RawConv => '$self->ValidateImage(\$val,$tag)',
     },
@@ -169,7 +171,7 @@ sub ProcessFotoStation($$)
             next;
         }
         if ($$et{DEL_GROUP}{FotoStation}) {
-            $verbose and printf $out "  Deleting FotoStation trailer\n";
+            $verbose and print $out "  Deleting FotoStation trailer\n";
             $verbose = 0;   # no more verbose messages after this
             ++$$et{CHANGED};
             next;
@@ -193,7 +195,7 @@ sub ProcessFotoStation($$)
             } else {
                 my $nvHash = $et->GetNewValueHash($tagInfo);
                 if ($et->IsOverwriting($nvHash) > 0) {
-                    $newVal = $et->GetNewValues($nvHash);
+                    $newVal = $et->GetNewValue($nvHash);
                     $newVal = '' unless defined $newVal;
                     if ($verbose > 1) {
                         my $n = length $newVal;
@@ -241,7 +243,7 @@ write information from the FotoWare FotoStation trailer.
 
 =head1 AUTHOR
 
-Copyright 2003-2014, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

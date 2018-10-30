@@ -31,7 +31,7 @@ use strict;
 use vars qw($VERSION);
 use Image::ExifTool qw(:DataAccess :Utils);
 
-$VERSION = '1.11';
+$VERSION = '1.15';
 
 # program map table "stream_type" lookup (ref 6/1)
 my %streamType = (
@@ -270,14 +270,12 @@ sub ParsePID($$$$$)
 {
     my ($et, $pid, $type, $pidName, $dataPt) = @_;
     # can't parse until we know the type (Program Map Table may be later in the stream)
-    return -1 unless defined $type;   
+    return -1 unless defined $type;
     my $verbose = $et->Options('Verbose');
     if ($verbose > 1) {
         my $out = $et->Options('TextOut');
         printf $out "Parsing stream 0x%.4x (%s)\n", $pid, $pidName;
-        my %parms = ( Out => $out );
-        $parms{MaxLen} = 96 if $verbose < 4;
-        HexDump($dataPt, undef, %parms) if $verbose > 2;
+        $et->VerboseDump($dataPt);
     }
     my $more = 0;
     if ($type == 0x01 or $type == 0x02) {
@@ -293,7 +291,11 @@ sub ParsePID($$$$$)
         require Image::ExifTool::H264;
         $more = Image::ExifTool::H264::ParseH264Video($et, $dataPt);
         # force parsing additional H264 frames with ExtractEmbedded option
-        $more = 1 if $et->Options('ExtractEmbedded');
+        if ($$et{OPTIONS}{ExtractEmbedded}) {
+            $more = 1;
+        } elsif (not $$et{OPTIONS}{Validate}) {
+            $et->WarnOnce('The ExtractEmbedded option may find more tags in the video data',3);
+        }
     } elsif ($type == 0x81 or $type == 0x87 or $type == 0x91) {
         # AC-3 audio
         ParseAC3Audio($et, $dataPt);
@@ -327,9 +329,16 @@ sub ProcessM2TS($$)
         $pLen = 192; # 188-byte transport packet + leading 4-byte timecode (ref 4)
         $upkPrefix = 'x4N';
     }
+    my $prePos = $pLen - 188;       # byte position of packet prefix
+    my $readSize = 64 * $pLen;      # read 64 packets at once
+    $raf->Seek(0,0);                # rewind to start
+    $raf->Read($buff, $readSize) >= $pLen * 4 or return 0;  # require at least 4 packets
+    # validate the sync byte in the next 3 packets
+    for ($j=1; $j<4; ++$j) {
+        return 0 unless substr($buff, $prePos + $pLen * $j, 1) eq 'G'; # (0x47)
+    }
     $et->SetFileType($fileType);
     SetByteOrder('MM');
-    $raf->Seek(0,0);        # rewind to start
     my $tagTablePtr = GetTagTable('Image::ExifTool::M2TS::Main');
 
     # PID lookup strings (will add to this with entries from program map table)
@@ -341,11 +350,8 @@ sub ProcessM2TS($$)
     );
     my %didPID = ( 1 => 0, 2 => 0, 0x1fff => 0 );
     my %needPID = ( 0 => 1 );       # lookup for stream PID's that we still need to parse
-    my $prePos = $pLen - 188;       # byte position of packet prefix
-    my $readSize = 64 * $pLen;      # read 64 packets at once
     my $pEnd = 0;
     my $i = 0;
-    $buff = '';
 
     # parse packets from MPEG-2 Transport Stream
     for (;;) {
@@ -400,10 +406,9 @@ sub ProcessM2TS($$)
         if ($verbose > 1) {
             print  $out "Transport packet $i:\n";
             ++$i;
-            HexDump(\$buff, $pLen, Addr => $i * $pLen, Out => $out,
-                Start => $pos - $prePos) if $verbose > 2;
+            $et->VerboseDump(\$buff, Len => $pLen, Addr => $i * $pLen, Start => $pos - $prePos);
             my $str = $pidName{$pid} ? " ($pidName{$pid})" : '';
-            printf $out "  Timecode:   0x%.4x\n", Get32u(\$buff, 0) if $pLen == 192;
+            printf $out "  Timecode:   0x%.4x\n", Get32u(\$buff, $pos - $prePos) if $pLen == 192;
             printf $out "  Packet ID:  0x%.4x$str\n", $pid;
             printf $out "  Start Flag: %s\n", $payload_unit_start_indicator ? 'Yes' : 'No';
         }
@@ -461,13 +466,13 @@ sub ProcessM2TS($$)
                 delete $sectLen{$pid};
             }
             my $slen = length($buf2);   # section length
-            $pos + 8 > $slen and $et->Warn("Truncated payload"), last;
+            $pos + 8 > $slen and $et->Warn('Truncated payload'), last;
             # validate table ID
             my $table_id = Get8u(\$buf2, $pos);
             my $name = ($tableID{$table_id} || sprintf('Unknown (0x%x)',$table_id)) . ' Table';
             my $expectedID = $pid ? 0x02 : 0x00;
             unless ($table_id == $expectedID) {
-                $verbose > 1 and printf $out "  (skipping $name)\n";
+                $verbose > 1 and print $out "  (skipping $name)\n";
                 delete $needPID{$pid};
                 $didPID{$pid} = 1;
                 next;
@@ -549,7 +554,7 @@ sub ProcessM2TS($$)
                     $pidName{$elementary_pid} = $str;
                     $pidType{$elementary_pid} = $stream_type;
                     $pos += 5;
-                    $pos + $es_info_length > $slen and $et->Warn('Trunacted ES info'), $pos = $end, last;
+                    $pos + $es_info_length > $slen and $et->Warn('Truncated ES info'), $pos = $end, last;
                     # parse elementary stream descriptors
                     for ($j=0; $j<$es_info_length-2; ) {
                         my $descriptor_tag = Get8u(\$buf2, $pos + $j);
@@ -689,7 +694,7 @@ video.
 
 =head1 AUTHOR
 
-Copyright 2003-2014, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

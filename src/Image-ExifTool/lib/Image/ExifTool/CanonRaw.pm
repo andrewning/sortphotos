@@ -21,7 +21,7 @@ use Image::ExifTool qw(:DataAccess :Utils);
 use Image::ExifTool::Exif;
 use Image::ExifTool::Canon;
 
-$VERSION = '1.57';
+$VERSION = '1.58';
 
 sub WriteCRW($$);
 sub ProcessCanonRaw($$$);
@@ -346,12 +346,14 @@ sub BuildMakerNotes($$$$$$);
     },
     0x2007 => {
         Name => 'JpgFromRaw',
+        Groups => { 2 => 'Preview' },
         Writable => 'resize',  # 'resize' allows this value to change size
         Permanent => 0,
         RawConv => '$self->ValidateImage(\$val,$tag)',
     },
     0x2008 => {
         Name => 'ThumbnailImage',
+        Groups => { 2 => 'Preview' },
         Writable => 'resize',  # 'resize' allows this value to change size
         WriteCheck => '$self->CheckImage(\$val)',
         Permanent => 0,
@@ -875,7 +877,7 @@ tags.)
 
 =head1 AUTHOR
 
-Copyright 2003-2014, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

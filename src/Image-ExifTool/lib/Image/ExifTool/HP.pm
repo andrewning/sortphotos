@@ -12,7 +12,7 @@ use strict;
 use vars qw($VERSION);
 use Image::ExifTool qw(:DataAccess :Utils);
 
-$VERSION = '1.03';
+$VERSION = '1.04';
 
 sub ProcessHP($$$);
 sub ProcessTDHD($$$);
@@ -43,6 +43,7 @@ sub ProcessTDHD($$$);
     NOTES => 'These tags are used by the PhotoSmart E427.',
    'PreviewImage' => {
         Name => 'PreviewImage',
+        Groups => { 2 => 'Preview' },
         RawConv => '$self->ValidateImage(\$val,$tag)',
     },
    'Serial Number' => 'SerialNumber',
@@ -249,7 +250,7 @@ Hewlett-Packard maker notes.
 
 =head1 AUTHOR
 
-Copyright 2003-2014, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

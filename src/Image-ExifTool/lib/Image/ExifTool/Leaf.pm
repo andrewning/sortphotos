@@ -13,7 +13,7 @@ use vars qw($VERSION);
 use Image::ExifTool qw(:DataAccess :Utils);
 use Image::ExifTool::Exif;
 
-$VERSION = '1.05';
+$VERSION = '1.07';
 
 sub ProcessLeaf($$$);
 
@@ -47,6 +47,7 @@ sub ProcessLeaf($$$);
     },
     JPEG_preview_data => {
         %Image::ExifTool::previewImageTagInfo,
+        Groups => { 2 => 'Preview' },
     },
     JPEG_preview_info => 'PreviewInfo',
     icc_camera_to_tone_space_flow => {
@@ -339,9 +340,10 @@ sub ProcessLeaf($$$);
     WRITE_PROC => \&Image::ExifTool::Exif::WriteExif,
     NOTES => q{
         Leaf writes a TIFF-format sub-IFD inside IFD0 of a MOS image.  No tags in
-        this sub-IFD are currently known, except for tag 0x8606 which really
-        shouldn't be here anyway (so it doesn't appear in the table below) because
-        it duplicates a reference to the same data of tag 0x8606 in IFD0.
+        this sub-IFD are currently known, except for tags 0x8602 and 0x8606 which
+        really shouldn't be here anyway (so they don't appear in the table below)
+        because they duplicate references to the same data from tags with the same
+        ID in IFD0.
     },
 );
 
@@ -502,7 +504,7 @@ Capture.
 
 =head1 AUTHOR
 
-Copyright 2003-2014, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

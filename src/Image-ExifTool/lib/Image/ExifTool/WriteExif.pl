@@ -14,8 +14,6 @@ use vars qw($VERSION $AUTOLOAD @formatSize @formatName %formatNumber
 
 use Image::ExifTool::Fixup;
 
-sub InsertWritableProperties($$;$);
-
 # some information may be stored in different IFD's with the same meaning.
 # Use this lookup to decide when we should delete information that is stored
 # in another IFD when we write it to the preferred IFD.
@@ -40,7 +38,7 @@ my %mandatory = (
         0x0128 => 2,        # ResolutionUnit (inches)
     },
     ExifIFD => {
-        0x9000 => '0230',   # ExifVersion
+        0x9000 => '0231',   # ExifVersion
         0x9101 => "1 2 3 0",# ComponentsConfiguration
         0xa000 => '0100',   # FlashpixVersion
         0xa001 => 0xffff,   # ColorSpace (uncalibrated)
@@ -54,1257 +52,6 @@ my %mandatory = (
         0x0002 => '0100',   # InteropVersion
     },
 );
-
-# The main EXIF table is unique because the tags from this table may appear
-# in many different directories.  For this reason, we introduce a
-# "WriteGroup" member to the tagInfo that tells us the preferred location
-# for writing each tag.  Here is the lookup for Writable flag (format)
-# and WriteGroup for all writable tags
-# - WriteGroup is ExifIFD unless otherwise specified
-# - Protected is 1 if the tag shouldn't be copied with SetNewValuesFromFile()
-my %writeTable = (
-    0x0001 => {             # InteropIndex
-        Protected => 1,
-        Writable => 'string',
-        WriteGroup => 'InteropIFD',
-    },
-    0x0002 => {             # InteropVersion
-        Protected => 1,
-        Writable => 'undef',
-        Mandatory => 1,
-        WriteGroup => 'InteropIFD',
-    },
-    0x000b => {             # ProcessingSoftware
-        Writable => 'string',
-        WriteGroup => 'IFD0',
-    },
-    0x00fe => {             # SubfileType
-        Protected => 1,
-        Writable => 'int32u',
-        WriteGroup => 'IFD0',
-    },
-    0x00ff => {             # OldSubfileType
-        Protected => 1,
-        Writable => 'int16u',
-        WriteGroup => 'IFD0',
-    },
-    0x0100 => {             # ImageWidth
-        Protected => 1,
-        Writable => 'int32u',
-        WriteGroup => 'IFD0',
-    },
-    0x0101 => {             # ImageHeight
-        Protected => 1,
-        Writable => 'int32u',
-        WriteGroup => 'IFD0',
-    },
-    0x0102 => {             # BitsPerSample
-        Protected => 1,
-        Writable => 'int16u',
-        WriteGroup => 'IFD0',
-        Count => -1, # can be 1 or 3: -1 means 'variable'
-    },
-    0x0103 => {             # Compression
-        Protected => 1,
-        Writable => 'int16u',
-        WriteGroup => 'IFD0',
-        Mandatory => 1,
-    },
-    0x0106 => {             # PhotometricInterpretation
-        Protected => 1,
-        Writable => 'int16u',
-        WriteGroup => 'IFD0',
-    },
-    0x0107 => {             # Thresholding
-        Protected => 1,
-        Writable => 'int16u',
-        WriteGroup => 'IFD0',
-    },
-    0x0108 => {             # CellWidth
-        Protected => 1,
-        Writable => 'int16u',
-        WriteGroup => 'IFD0',
-    },
-    0x0109 => {             # CellLength
-        Protected => 1,
-        Writable => 'int16u',
-        WriteGroup => 'IFD0',
-    },
-    0x010a => {             # FillOrder
-        Protected => 1,
-        Writable => 'int16u',
-        WriteGroup => 'IFD0',
-    },
-    0x010d => {             # DocumentName
-        Writable => 'string',
-        WriteGroup => 'IFD0',
-    },
-    0x010e => {             # ImageDescription
-        Writable => 'string',
-        WriteGroup => 'IFD0',
-    },
-    0x010f => {             # Make
-        Writable => 'string',
-        WriteGroup => 'IFD0',
-    },
-    0x0110 => {             # Model
-        Writable => 'string',
-        WriteGroup => 'IFD0',
-    },
-    0x0112 => {             # Orientation
-        Writable => 'int16u',
-        WriteGroup => 'IFD0',
-    },
-    0x0115 => {             # SamplesPerPixel
-        Protected => 1,
-        Writable => 'int16u',
-        WriteGroup => 'IFD0',
-    },
-    0x0116 => {             # RowsPerStrip
-        Protected => 1,
-        Writable => 'int32u',
-        WriteGroup => 'IFD0',
-    },
-    0x0118 => {             # MinSampleValue
-        Writable => 'int16u',
-        WriteGroup => 'IFD0',
-    },
-    0x0119 => {             # MaxSampleValue
-        Writable => 'int16u',
-        WriteGroup => 'IFD0',
-    },
-    0x011a => {             # XResolution
-        Writable => 'rational64u',
-        WriteGroup => 'IFD0',
-        Mandatory => 1,
-    },
-    0x011b => {             # YResolution
-        Writable => 'rational64u',
-        WriteGroup => 'IFD0',
-        Mandatory => 1,
-    },
-    0x011c => {             # PlanarConfiguration
-        Protected => 1,
-        Writable => 'int16u',
-        WriteGroup => 'IFD0',
-    },
-    0x011d => {             # PageName
-        Writable => 'string',
-        WriteGroup => 'IFD0',
-    },
-    0x011e => {             # XPosition
-        Writable => 'rational64u',
-        WriteGroup => 'IFD0',
-    },
-    0x011f => {             # YPosition
-        Writable => 'rational64u',
-        WriteGroup => 'IFD0',
-    },
-    0x0122 => {             # GrayResponseUnit
-        Writable => 'int16u',
-        WriteGroup => 'IFD0',
-    },
-    0x0128 => {             # ResolutionUnit
-        Writable => 'int16u',
-        WriteGroup => 'IFD0',
-        Mandatory => 1,
-    },
-    0x0129 => {             # PageNumber
-        Writable => 'int16u',
-        WriteGroup => 'IFD0',
-        Count => 2,
-    },
-    0x012d => {             # TransferFunction
-        Protected => 1,
-        Writable => 'int16u',
-        WriteGroup => 'IFD0',
-        Count => 768,
-    },
-    0x0131 => {             # Software
-        Writable => 'string',
-        WriteGroup => 'IFD0',
-    },
-    0x0132 => {             # ModifyDate
-        Writable => 'string',
-        Shift => 'Time',
-        WriteGroup => 'IFD0',
-        PrintConvInv => '$self->InverseDateTime($val,0)',
-    },
-    0x013b => {             # Artist
-        Writable => 'string',
-        WriteGroup => 'IFD0',
-    },
-    0x013c => {             # HostComputer
-        Writable => 'string',
-        WriteGroup => 'IFD0',
-    },
-    0x013d => {             # Predictor
-        Protected => 1,
-        Writable => 'int16u',
-        WriteGroup => 'IFD0',
-    },
-    0x013e => {             # WhitePoint
-        Writable => 'rational64u',
-        WriteGroup => 'IFD0',
-        Count => 2,
-    },
-    0x013f => {             # PrimaryChromaticities
-        Writable => 'rational64u',
-        WriteGroup => 'IFD0',
-        Count => 6,
-    },
-    0x0141 => {             # HalftoneHints
-        Writable => 'int16u',
-        WriteGroup => 'IFD0',
-        Count => 2,
-    },
-    0x0142 => {             # TileWidth
-        Protected => 1,
-        Writable => 'int32u',
-        WriteGroup => 'IFD0',
-    },
-    0x0143 => {             # TileLength
-        Protected => 1,
-        Writable => 'int32u',
-        WriteGroup => 'IFD0',
-    },
-    0x014c => {             # InkSet
-        Writable => 'int16u',
-        WriteGroup => 'IFD0',
-    },
-    0x0150 => {             # TargetPrinter
-        Writable => 'string',
-        WriteGroup => 'IFD0',
-    },
-    0x013c => {             # HostComputer
-        Writable => 'string',
-        WriteGroup => 'IFD0',
-    },
-    0x0211 => {             # YCbCrCoefficients
-        Protected => 1,
-        Writable => 'rational64u',
-        WriteGroup => 'IFD0',
-        Count => 3,
-    },
-    0x0212 => {             # YCbCrSubSampling
-        Protected => 1,
-        Writable => 'int16u',
-        WriteGroup => 'IFD0',
-        Count => 2,
-    },
-    0x0213 => {             # YCbCrPositioning
-        Protected => 1,
-        Writable => 'int16u',
-        WriteGroup => 'IFD0',
-        Mandatory => 1,
-    },
-    0x0214 => {             # ReferenceBlackWhite
-        Writable => 'rational64u',
-        WriteGroup => 'IFD0',
-        Count => 6,
-    },
-    0x1000 => {             # RelatedImageFileFormat
-        Protected => 1,
-        Writable => 'string',
-        WriteGroup => 'InteropIFD',
-    },
-    0x1001 => {             # RelatedImageWidth
-        Protected => 1,
-        Writable => 'int16u',
-        WriteGroup => 'InteropIFD',
-    },
-    0x1002 => {             # RelatedImageHeight (more commonly RelatedImageLength)
-        Protected => 1,
-        Writable => 'int16u',
-        WriteGroup => 'InteropIFD',
-    },
-    0x4746 => {             # Rating (MicrosoftPhoto)
-        Writable => 'int16u',
-        WriteGroup => 'IFD0',
-        Avoid => 1,
-    },
-    0x4749 => {             # RatingPercent (MicrosoftPhoto)
-        Writable => 'int16u',
-        WriteGroup => 'IFD0',
-        Avoid => 1,
-    },
-    0x828d => {             # CFARepeatPatternDim
-        Protected => 1,
-        Writable => 'int16u',
-        WriteGroup => 'SubIFD',
-        Count => 2,
-    },
-    0x828e => {             # CFAPattern2
-        Protected => 1,
-        Writable => 'int8u',
-        WriteGroup => 'SubIFD',
-        Count => -1,
-    },
-    0x8298 => {             # Copyright
-        Writable => 'string',
-        WriteGroup => 'IFD0',
-        RawConvInv => '$val . "\0"',
-        PrintConvInv => sub {
-            my ($val, $self) = @_;
-            # encode if necessary
-            my $enc = $self->Options('CharsetEXIF');
-            $val = $self->Encode($val,$enc) if $enc and $val !~ /\0/;
-            if ($val =~ /(.*?)\s*[\n\r]+\s*(.*)/s) {
-                return $1 unless length $2;
-                # photographer copyright set to ' ' if it doesn't exist, according to spec.
-                return((length($1) ? $1 : ' ') . "\0" . $2);
-            }
-            return $val;
-        },
-    },
-#
-# Most of the tags below this belong in the ExifIFD...
-#
-    0x829a => {             # ExposureTime
-        Writable => 'rational64u',
-        PrintConvInv => 'Image::ExifTool::Exif::ConvertFraction($val)',
-    },
-    0x829d => {             # FNumber
-        Writable => 'rational64u',
-        PrintConvInv => '$val',
-    },
-    0x8546 => {             # SEMInfo
-        Writable => 'string',
-        WriteGroup => 'IFD0',
-    },
-    0x87af => {             # GeoTiffDirectory
-        Writable => 'undef',
-        WriteGroup => 'IFD0',
-        # swap byte order if necessary
-        RawConvInv => q{
-            return $val if length $val < 2;
-            my $order = substr($val, -2);
-            return $val unless $order eq 'II' or $order eq 'MM';
-            $val = substr($val, 0, -2);
-            return $val if $order eq GetByteOrder();
-            return pack('v*',unpack('n*',$val));
-        },
-    },
-    0x87b0 => {             # GeoTiffDoubleParams
-        Writable => 'undef',
-        WriteGroup => 'IFD0',
-        # swap byte order if necessary
-        RawConvInv => q{
-            return $val if length $val < 2;
-            my $order = substr($val, -2);
-            return $val unless $order eq 'II' or $order eq 'MM';
-            $val = substr($val, 0, -2);
-            return $val if $order eq GetByteOrder();
-            $val =~ s/(.{4})(.{4})/$2$1/sg; # swap words
-            return pack('V*',unpack('N*',$val));
-        },
-    },
-    0x87b1 => {             # GeoTiffAsciiParams
-        Writable => 'string',
-        WriteGroup => 'IFD0',
-    },
-    0x8822 => 'int16u',     # ExposureProgram
-    0x8824 => 'string',     # SpectralSensitivity
-    0x8827 => {             # ISO
-        Writable => 'int16u',
-        Count => -1,
-        PrintConvInv => '$val=~tr/,//d; $val',
-    },
-    0x882a => {             # TimeZoneOffset
-        Writable => 'int16s',
-        Count => -1, # can be 1 or 2
-        Notes => q{
-            1 or 2 values: 1. The time zone offset of DateTimeOriginal from GMT in
-            hours, 2. If present, the time zone offset of ModifyDate
-        },
-    },
-    0x882b => 'int16u',     # SelfTimerMode
-    0x8830 => 'int16u',     # SensitivityType
-    0x8831 => 'int32u',     # StandardOutputSensitivity
-    0x8832 => 'int32u',     # RecommendedExposureIndex
-    0x8833 => 'int32u',     # ISOSpeed
-    0x8834 => 'int32u',     # ISOSpeedLatitudeyyy
-    0x8835 => 'int32u',     # ISOSpeedLatitudezzz
-    0x9000 => {             # ExifVersion
-        Writable => 'undef',
-        Mandatory => 1,
-        PrintConvInv => '$val=~tr/.//d; $val=~/^\d{4}$/ ? $val : undef',
-    },
-    0x9003 => {             # DateTimeOriginal
-        Writable => 'string',
-        Shift => 'Time',
-        PrintConvInv => '$self->InverseDateTime($val,0)',
-    },
-    0x9004 => {             # CreateDate
-        Writable => 'string',
-        Shift => 'Time',
-        PrintConvInv => '$self->InverseDateTime($val,0)',
-    },
-    0x9009 => 'undef',      # GooglePlusUploadCode
-    0x9101 => {             # ComponentsConfiguration
-        Protected => 1,
-        Writable => 'undef',
-        Count => 4,
-        Mandatory => 1,
-        ValueConvInv => '$val=~tr/,//d; $val',  # (so we can copy from XMP with -n)
-    },
-    0x9102 => {             # CompressedBitsPerPixel
-        Protected => 1,
-        Writable => 'rational64u',
-    },
-    0x9201 => {             # ShutterSpeedValue
-        Writable => 'rational64s',
-        ValueConvInv => '$val>0 ? -log($val)/log(2) : -100',
-        # do eval to convert things like '1/100'
-        PrintConvInv => 'Image::ExifTool::Exif::ConvertFraction($val)',
-    },
-    0x9202 => {             # ApertureValue
-        Writable => 'rational64u',
-        ValueConvInv => '$val>0 ? 2*log($val)/log(2) : 0',
-        PrintConvInv => '$val',
-    },
-    0x9203 => 'rational64s',# BrightnessValue
-    0x9204 => {             # ExposureCompensation
-        Writable => 'rational64s',
-        # do eval to convert things like '+2/3'
-        PrintConvInv => 'Image::ExifTool::Exif::ConvertFraction($val)',
-    },
-    0x9205 => {             # MaxApertureValue
-        Writable => 'rational64u',
-        ValueConvInv => '$val>0 ? 2*log($val)/log(2) : 0',
-        PrintConvInv => '$val',
-    },
-    0x9206 => {             # SubjectDistance
-        Writable => 'rational64u',
-        PrintConvInv => '$val=~s/\s*m$//;$val',
-    },
-    0x9207 => 'int16u',     # MeteringMode
-    0x9208 => 'int16u',     # LightSource
-    0x9209 => 'int16u',     # Flash
-    0x920a => {             # FocalLength
-        Writable => 'rational64u',
-        PrintConvInv => '$val=~s/\s*mm$//;$val',
-    },
-    0x9211 => 'int32u',     # ImageNumber
-    0x9212 => 'string',     # SecurityClassification
-    0x9213 => 'string',     # ImageHistory
-    0x9214 => {             # SubjectArea
-        Writable => 'int16u',
-        Count => -1, # 2, 3 or 4 values
-    },
-#    0x927c => 'undef',      # MakerNotes
-    0x9286 => {             # UserComment
-        Writable => 'undef',
-        #  (starts with "ASCII\0\0\0", "UNICODE\0", "JIS\0\0\0\0\0" or "\0\0\0\0\0\0\0\0")
-        RawConvInv => 'Image::ExifTool::Exif::EncodeExifText($self,$val)',
-        # SHOULD ADD SPECIAL LOGIC TO ALLOW CONDITIONAL OVERWRITE OF
-        # "UNKNOWN" VALUES FILLED WITH SPACES
-    },
-    0x9290 => {             # SubSecTime
-        Writable => 'string',
-        # extract fractional seconds from a full date/time value
-        ValueConvInv => '$val=~/^(\d+)\s*$/ ? $1 : ($val=~/\.(\d+)/ ? $1 : undef)',
-    },
-    0x9291 => {             # SubSecTimeOriginal
-        Writable => 'string',
-        ValueConvInv => '$val=~/^(\d+)\s*$/ ? $1 : ($val=~/\.(\d+)/ ? $1 : undef)',
-    },
-    0x9292 => {             # SubSecTimeDigitized
-        Writable => 'string',
-        ValueConvInv => '$val=~/^(\d+)\s*$/ ? $1 : ($val=~/\.(\d+)/ ? $1 : undef)',
-    },
-    0x935c => {             # ImageSourceData
-        Writable => 'undef',
-        WriteGroup => 'IFD0',
-        Protected => 1,
-    },
-#    0x9928 => 'undef',      # Opto-ElectricConversionFactor
-    0x9c9b => {             # XPTitle
-        Writable => 'int8u',
-        WriteGroup => 'IFD0',
-        Notes => q{
-            tags 0x9c9b-0x9c9f are used by Windows Explorer; special characters
-            in these values are converted to UTF-8 by default, or Windows Latin1
-            with the -L option.  XPTitle is ignored by Windows Explorer if
-            ImageDescription exists
-        },
-        ValueConvInv => '$self->Encode($val,"UCS2","II") . "\0\0"',
-    },
-    0x9c9c => {             # XPComment
-        Writable => 'int8u',
-        WriteGroup => 'IFD0',
-        ValueConvInv => '$self->Encode($val,"UCS2","II") . "\0\0"',
-    },
-    0x9c9d => {             # XPAuthor
-        Writable => 'int8u',
-        WriteGroup => 'IFD0',
-        Notes => 'ignored by Windows Explorer if Artist exists',
-        ValueConvInv => '$self->Encode($val,"UCS2","II") . "\0\0"',
-    },
-    0x9c9e => {             # XPKeywords
-        Writable => 'int8u',
-        WriteGroup => 'IFD0',
-        ValueConvInv => '$self->Encode($val,"UCS2","II") . "\0\0"',
-    },
-    0x9c9f => {             # XPSubject
-        Writable => 'int8u',
-        WriteGroup => 'IFD0',
-        ValueConvInv => '$self->Encode($val,"UCS2","II") . "\0\0"',
-    },
-    0xa000 => {             # FlashpixVersion
-        Writable => 'undef',
-        Mandatory => 1,
-        PrintConvInv => '$val=~tr/.//d; $val=~/^\d{4}$/ ? $val : undef',
-    },
-    0xa001 => {             # ColorSpace
-        Writable => 'int16u',
-        Mandatory => 1,
-    },
-    0xa002 => {             # ExifImageWidth (could also be int32u)
-        Writable => 'int16u',
-        Mandatory => 1,
-    },
-    0xa003 => {             # ExifImageHeight (could also be int32u)
-        Writable => 'int16u',
-        Mandatory => 1,
-    },
-    0xa004 => 'string',     # RelatedSoundFile
-    0xa20b => {             # FlashEnergy
-        Writable => 'rational64u',
-        Count => -1, # 1 or 2 (ref 12)
-    },
-#    0xa20c => 'undef',      # SpatialFrequencyResponse
-    0xa20e => 'rational64u',# FocalPlaneXResolution
-    0xa20f => 'rational64u',# FocalPlaneYResolution
-    0xa210 => 'int16u',     # FocalPlaneResolutionUnit
-    0xa214 => {             # SubjectLocation
-        Writable => 'int16u',
-        Count => 2,
-    },
-    0xa215 => 'rational64u',# ExposureIndex
-    0xa217 => 'int16u',     # SensingMethod
-    0xa300 => {             # FileSource
-        Writable => 'undef',
-        ValueConvInv => '($val=~/^\d+$/ and $val < 256) ? chr($val) : $val',
-    },
-    0xa301 => {             # SceneType
-        Writable => 'undef',
-        ValueConvInv => 'chr($val)',
-    },
-    0xa302 => {             # CFAPattern
-        Writable => 'undef',
-        RawConvInv => q{
-            my @a = split ' ', $val;
-            return $val if @a <= 2; # also accept binary data for backward compatibility
-            return pack(GetByteOrder() eq 'II' ? 'v2C*' : 'n2C*', @a);
-        },
-        PrintConvInv => 'Image::ExifTool::Exif::GetCFAPattern($val)',
-    },
-    0xa401 => 'int16u',     # CustomRendered
-    0xa402 => 'int16u',     # ExposureMode
-    0xa403 => 'int16u',     # WhiteBalance
-    0xa404 => 'rational64u',# DigitalZoomRatio
-    0xa405 => {             # FocalLengthIn35mmFormat
-        Writable => 'int16u',
-        PrintConvInv => '$val=~s/\s*mm$//;$val',
-    },
-    0xa406 => 'int16u',     # SceneCaptureType
-    0xa407 => 'int16u',     # GainControl
-    0xa408 => {             # Contrast
-        Writable => 'int16u',
-        PrintConvInv => 'Image::ExifTool::Exif::ConvertParameter($val)',
-    },
-    0xa409 => {             # Saturation
-        Writable => 'int16u',
-        PrintConvInv => 'Image::ExifTool::Exif::ConvertParameter($val)',
-    },
-    0xa40a => {             # Sharpness
-        Writable => 'int16u',
-        PrintConvInv => 'Image::ExifTool::Exif::ConvertParameter($val)',
-    },
-#    0xa40b => 'undef',      # DeviceSettingDescription
-    0xa40c => 'int16u',     # SubjectDistanceRange
-    0xa420 => 'string',     # ImageUniqueID
-    0xa430 => 'string',     # OwnerName
-    0xa431 => 'string',     # SerialNumber
-    0xa432 => {             # LensInfo
-        Writable => 'rational64u',
-        Count => 4,
-        PrintConvInv => \&ConvertLensInfo,
-    },
-    0xa433 => 'string',     # LensMake
-    0xa434 => 'string',     # LensModel
-    0xa435 => 'string',     # LensSerialNumber
-    0xa500 => 'rational64u',# Gamma
-#
-# DNG stuff (mostly in IFD0, "Raw IFD" in SubIFD)
-#
-    0xc612 => {             # DNGVersion
-        Writable => 'int8u',
-        WriteGroup => 'IFD0',
-        Count => 4,
-        Protected => 1, # (confuses Apple Preview if written to a TIFF image)
-        PrintConvInv => '$val =~ tr/./ /; $val',
-    },
-    0xc613 => {             # DNGBackwardVersion
-        Writable => 'int8u',
-        WriteGroup => 'IFD0',
-        Count => 4,
-        Protected => 1,
-        PrintConvInv => '$val =~ tr/./ /; $val',
-    },
-    0xc614 => {             # UniqueCameraModel
-        Writable => 'string',
-        WriteGroup => 'IFD0',
-    },
-    0xc615 => {             # LocalizedCameraModel
-        Writable => 'string',
-        WriteGroup => 'IFD0',
-        PrintConvInv => '$val',
-    },
-    0xc618 => {             # LinearizationTable
-        Writable => 'int16u',
-        WriteGroup => 'SubIFD',
-        Count => -1,
-        Protected => 1,
-    },,
-    0xc619 => {             # BlackLevelRepeatDim
-        Writable => 'int16u',
-        WriteGroup => 'SubIFD',
-        Count => 2,
-        Protected => 1,
-    },
-    0xc61a => {             # BlackLevel
-        Writable => 'rational64u',
-        WriteGroup => 'SubIFD',
-        Count => -1,
-        Protected => 1,
-    },
-    0xc61b => {             # BlackLevelDeltaH
-        Writable => 'rational64s',
-        WriteGroup => 'SubIFD',
-        Count => -1,
-        Protected => 1,
-    },
-    0xc61c => {             # BlackLevelDeltaV
-        Writable => 'rational64s',
-        WriteGroup => 'SubIFD',
-        Count => -1,
-        Protected => 1,
-    },
-    0xc61d => {             # WhiteLevel
-        Writable => 'int32u',
-        WriteGroup => 'SubIFD',
-        Count => -1,
-        Protected => 1,
-    },
-    0xc61e => {             # DefaultScale
-        Writable => 'rational64u',
-        WriteGroup => 'SubIFD',
-        Count => 2,
-        Protected => 1,
-    },
-    0xc61f => {             # DefaultCropOrigin
-        Writable => 'int32u',
-        WriteGroup => 'SubIFD',
-        Count => 2,
-        Protected => 1,
-    },
-    0xc620 => {             # DefaultCropSize
-        Writable => 'int32u',
-        WriteGroup => 'SubIFD',
-        Count => 2,
-        Protected => 1,
-    },
-    0xc621 => {             # ColorMatrix1
-        Writable => 'rational64s',
-        WriteGroup => 'IFD0',
-        Count => -1,
-        Protected => 1,
-    },
-    0xc622 => {             # ColorMatrix2
-        Writable => 'rational64s',
-        WriteGroup => 'IFD0',
-        Count => -1,
-        Protected => 1,
-    },
-    0xc623 => {             # CameraCalibration1
-        Writable => 'rational64s',
-        WriteGroup => 'IFD0',
-        Count => -1,
-        Protected => 1,
-    },
-    0xc624 => {             # CameraCalibration2
-        Writable => 'rational64s',
-        WriteGroup => 'IFD0',
-        Count => -1,
-        Protected => 1,
-    },
-    0xc625 => {             # ReductionMatrix1
-        Writable => 'rational64s',
-        WriteGroup => 'IFD0',
-        Count => -1,
-        Protected => 1,
-    },
-    0xc626 => {             # ReductionMatrix2
-        Writable => 'rational64s',
-        WriteGroup => 'IFD0',
-        Count => -1,
-        Protected => 1,
-    },
-    0xc627 => {             # AnalogBalance
-        Writable => 'rational64u',
-        WriteGroup => 'IFD0',
-        Count => -1,
-        Protected => 1,
-    },
-    0xc628 => {             # AsShotNeutral
-        Writable => 'rational64u',
-        WriteGroup => 'IFD0',
-        Count => -1,
-        Protected => 1,
-    },
-    0xc629 => {             # AsShotWhiteXY
-        Writable => 'rational64u',
-        WriteGroup => 'IFD0',
-        Count => 2,
-        Protected => 1,
-    },
-    0xc62a => {             # BaselineExposure
-        Writable => 'rational64s',
-        WriteGroup => 'IFD0',
-        Protected => 1,
-    },
-    0xc62b => {             # BaselineNoise
-        Writable => 'rational64u',
-        WriteGroup => 'IFD0',
-        Protected => 1,
-    },
-    0xc62c => {             # BaselineSharpness
-        Writable => 'rational64u',
-        WriteGroup => 'IFD0',
-        Protected => 1,
-    },
-    0xc62d => {             # BayerGreenSplit
-        Writable => 'int32u',
-        WriteGroup => 'SubIFD',
-        Protected => 1,
-    },
-    0xc62e => {             # LinearResponseLimit
-        Writable => 'rational64u',
-        WriteGroup => 'IFD0',
-        Protected => 1,
-    },
-    0xc62f => {             # CameraSerialNumber
-        Writable => 'string',
-        WriteGroup => 'IFD0',
-    },
-    0xc630 => {             # DNGLensInfo
-        Writable => 'rational64u',
-        WriteGroup => 'IFD0',
-        Count => 4,
-        PrintConvInv => \&ConvertLensInfo,
-    },
-    0xc631 => {             # ChromaBlurRadius
-        Writable => 'rational64u',
-        WriteGroup => 'SubIFD',
-        Protected => 1,
-    },
-    0xc632 => {             # AntiAliasStrength
-        Writable => 'rational64u',
-        WriteGroup => 'SubIFD',
-        Protected => 1,
-    },
-    0xc633 => {             # ShadowScale
-        Writable => 'rational64u',
-        WriteGroup => 'IFD0',
-        Protected => 1,
-    },
-    0xc635 => {             # MakerNoteSafety
-        Writable => 'int16u',
-        WriteGroup => 'IFD0',
-    },
-    0xc65a => {             # CalibrationIlluminant1
-        Writable => 'int16u',
-        WriteGroup => 'IFD0',
-        Protected => 1,
-    },
-    0xc65b => {             # CalibrationIlluminant2
-        Writable => 'int16u',
-        WriteGroup => 'IFD0',
-        Protected => 1,
-    },
-    0xc65c => {             # BestQualityScale
-        Writable => 'rational64u',
-        WriteGroup => 'SubIFD',
-        Protected => 1,
-    },
-    0xc65d => {             # RawDataUniqueID
-        Writable => 'int8u',
-        WriteGroup => 'IFD0',
-        Count => 16,
-        Count => 16,
-        ValueConvInv => 'pack("H*", $val)',
-        Protected => 1,
-    },
-    0xc68b => {             # OriginalRawFileName
-        Writable => 'string',
-        WriteGroup => 'IFD0',
-        Protected => 1,
-    },
-    0xc68d => {             # ActiveArea
-        Writable => 'int32u',
-        WriteGroup => 'SubIFD',
-        Count => 4,
-        Protected => 1,
-    },
-    0xc68e => {             # MaskedAreas
-        Writable => 'int32u',
-        WriteGroup => 'SubIFD',
-        Count => 4,
-        Protected => 1,
-    },
-    0xc68f => {             # AsShotICCProfile (writable directory)
-        WriteGroup => 'IFD0',
-        Protected => 1,
-        WriteCheck => q{
-            require Image::ExifTool::ICC_Profile;
-            return Image::ExifTool::ICC_Profile::ValidateICC(\$val);
-        },
-    },
-    0xc690 => {             # AsShotPreProfileMatrix
-        Writable => 'rational64s',
-        WriteGroup => 'IFD0',
-        Count => -1,
-        Protected => 1,
-    },
-    0xc691 => {             # CurrentICCProfile (writable directory)
-        Writable => 'undef',
-        WriteGroup => 'IFD0',
-        Protected => 1,
-        WriteCheck => q{
-            require Image::ExifTool::ICC_Profile;
-            return Image::ExifTool::ICC_Profile::ValidateICC(\$val);
-        },
-    },
-    0xc692 => {             # CurrentPreProfileMatrix
-        Writable => 'rational64s',
-        WriteGroup => 'IFD0',
-        Count => -1,
-        Protected => 1,
-    },
-    0xc6bf => {             # ColorimetricReference
-        Writable => 'int16u',
-        WriteGroup => 'IFD0',
-        Protected => 1,
-    },
-    0xc6d2 => {             # PanasonicTitle (Panasonic DMC-TZ5, not a DNG tag)
-        Writable => 'undef',
-        WriteGroup => 'IFD0',
-        ValueConvInv => '$self->Encode($val,"UTF8")',
-    },
-    0xc6d3 => {             # PanasonicTitle2 (Panasonic DMC-FS7, not a DNG tag)
-        Writable => 'undef',
-        WriteGroup => 'IFD0',
-        ValueConvInv => '$self->Encode($val,"UTF8")',
-    },
-    0xc6f3 => {             # CameraCalibrationSig
-        Writable => 'string',
-        WriteGroup => 'IFD0',
-        Protected => 1,
-    },
-    0xc6f4 => {             # ProfileCalibrationSig
-        Writable => 'string',
-        WriteGroup => 'IFD0',
-        Protected => 1,
-    },
-    0xc6f6 => {             # AsShotProfileName
-        Writable => 'string',
-        WriteGroup => 'IFD0',
-        Protected => 1,
-    },
-    0xc6f7 => {             # NoiseReductionApplied
-        Writable => 'rational64u',
-        WriteGroup => 'SubIFD',
-        Protected => 1,
-    },
-    0xc6f8 => {             # ProfileName
-        Writable => 'string',
-        WriteGroup => 'IFD0',
-        Protected => 1,
-    },
-    0xc6f9 => {             # ProfileHueSatMapDims
-        Writable => 'int32u',
-        WriteGroup => 'IFD0',
-        Count => 3,
-        Protected => 1,
-    },
-    0xc6fa => {             # ProfileHueSatMapData1
-        Writable => 'float',
-        WriteGroup => 'IFD0',
-        Count => -1,
-        Protected => 1,
-    },
-    0xc6fb => {             # ProfileHueSatMapData2
-        Writable => 'float',
-        WriteGroup => 'IFD0',
-        Count => -1,
-        Protected => 1,
-    },
-    0xc6fc => {             # ProfileToneCurve
-        Writable => 'float',
-        WriteGroup => 'IFD0',
-        Count => -1,
-        Protected => 1,
-    },
-    0xc6fd => {             # ProfileEmbedPolicy
-        Writable => 'int32u',
-        WriteGroup => 'IFD0',
-        Protected => 1,
-    },
-    0xc6fe => {             # ProfileCopyright
-        Writable => 'string',
-        WriteGroup => 'IFD0',
-        Protected => 1,
-    },
-    0xc714 => {             # ForwardMatrix1
-        Writable => 'rational64s',
-        WriteGroup => 'IFD0',
-        Count => -1,
-        Protected => 1,
-    },
-    0xc715 => {             # ForwardMatrix2
-        Writable => 'rational64s',
-        WriteGroup => 'IFD0',
-        Count => -1,
-        Protected => 1,
-    },
-    0xc716 => {             # PreviewApplicationName
-        Writable => 'string',
-        WriteGroup => 'IFD0',
-        Protected => 1,
-    },
-    0xc717 => {             # PreviewApplicationVersion
-        Writable => 'string',
-        WriteGroup => 'IFD0',
-        Protected => 1,
-    },
-    0xc718 => {             # PreviewSettingsName
-        Writable => 'string',
-        WriteGroup => 'IFD0',
-        Protected => 1,
-    },
-    0xc719 => {             # PreviewSettingsDigest
-        Writable => 'int8u',
-        WriteGroup => 'IFD0',
-        Protected => 1,
-        ValueConvInv => 'pack("H*", $val)',
-    },
-    0xc71a => {             # PreviewColorSpace
-        Writable => 'int32u',
-        WriteGroup => 'IFD0',
-        Protected => 1,
-        PrintConv => {
-            0 => 'Unknown',
-            1 => 'Gray Gamma 2.2',
-            2 => 'sRGB',
-            3 => 'Adobe RGB',
-            4 => 'ProPhoto RGB',
-        },
-    },
-    0xc71b => {             # PreviewDateTime
-        Writable => 'string',
-        WriteGroup => 'IFD0',
-        Protected => 1,
-        ValueConvInv => q{
-            require Image::ExifTool::XMP;
-            return Image::ExifTool::XMP::FormatXMPDate($val);
-        },
-        PrintConvInv => '$self->InverseDateTime($val,1,1)',
-    },
-    0xc71c => {             # RawImageDigest
-        Writable => 'int8u',
-        WriteGroup => 'IFD0',
-        Count => 16,
-        Protected => 1,
-        ValueConvInv => 'pack("H*", $val)',
-    },
-    0xc71d => {             # OriginalRawFileDigest
-        Writable => 'int8u',
-        WriteGroup => 'IFD0',
-        Count => 16,
-        Protected => 1,
-        ValueConvInv => 'pack("H*", $val)',
-    },
-    0xc725 => {             # ProfileLookTableDims
-        Writable => 'int32u',
-        WriteGroup => 'IFD0',
-        Count => 3,
-        Protected => 1,
-    },
-    0xc726 => {             # ProfileLookTableData
-        Writable => 'float',
-        WriteGroup => 'IFD0',
-        Count => -1,
-        Protected => 1,
-    },
-    0xc761 => {             # NoiseProfile
-        Writable => 'double',
-        WriteGroup => 'SubIFD',
-        Count => -1,
-        Protected => 1,
-    },
-    0xc763 => {             # TimeCodes
-        Writable => 'int8u',
-        WriteGroup => 'IFD0',
-        Count => -1, # (8 * number of time codes, max 10)
-        ValueConvInv => q{
-            my @a = map hex, split /[. ]+/, $val;
-            join ' ', @a;
-        },
-        PrintConvInv => q{
-            my @a = split ' ', $val;
-            my @v;
-            foreach (@a) {
-                my @td = reverse split /T/;
-                my $tz = 0x39; # default to unknown timezone
-                if ($td[0] =~ s/([-+])(\d+):(\d+)$//) {
-                    if ($3 == 0) {
-                        $tz = hex(($1 eq '-') ? $2 : 0x26 - $2);
-                    } elsif ($3 == 30) {
-                        if ($1 eq '-') {
-                            $tz = $2 + 0x0a;
-                            $tz += 0x0a if $tz > 0x0f;
-                        } else {
-                            $tz = 0x3f - $2;
-                            $tz -= 0x0a if $tz < 0x3a;
-                        }
-                    } elsif ($3 == 45) {
-                        $tz = 0x32 if $1 eq '+' and $2 == 12;
-                    }
-                }
-                my @t = split /[:.]/, $td[0];
-                push @t, '00' while @t < 4;
-                my $bg;
-                if ($td[1]) {
-                    # date was specified: fill in date & timezone
-                    my @d = split /[-]/, $td[1];
-                    next if @d < 3;
-                    $bg = sprintf('.%.2d.%.2d.%.2d.%.2x', $d[2], $d[1], $d[0]%100, $tz);
-                    $t[0] = sprintf('%.2x', hex($t[0]) + 0xc0); # set BGF1+BGF2
-                } else { # time only
-                    $bg = '.00.00.00.00';
-                }
-                push @v, join('.', reverse(@t[0..3])) . $bg;
-            }
-            join ' ', @v;
-        },
-    },
-    0xc764 => {             # FrameRate
-        Writable => 'rational64s',
-        WriteGroup => 'IFD0',
-        PrintConvInv => '$val',
-    },
-    0xc772 => {             # TStop
-        Writable => 'rational64u',
-        WriteGroup => 'IFD0',
-        Count => -1, # (1 or 2)
-        PrintConvInv => '$val=~tr/-/ /; $val',
-    },
-    0xc789 => {             # ReelName
-        Writable => 'string',
-        WriteGroup => 'IFD0',
-    },
-    0xc791 => {             # OriginalDefaultFinalSize
-        Writable => 'int32u',
-        WriteGroup => 'IFD0',
-        Count => 2,
-        Protected => 1,
-    },
-    0xc792 => {             # OriginalBestQualitySize
-        Writable => 'int32u',
-        WriteGroup => 'IFD0',
-        Count => 2,
-        Protected => 1,
-    },
-    0xc793 => {             # OriginalDefaultCropSize
-        Writable => 'rational64u',
-        WriteGroup => 'IFD0',
-        Count => 2,
-        Protected => 1,
-    },
-    0xc7a1 => {             # CameraLabel
-        Writable => 'string',
-        WriteGroup => 'IFD0',
-    },
-    0xc7a3 => {             # ProfileHueSatMapEncoding
-        Writable => 'int32u',
-        WriteGroup => 'IFD0',
-        Protected => 1,
-    },
-    0xc7a4 => {             # ProfileLookTableEncoding
-        Writable => 'int32u',
-        WriteGroup => 'IFD0',
-        Protected => 1,
-    },
-    0xc7a5 => {             # BaselineExposureOffset
-        Writable => 'rational64u',
-        WriteGroup => 'IFD0',
-        Protected => 1,
-    },
-    0xc7a6 => {             # DefaultBlackRender
-        Writable => 'int32u',
-        WriteGroup => 'IFD0',
-        Protected => 1,
-    },
-    0xc7a7 => {             # NewRawImageDigest
-        Writable => 'int8u',
-        WriteGroup => 'IFD0',
-        Count => 16,
-        Protected => 1,
-        ValueConvInv => 'pack("H*", $val)',
-    },
-    0xc7a8 => {             # RawToPreviewGain
-        Writable => 'double',
-        WriteGroup => 'IFD0',
-        Protected => 1,
-    },
-    0xc7b5 => {             # DefaultUserCrop
-        Writable => 'rational64u',
-        WriteGroup => 'SubIFD',
-        Count => 4,
-        Protected => 1,
-    },
-    # --- end DNG tags ---
-    0xea1d => {             # OffsetSchema
-        Writable => 'int32s',
-    },
-    # tags produced by Photoshop Camera RAW
-    # (avoid creating these tags unless there is no other option)
-    0xfde8 => {
-        Name => 'OwnerName',
-        Condition => '$$self{TIFF_TYPE} ne "DCR"', # (used for another purpose in Kodak DCR images)
-        Avoid => 1,
-        PSRaw => 1,
-        Writable => 'string',
-        ValueConv => '$val=~s/^.*: //;$val',
-        ValueConvInv => q{"Owner's Name: $val"},
-        Notes => q{
-            tags 0xfde8-0xfdea and 0xfe4c-0xfe58 are generated by Photoshop Camera RAW.
-            Some names are the same as other EXIF tags, but ExifTool will avoid writing
-            these unless they already exist in the file
-        },
-    },
-    0xfde9 => {
-        Name => 'SerialNumber',
-        Condition => '$$self{TIFF_TYPE} ne "DCR"', # (used for another purpose in Kodak DCR SubIFD)
-        Avoid => 1,
-        PSRaw => 1,
-        Writable => 'string',
-        ValueConv => '$val=~s/^.*: //;$val',
-        ValueConvInv => q{"Serial Number: $val"},
-    },
-    0xfdea => {
-        Name => 'Lens',
-        Condition => '$$self{TIFF_TYPE} ne "DCR"', # (used for another purpose in Kodak DCR SubIFD)
-        Avoid => 1,
-        PSRaw => 1,
-        Writable => 'string',
-        ValueConv => '$val=~s/^.*: //;$val',
-        ValueConvInv => q{"Lens: $val"},
-    },
-    0xfe4c => {
-        Name => 'RawFile',
-        Avoid => 1,
-        PSRaw => 1,
-        Writable => 'string',
-        ValueConv => '$val=~s/^.*: //;$val',
-        ValueConvInv => q{"Raw File: $val"},
-    },
-    0xfe4d => {
-        Name => 'Converter',
-        Avoid => 1,
-        PSRaw => 1,
-        Writable => 'string',
-        ValueConv => '$val=~s/^.*: //;$val',
-        ValueConvInv => q{"Converter: $val"},
-    },
-    0xfe4e => {
-        Name => 'WhiteBalance',
-        Avoid => 1,
-        PSRaw => 1,
-        Writable => 'string',
-        ValueConv => '$val=~s/^.*: //;$val',
-        ValueConvInv => q{"White Balance: $val"},
-    },
-    0xfe51 => {
-        Name => 'Exposure',
-        Avoid => 1,
-        PSRaw => 1,
-        Writable => 'string',
-        ValueConv => '$val=~s/^.*: //;$val',
-        ValueConvInv => q{"Exposure: $val"},
-    },
-    0xfe52 => {
-        Name => 'Shadows',
-        Avoid => 1,
-        PSRaw => 1,
-        Writable => 'string',
-        ValueConv => '$val=~s/^.*: //;$val',
-        ValueConvInv => q{"Shadows: $val"},
-    },
-    0xfe53 => {
-        Name => 'Brightness',
-        Avoid => 1,
-        PSRaw => 1,
-        Writable => 'string',
-        ValueConv => '$val=~s/^.*: //;$val',
-        ValueConvInv => q{"Brightness: $val"},
-    },
-    0xfe54 => {
-        Name => 'Contrast',
-        Avoid => 1,
-        PSRaw => 1,
-        Writable => 'string',
-        ValueConv => '$val=~s/^.*: //;$val',
-        ValueConvInv => q{"Contrast: $val"},
-    },
-    0xfe55 => {
-        Name => 'Saturation',
-        Avoid => 1,
-        PSRaw => 1,
-        Writable => 'string',
-        ValueConv => '$val=~s/^.*: //;$val',
-        ValueConvInv => q{"Saturation: $val"},
-    },
-    0xfe56 => {
-        Name => 'Sharpness',
-        Avoid => 1,
-        PSRaw => 1,
-        Writable => 'string',
-        ValueConv => '$val=~s/^.*: //;$val',
-        ValueConvInv => q{"Sharpness: $val"},
-    },
-    0xfe57 => {
-        Name => 'Smoothness',
-        Avoid => 1,
-        PSRaw => 1,
-        Writable => 'string',
-        ValueConv => '$val=~s/^.*: //;$val',
-        ValueConvInv => q{"Smoothness: $val"},
-    },
-    0xfe58 => {
-        Name => 'MoireFilter',
-        Avoid => 1,
-        PSRaw => 1,
-        Writable => 'string',
-        ValueConv => '$val=~s/^.*: //;$val',
-        ValueConvInv => q{"Moire Filter: $val"},
-    },
-);
-
-# insert our writable properties into main EXIF tag table
-InsertWritableProperties(\%Image::ExifTool::Exif::Main, \%writeTable, \&CheckExif);
 
 #------------------------------------------------------------------------------
 # Inverse print conversion for LensInfo
@@ -1338,7 +85,7 @@ sub GetCFAPattern($)
         foreach (@cols) {
             tr/ \]\[//d;    # remove remaining brackets and any spaces
             my $c = $cfaLookup{lc($_)};
-            defined $c or warn("Unknown color '$_'\n"), return undef;
+            defined $c or warn("Unknown color '${_}'\n"), return undef;
             push @a, $c;
         }
     }
@@ -1373,7 +120,7 @@ sub EncodeExifText($$)
     my ($et, $val) = @_;
     # does the string contain special characters?
     if ($val =~ /[\x80-\xff]/) {
-        my $order = $et->GetNewValues('ExifUnicodeByteOrder');
+        my $order = $et->GetNewValue('ExifUnicodeByteOrder');
         return "UNICODE\0" . $et->Encode($val,'UTF16',$order);
     } else {
         return "ASCII\0\0\0$val";
@@ -1381,43 +128,13 @@ sub EncodeExifText($$)
 }
 
 #------------------------------------------------------------------------------
-# insert writable properties into main tag table
-# Inputs: 0) tag table ref, 1) reference to writable properties
-#         2) [optional] CHECK_PROC reference
-sub InsertWritableProperties($$;$)
-{
-    my ($tagTablePtr, $writeTablePtr, $checkProc) = @_;
-    my $tag;
-    $checkProc and $$tagTablePtr{CHECK_PROC} = $checkProc;
-    foreach $tag (keys %$writeTablePtr) {
-        my $writeInfo = $$writeTablePtr{$tag};
-        my @infoList = GetTagInfoList($tagTablePtr, $tag);
-        if (@infoList) {
-            my $tagInfo;
-            foreach $tagInfo (@infoList) {
-                if (ref $writeInfo) {
-                    my $key;
-                    foreach $key (keys %$writeInfo) {
-                        $$tagInfo{$key} = $$writeInfo{$key} unless defined $$tagInfo{$key};
-                    }
-                } else {
-                    $$tagInfo{Writable} = $writeInfo unless defined $$tagInfo{Writable};
-                }
-            }
-        } else {
-            AddTagToTable($tagTablePtr, $tag, $writeInfo);
-        }
-    }
-}
-
-#------------------------------------------------------------------------------
 # rebuild maker notes to properly contain all value data
 # (some manufacturers put value data outside maker notes!!)
-# Inputs: 0) ExifTool object ref, 1) tag table ref, 2) dirInfo ref
+# Inputs: 0) ExifTool object ref, 1) dirInfo ref, 2) tag table ref
 # Returns: new maker note data (and creates MAKER_NOTE_FIXUP), or undef on error
 sub RebuildMakerNotes($$$)
 {
-    my ($et, $tagTablePtr, $dirInfo) = @_;
+    my ($et, $dirInfo, $tagTablePtr) = @_;
     my $dirStart = $$dirInfo{DirStart};
     my $dirLen = $$dirInfo{DirLen};
     my $dataPt = $$dirInfo{DataPt};
@@ -1461,7 +178,7 @@ sub RebuildMakerNotes($$$)
         # set GENERATE_PREVIEW_INFO flag so PREVIEW_INFO will be generated
         $$newTool{GENERATE_PREVIEW_INFO} = 1;
         # drop any large tags
-        $$newTool{DROP_TAGS} = 1;
+        $$newTool{DropTags} = 1;
         # initialize other necessary data members
         $$newTool{FILE_TYPE} = $$et{FILE_TYPE};
         $$newTool{TIFF_TYPE} = $$et{TIFF_TYPE};
@@ -1626,6 +343,68 @@ sub UpdateTiffEnd($$)
 }
 
 #------------------------------------------------------------------------------
+# Validate image data size
+# Inputs: 0) ExifTool ref, 1) validate info hash ref,
+#         2) flag to issue error (ie. we're writing)
+# - issues warning or error if problems found
+sub ValidateImageData($$$;$)
+{
+    local $_;
+    my ($et, $vInfo, $dirName, $errFlag) = @_;
+
+    # determine the expected size of the image data for an uncompressed image
+    # (0x102 BitsPerSample, 0x103 Compression and 0x115 SamplesPerPixel
+    #  all default to a value of 1 if they don't exist)
+    if ((not defined $$vInfo{0x103} or $$vInfo{0x103} eq '1') and
+        $$vInfo{0x100} and $$vInfo{0x101} and ($$vInfo{0x117} or $$vInfo{0x145}))
+    {
+        my $samplesPerPix = $$vInfo{0x115} || 1;
+        my @bitsPerSample = $$vInfo{0x102} ? split(' ',$$vInfo{0x102}) : (1) x $samplesPerPix;
+        my $byteCountInfo = $$vInfo{0x117} || $$vInfo{0x145};
+        my $byteCounts = $$byteCountInfo[1];
+        my $totalBytes = 0;
+        $totalBytes += $_ foreach split ' ', $byteCounts;
+        my $minor;
+        $minor = 1 if $$et{DOC_NUM} or $$et{FILE_TYPE} ne 'TIFF';
+        unless (@bitsPerSample == $samplesPerPix) {
+            # (just a warning for this problem)
+            my $s = $samplesPerPix eq '1' ? '' : 's';
+            $et->Warn("$dirName BitsPerSample should have $samplesPerPix value$s", $minor);
+            push @bitsPerSample, $bitsPerSample[0] while @bitsPerSample < $samplesPerPix;
+            foreach (@bitsPerSample) {
+                $et->WarnOnce("$dirName BitsPerSample values are different", $minor) if $_ ne $bitsPerSample[0];
+                $et->WarnOnce("Invalid $dirName BitsPerSample value", $minor) if $_ < 1 or $_ > 32;
+            }
+        }
+        my $bitsPerPixel = 0;
+        $bitsPerPixel += $_ foreach @bitsPerSample;
+        my $expectedBytes = int(($$vInfo{0x100} * $$vInfo{0x101} * $bitsPerPixel + 7) / 8);
+        if ($expectedBytes != $totalBytes and
+            # (this problem seems normal for certain types of RAW files...)
+            $$et{TIFF_TYPE} !~ /^(K25|KDC|MEF|ORF|SRF)$/)
+        {
+            my ($adj, $minor);
+            if ($expectedBytes > $totalBytes) {
+                $adj = 'Under'; # undersized is a bigger problem because we may lose data
+                $minor = 0 unless $errFlag;
+            } else {
+                $adj = 'Over';
+                $minor = 1;
+            }
+            my $msg = "${adj}sized $dirName $$byteCountInfo[0]{Name} ($totalBytes bytes, but expected $expectedBytes)";
+            if (not defined $minor) {
+                # this is a serious error if we are writing the file and there
+                # is a chance that we may not copy all of the image data
+                # (but make it minor to allow the file to be written anyway)
+                $et->Error($msg, 1);
+            } else {
+                $et->Warn($msg, $minor);
+            }
+        }
+    }
+}
+
+#------------------------------------------------------------------------------
 # Handle error while writing EXIF
 # Inputs: 0) ExifTool ref, 1) error string, 2) tag table ref
 # Returns: undef on fatal error, or '' if minor error is ignored
@@ -1734,7 +513,7 @@ sub WriteExif($$$)
     my $verbose = $et->Options('Verbose');
     my $out = $et->Options('TextOut');
     my ($nextIfdPos, %offsetData, $inMakerNotes);
-    my (@offsetInfo, %xDelete, $strEnc);
+    my (@offsetInfo, %validateInfo, %xDelete, $strEnc);
     my $deleteAll = 0;
     my $newData = '';   # initialize buffer to receive new directory data
     my @imageData;      # image data blocks to copy later if requested
@@ -1748,10 +527,14 @@ sub WriteExif($$$)
     $$dirInfo{Multi} = 1 if $dirName =~ /^(IFD0|SubIFD)$/ and not defined $$dirInfo{Multi};
     $inMakerNotes = 1 if $$tagTablePtr{GROUPS}{0} eq 'MakerNotes';
     my $ifd;
+
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # loop through each IFD
 #
     for ($ifd=0; ; ++$ifd) {  # loop through multiple IFD's
+
+        # make sure that Compression and SubfileType are defined for this IFD (for Condition's)
+        $$et{Compression} = $$et{SubfileType} = '';
 
         # save pointer to start of this IFD within the newData
         my $newStart = length($newData);
@@ -1827,83 +610,13 @@ sub WriteExif($$$)
         # loop through new values and accumulate all information for this IFD
         my (%set, %mayDelete, $tagInfo);
         my $wrongDir = $crossDelete{$dirName};
-        foreach $tagInfo ($et->GetNewTagInfoList($tagTablePtr)) {
+        my @newTagInfo = $et->GetNewTagInfoList($tagTablePtr);
+        foreach $tagInfo (@newTagInfo) {
             my $tagID = $$tagInfo{TagID};
-            # evaluate conditional lists now if necessary
-            if (ref $$tagTablePtr{$tagID} eq 'ARRAY' or $$tagInfo{Condition}) {
-                my $curInfo = $et->GetTagInfo($tagTablePtr, $tagID);
-                if (defined $curInfo and not $curInfo) {
-                    # need value to evaluate the condition
-                    my ($val) = $et->GetNewValues($tagInfo);
-                    # must convert to binary for evaluating in Condition
-                    if ($$tagInfo{Format} and defined $val) {
-                        $val = WriteValue($val, $$tagInfo{Format}, $$tagInfo{Count});
-                    }
-                    if (defined $val) {
-                        my $fmt = $$tagInfo{Writable} || $$tagInfo{Format} || 'undef';
-                        my $cnt = $$tagInfo{Count} || 1;
-                        # always use old format/count for Condition in maker notes
-                        if ($inMakerNotes) {
-                            for ($index=0; $index<$numEntries; ++$index) {
-                                my $entry = $dirStart + 2 + 12 * $index;
-                                my $id = Get16u($dataPt, $entry);
-                                if ($id eq $tagID) {
-                                    my $f = Get16u($dataPt, $entry + 2);
-                                    if ($formatName[$f]) {
-                                        $fmt = $formatName[$f];
-                                        $cnt = Get32u($dataPt, $entry + 4);
-                                    }
-                                    last;
-                                }
-                            }
-                        }
-                        $curInfo = $et->GetTagInfo($tagTablePtr, $tagID, \$val, $fmt, $cnt);
-                    } else {
-                        # may want to delete this, but we need to see the value first
-                        $mayDelete{$tagID} = 1;
-                    }
-                }
-                # don't set this tag unless valid for the current condition
-                next unless defined $curInfo and $curInfo eq $tagInfo;
-            }
-            if ($$tagInfo{WriteCondition}) {
-                my $self = $et;   # set $self to be used in eval
-                #### eval WriteCondition ($self)
-                unless (eval $$tagInfo{WriteCondition}) {
-                    $@ and warn $@;
-                    next;
-                }
-            }
-            my $nvHash = $et->GetNewValueHash($tagInfo, $dirName);
-            unless ($nvHash) {
-                next unless $wrongDir;
-                # delete stuff from the wrong directory if setting somewhere else
-                $nvHash = $et->GetNewValueHash($tagInfo, $wrongDir);
-                # don't cross delete if not overwriting
-                next unless $et->IsOverwriting($nvHash);
-                # don't cross delete if specifically deleting from the other directory
-                # (Note: don't call GetValue() here because it shouldn't be called
-                #  if IsOverwriting returns < 0 -- eg. when shifting)
-                next if not defined $$nvHash{Value} and $$nvHash{WantGroup} and
-                        lc($$nvHash{WantGroup}) eq lc($wrongDir);
-                # remove this tag if found in this IFD
-                $xDelete{$tagID} = 1;
-            }
-            if ($set{$tagID}) {
-                # this tag is being set twice, which can happen if two Condition's
-                # were true for this tag.  Hopefully the only case where this can
-                # happen is the MakerNotes tag since it may store two very different
-                # types of information (MakerNotes and PreviewImage), but we want
-                # to store the MakerNotes if both are available
-                if ($tagID == 0x927c and $dirName =~ /^(ExifIFD|IFD0)$/) {
-                    next if $$tagInfo{Name} eq 'PreviewImage';
-                } else {
-                    $et->Warn(sprintf("Multiple new values for $name tag 0x%.4x",$tagID));
-                }
-            }
-            $set{$tagID} = $tagInfo;
+            # must evaluate Condition later when we have all DataMember's available
+            $set{$tagID} = (ref $$tagTablePtr{$tagID} eq 'ARRAY' or $$tagInfo{Condition}) ? '' : $tagInfo;
         }
-        
+
         # fix base offsets (some cameras incorrectly write maker notes in IFD0)
         if ($dirName eq 'MakerNotes' and $$dirInfo{Parent} =~ /^(ExifIFD|IFD0)$/ and
             $$et{TIFF_TYPE} !~ /^(ARW|SR2)$/ and not $$et{LeicaTrailerPos} and
@@ -1912,6 +625,11 @@ sub WriteExif($$$)
             # update local variables from fixed values
             $base = $$dirInfo{Base};
             $dataPos = $$dirInfo{DataPos};
+            # changed if ForceWrite tag was was set to "FixBase"
+            ++$$et{CHANGED} if $$et{FORCE_WRITE}{FixBase};
+            if ($$et{TIFF_TYPE} eq 'SRW' and $$et{Make} eq 'SAMSUNG' and $$et{Model} eq 'EK-GN120') {
+                $et->Error("EK-GN120 SRW files are too buggy to write");
+            }
         }
 
         # initialize variables to handle mandatory tags
@@ -1930,7 +648,7 @@ sub WriteExif($$$)
             # add mandatory tags if creating a new directory
             unless ($numEntries) {
                 foreach (keys %$mandatory) {
-                    $set{$_} or $set{$_} = $$tagTablePtr{$_};
+                    defined $set{$_} or $set{$_} = $$tagTablePtr{$_};
                 }
             }
         } else {
@@ -1944,6 +662,7 @@ sub WriteExif($$$)
             #  because we allow out-of-order tags in MakerNote IFD's but our
             #  logic to add new tags relies on ordered entries)
             foreach (keys %set) {
+                next unless $set{$_};
                 my $perm = $set{$_}{Permanent};
                 push @newTags, $_ if defined $perm and not $perm;
             }
@@ -2057,7 +776,7 @@ Entry:  for (;;) {
                             #### eval FixOffsets ($valuePtr, $valEnd, $size, $tagID, $wFlag)
                             eval $$dirInfo{FixOffsets};
                             unless (defined $valuePtr) {
-                                unless ($$et{DROP_TAGS}) {
+                                unless ($$et{DropTags}) {
                                     my $tagStr = $oldInfo ? $$oldInfo{Name} : sprintf("tag 0x%.4x",$oldID);
                                     return undef if $et->Error("Bad $name offset for $tagStr", $inMakerNotes);
                                 }
@@ -2122,12 +841,13 @@ Entry:  for (;;) {
                                 }
                             }
                             if ($oldSize > BINARY_DATA_LIMIT and $$origDirInfo{ImageData} and
-                                (not defined $oldInfo or ($oldInfo and not $$oldInfo{SubDirectory})))
+                                (not defined $oldInfo or ($oldInfo and
+                                (not $$oldInfo{SubDirectory} or $$oldInfo{ReadFromRAF}))))
                             {
                                 # copy huge data blocks later instead of loading into memory
                                 $oldValue = ''; # dummy empty value
                                 # copy this value later unless writing a new value
-                                unless ($set{$oldID}) {
+                                unless (defined $set{$oldID}) {
                                     my $pad = $oldSize & 0x01 ? 1 : 0;
                                     # save block information to copy later (set directory offset later)
                                     $oldImageData = [$base+$valuePtr+$dataPos, $oldSize, $pad];
@@ -2223,7 +943,7 @@ Entry:  for (;;) {
                             $et->Error("Invalid format ($oldFormName) for $name $$oldInfo{Name}", $inMakerNotes);
                             ++$index;  $oldID = $newID;  next;  # drop this tag
                         }
-                        if ($$oldInfo{Drop} and $$et{DROP_TAGS} and
+                        if ($$oldInfo{Drop} and $$et{DropTags} and
                             ($$oldInfo{Drop} == 1 or $$oldInfo{Drop} < $oldSize))
                         {
                             ++$index;  $oldID = $newID;  next;  # drop this tag
@@ -2236,6 +956,10 @@ Entry:  for (;;) {
                                 $readFormName = $oldFormName;
                                 $readFormat = $oldFormat;
                             }
+                            if ($$oldInfo{FixedSize}) {
+                                $oldSize = $$oldInfo{FixedSize} if $$oldInfo{FixedSize};
+                                $oldValue = substr($$valueDataPt, $valuePtr, $oldSize);
+                            }
                             # adjust number of items to read if format size changed
                             $readCount = $oldSize / $formatSize[$readFormat];
                         }
@@ -2243,7 +967,9 @@ Entry:  for (;;) {
                     if ($oldID <= $lastTagID and not $inMakerNotes) {
                         my $str = $oldInfo ? "$$oldInfo{Name} tag" : sprintf('tag 0x%x',$oldID);
                         if ($oldID == $lastTagID) {
-                            $et->Warn("Duplicate $str in $name");;
+                            $et->Warn("Duplicate $str in $name");
+                            # put this tag back into the newTags list if necessary
+                            unshift @newTags, $oldID if defined $set{$oldID};
                         } else {
                             $et->Warn("\u$str out of sequence in $name");
                         }
@@ -2264,7 +990,7 @@ Entry:  for (;;) {
                 $isNew = 1;
             } elsif (not defined $newID) {
                 # maker notes will have no new tags defined
-                if ($set{$oldID}) {
+                if (defined $set{$oldID}) {
                     $newID = $oldID;
                     $isNew = 0;
                 } else {
@@ -2285,6 +1011,78 @@ Entry:  for (;;) {
             if ($isNew >= 0) {
                 # add, edit or delete this tag
                 shift @newTags; # remove from list
+                my $curInfo = $set{$newID};
+                unless ($curInfo or $$addDirs{$newID}) {
+                    # we can finally get the specific tagInfo reference for this tag
+                    # (because we can now evaluate the Condition statement since all
+                    #  DataMember's have been obtained for tags up to this one)
+                    $curInfo = $et->GetTagInfo($tagTablePtr, $newID);
+                    if (defined $curInfo and not $curInfo) {
+                        # need value to evaluate the condition
+                        # (tricky because we need the tagInfo ref to get the value,
+                        #  so we must loop through all new tagInfo's...)
+                        foreach $tagInfo (@newTagInfo) {
+                            next unless $$tagInfo{TagID} == $newID;
+                            my $val = $et->GetNewValue($tagInfo);
+                            defined $val or $mayDelete{$newID} = 1, next;
+                            # must convert to binary for evaluating in Condition
+                            my $fmt = $$tagInfo{Format} || $$tagInfo{Writable};
+                            if ($fmt) {
+                                $val = WriteValue($val, $fmt, $$tagInfo{Count});
+                                defined $val or $mayDelete{$newID} = 1, next;
+                            }
+                            $curInfo = $et->GetTagInfo($tagTablePtr, $newID, \$val, $oldFormName, $oldCount);
+                            if ($curInfo) {
+                                last if $curInfo eq $tagInfo;
+                                undef $curInfo;
+                            }
+                        }
+                        # may want to delete this, but we need to see the old value first
+                        $mayDelete{$newID} = 1 unless $curInfo;
+                    }
+                    # don't set this tag unless valid for the current condition
+                    if ($curInfo and $$et{NEW_VALUE}{$curInfo}) {
+                        $set{$newID} = $curInfo;
+                    } else {
+                        next if $isNew > 0;
+                        $isNew = -1;
+                        undef $curInfo;
+                    }
+                }
+                if ($curInfo) {
+                    if ($$curInfo{WriteCondition}) {
+                        my $self = $et;   # set $self to be used in eval
+                        #### eval WriteCondition ($self)
+                        unless (eval $$curInfo{WriteCondition}) {
+                            $@ and warn $@;
+                            goto NoWrite;   # GOTO !
+                        }
+                    }
+                    my $nvHash;
+                    $nvHash = $et->GetNewValueHash($curInfo, $dirName) if $isNew >= 0;
+                    unless ($nvHash or defined $$mandatory{$newID}) {
+                        goto NoWrite unless $wrongDir;  # GOTO !
+                        # delete stuff from the wrong directory if setting somewhere else
+                        $nvHash = $et->GetNewValueHash($curInfo, $wrongDir);
+                        # don't cross delete if not overwriting
+                        goto NoWrite unless $et->IsOverwriting($nvHash);    # GOTO !
+                        # don't cross delete if specifically deleting from the other directory
+                        # (Note: don't call GetValue() here because it shouldn't be called
+                        #  if IsOverwriting returns < 0 -- eg. when shifting)
+                        if (not defined $$nvHash{Value} and $$nvHash{WantGroup} and
+                                lc($$nvHash{WantGroup}) eq lc($wrongDir))
+                        {
+                            goto NoWrite;   # GOTO !
+                        } else {
+                            # remove this tag if found in this IFD
+                            $xDelete{$newID} = 1;
+                        }
+                    }
+                } elsif (not $$addDirs{$newID}) {
+NoWrite:            next if $isNew > 0;
+                    delete $set{$newID};
+                    $isNew = -1;
+                }
                 if ($set{$newID}) {
 #
 # set the new tag value (or 'next' if deleting tag)
@@ -2362,11 +1160,11 @@ Entry:  for (;;) {
                         }
                     }
                     if ($isOverwriting) {
-                        $newVal = $et->GetNewValues($nvHash) unless defined $newVal;
+                        $newVal = $et->GetNewValue($nvHash) unless defined $newVal;
                         # value undefined if deleting this tag
                         # (also delete tag if cross-deleting and this isn't a date/time shift)
                         if (not defined $newVal or ($xDelete{$newID} and not defined $$nvHash{Shift})) {
-                            if ($$newInfo{RawConvInv} and defined $$nvHash{Value}) {
+                            if (not defined $newVal and $$newInfo{RawConvInv} and defined $$nvHash{Value}) {
                                 # error in RawConvInv, so rewrite existing tag
                                 goto NoOverwrite; # GOTO!
                             }
@@ -2394,8 +1192,7 @@ Entry:  for (;;) {
                                 $$newInfo{Name} ne 'PreviewImage')
                             {
                                 my $name = $$newInfo{MakerNotes} ? 'MakerNotes' : $$newInfo{Name};
-                                $et->Warn("$name too large to write in JPEG segment");
-                                goto NoOverwrite; # GOTO!
+                                $et->Warn("Writing large value for $name",1);
                             }
                             # re-code if necessary
                             if ($strEnc and $newFormName eq 'string') {
@@ -2419,8 +1216,12 @@ Entry:  for (;;) {
                             }
                             if ($verbose > 1) {
                                 $et->VerboseValue("- $dirName:$$newInfo{Name}", $val) unless $isNew;
-                                my $str = $nvHash ? '' : ' (mandatory)';
-                                $et->VerboseValue("+ $dirName:$$newInfo{Name}", $newVal, $str);
+                                if ($$newInfo{OffsetPair} and $newVal eq '4277010157') { # (0xfeedfeed)
+                                    print { $$et{OPTIONS}{TextOut} } "    + $dirName:$$newInfo{Name} = <tbd>\n";
+                                } else {
+                                    my $str = $nvHash ? '' : ' (mandatory)';
+                                    $et->VerboseValue("+ $dirName:$$newInfo{Name}", $newVal, $str);
+                                }
                             }
                         }
                     } else {
@@ -2518,16 +1319,13 @@ NoOverwrite:            next if $isNew > 0;
                         # prefer tag from Composite table if it exists (otherwise
                         # PreviewImage data would be taken from Extra tag)
                         my $compInfo = $Image::ExifTool::Composite{$dataTag};
-                        $offsetData{$dataTag} = $et->GetNewValues($compInfo || $dataTag);
+                        $offsetData{$dataTag} = $et->GetNewValue($compInfo || $dataTag);
                         my $err;
                         if (defined $offsetData{$dataTag}) {
                             my $len = length $offsetData{$dataTag};
                             if ($dataTag eq 'PreviewImage') {
                                 # must set DEL_PREVIEW flag now if preview fit into IFD
                                 $$et{DEL_PREVIEW} = 1 if $len <= 4;
-                            } elsif ($$et{FILE_TYPE} eq 'JPEG' and $len > 60000) {
-                                delete $offsetData{$dataTag};
-                                $err = "$dataTag not written (too large for JPEG segment)";
                             }
                         } else {
                             $err = "$dataTag not found";
@@ -2554,7 +1352,7 @@ NoOverwrite:            next if $isNew > 0;
                         next;
                     }
                     my $saveOrder = GetByteOrder();
-                    if ($isNew >= 0 and $set{$newID}) {
+                    if ($isNew >= 0 and defined $set{$newID}) {
                         # we are writing a whole new maker note block
                         # --> add fixup information if necessary
                         my $nvHash = $et->GetNewValueHash($newInfo, $dirName);
@@ -2588,6 +1386,7 @@ NoOverwrite:            next if $isNew > 0;
                             $subdirInfo{EntryBased} = $$sub{EntryBased};
                             $subdirInfo{NoFixBase} = 1 if defined $$sub{Base};
                             $subdirInfo{AutoFix} = $$sub{AutoFix};
+                            SetByteOrder($$sub{ByteOrder}) if $$sub{ByteOrder};
                         }
                         # get the proper tag table for these maker notes
                         if ($oldInfo and $$oldInfo{SubDirectory}) {
@@ -2598,6 +1397,7 @@ NoOverwrite:            next if $isNew > 0;
                         } else {
                             $et->Warn('Internal problem getting maker notes tag table');
                         }
+                        $writeProc or $writeProc = $$subTable{WRITE_PROC} if $subTable;
                         $subTable or $subTable = $tagTablePtr;
                         if ($writeProc and
                             $writeProc eq \&Image::ExifTool::MakerNotes::WriteUnknownOrPreview and
@@ -2633,7 +1433,12 @@ NoOverwrite:            next if $isNew > 0;
                             }
                             # rewrite maker notes
                             $subdir = $et->WriteDirectory(\%subdirInfo, $subTable);
-                        } elsif (not $notIFD) {
+                        } elsif ($notIFD) {
+                            if ($writeProc) {
+                                $loc = 0;
+                                $subdir = $et->WriteDirectory(\%subdirInfo, $subTable);
+                            }
+                        } else {
                             my $msg = 'Maker notes could not be parsed';
                             if ($$et{FILE_TYPE} eq 'JPEG') {
                                 $et->Warn($msg, 1);
@@ -2642,7 +1447,7 @@ NoOverwrite:            next if $isNew > 0;
                             }
                         }
                         if (defined $subdir) {
-                            next unless length $subdir;
+                            length $subdir or SetByteOrder($saveOrder), next;
                             my $valLen = length($valBuff);
                             # restore existing header and substitute the new
                             # maker notes for the old value
@@ -2708,7 +1513,8 @@ NoOverwrite:            next if $isNew > 0;
                 # process existing subdirectory unless we are overwriting it entirely
                 } elsif ($$newInfo{SubDirectory} and $isNew <= 0 and not $isOverwriting
                     # don't edit directory if Writable is set to 0
-                    and (not defined $$newInfo{Writable} or $$newInfo{Writable}))
+                    and (not defined $$newInfo{Writable} or $$newInfo{Writable}) and
+                    not $$newInfo{ReadFromRAF})
                 {
 
                     my $subdir = $$newInfo{SubDirectory};
@@ -2938,7 +1744,7 @@ NoOverwrite:            next if $isNew > 0;
                         my $hasVRD;
                         if ($$et{NEW_VALUE}{$Image::ExifTool::Extra{CanonVRD}}) {
                             # adding or deleting as a block
-                            $hasVRD = $et->GetNewValues('CanonVRD') ? 1 : 0;
+                            $hasVRD = $et->GetNewValue('CanonVRD') ? 1 : 0;
                         } elsif ($$et{DEL_GROUP}{CanonVRD} or
                                  $$et{DEL_GROUP}{Trailer})
                         {
@@ -2961,7 +1767,7 @@ NoOverwrite:            next if $isNew > 0;
                         my $odd;
                         my $oddInfo = $Image::ExifTool::Composite{OriginalDecisionData};
                         if ($oddInfo and $$et{NEW_VALUE}{$oddInfo}) {
-                            $odd = $et->GetNewValues($dataTag);
+                            $odd = $et->GetNewValue($dataTag);
                             if ($verbose > 1) {
                                 print $out "    - $dirName:$dataTag\n" if $$newValuePt ne "\0\0\0\0";
                                 print $out "    + $dirName:$dataTag\n" if $odd;
@@ -3000,6 +1806,7 @@ NoOverwrite:            next if $isNew > 0;
                             SetByteOrder($$newInfo{ByteOrder}) if $$newInfo{ByteOrder};
                             @vals = ReadValue(\$oldValue, 0, $readFormName, $readCount, $oldSize);
                             SetByteOrder($oldOrder);
+                            $validateInfo{$newID} = [$newInfo, join(' ',@vals)] unless $$newInfo{IsOffset};
                         }
                         # only support int32 pointers (for now)
                         if ($formatSize[$newFormat] != 4 and $$newInfo{IsOffset}) {
@@ -3043,8 +1850,9 @@ NoOverwrite:            next if $isNew > 0;
                         if (ref $conv eq 'CODE') {
                             &$conv($val, $et);
                         } else {
-                            my ($self, $tag, $taginfo) = ($et, $$newInfo{Name}, $newInfo);
-                            #### eval RawConv ($self, $val, $tag, $tagInfo)
+                            my ($priority, @grps);
+                            my ($self, $tag, $tagInfo) = ($et, $$newInfo{Name}, $newInfo);
+                            #### eval RawConv ($self, $val, $tag, $tagInfo, $priority, @grps)
                             eval $conv;
                         }
                     } else {
@@ -3058,7 +1866,12 @@ NoOverwrite:            next if $isNew > 0;
             my $newSize = length($$newValuePt);
             my $fsize = $formatSize[$newFormat];
             my $offsetVal;
-            $newCount = int(($newSize + $fsize - 1) / $fsize);  # set proper count
+            # set proper count
+            $newCount = int(($newSize + $fsize - 1) / $fsize) unless $oldInfo and $$oldInfo{FixedSize};
+            if ($saveForValidate{$newID} and $tagTablePtr eq \%Image::ExifTool::Exif::Main) {
+                my @vals = ReadValue(\$newValue, 0, $newFormName, $newCount, $newSize);
+                $validateInfo{$newID} = join ' ',@vals;
+            }
             if ($newSize > 4) {
                 # zero-pad to an even number of bytes (required by EXIF standard)
                 # and make sure we are a multiple of the format size
@@ -3097,7 +1910,7 @@ NoOverwrite:            next if $isNew > 0;
                 }
                 if ($putFirst and $$dirInfo{HeaderPtr}) {
                     my $hdrPtr = $$dirInfo{HeaderPtr};
-                    # place this value immediately after the TIFF header
+                    # place this value immediately after the TIFF header (eg. IIQ maker notes)
                     $offsetVal = Set32u(length $$hdrPtr);
                     $$hdrPtr .= $$newValuePt;
                 } else {
@@ -3132,6 +1945,10 @@ NoOverwrite:            next if $isNew > 0;
                 undef $deleteAll;
                 undef $allMandatory;
             }
+        }
+        if (%validateInfo) {
+            ValidateImageData($et, \%validateInfo, $dirName, 1);
+            undef %validateInfo;
         }
         if ($ignoreCount) {
             my $y = $ignoreCount > 1 ? 'ies' : 'y';
@@ -3180,9 +1997,15 @@ NoOverwrite:            next if $isNew > 0;
             $entryBasedFixup->ApplyFixup(\$dirBuff);
             undef $entryBasedFixup;
         }
+        # initialize next IFD pointer to zero
+        my $nextIFD = Set32u(0);
+        # some cameras use a different amount of padding after the makernote IFD
+        if ($dirName eq 'MakerNotes' and $$dirInfo{Parent} =~ /^(ExifIFD|IFD0)$/) {
+            my ($rel, $pad) = Image::ExifTool::MakerNotes::GetMakerNoteOffset($et);
+            $nextIFD = "\0" x $pad if defined $pad and ($pad==0 or ($pad>4 and $pad<=32));
+        }
         # add directory entry count to start of IFD and next IFD pointer to end
-        # (temporarily set next IFD pointer to zero)
-        $newData .= Set16u($newEntries) . $dirBuff . Set32u(0);
+        $newData .= Set16u($newEntries) . $dirBuff . $nextIFD;
         # get position of value data in newData
         my $valPos = length($newData);
         # go back now and set next IFD pointer if this isn't the first IFD
@@ -3192,7 +2015,7 @@ NoOverwrite:            next if $isNew > 0;
             $fixup->AddFixup($nextIfdPos,'NextIFD');    # add fixup for this offset in newData
         }
         # remember position of 'next IFD' pointer so we can set it next time around
-        $nextIfdPos = $valPos - 4;
+        $nextIfdPos = length($nextIFD) ? $valPos - length($nextIFD) : undef;
         # add value data after IFD
         $newData .= $valBuff;
 #
@@ -3612,7 +2435,7 @@ NoOverwrite:            next if $isNew > 0;
                     my $subIfdDataFixup = new Image::ExifTool::Fixup;
                     $subIfdDataFixup->AddFixup($entry + 8);
                     # save fixup in imageData list
-                    $$blockInfo[4] = $subIfdDataFixup; 
+                    $$blockInfo[4] = $subIfdDataFixup;
                 }
                 # must reset entry pointer so we don't use it again in a parent IFD!
                 $$blockInfo[3] = undef;
@@ -3668,7 +2491,7 @@ NoOverwrite:            next if $isNew > 0;
                 $fixup->SetMarkerPointers(\$newData, 'PreviewImage', $newPos);
                 $newData .= $$pt;
                 # set flag to delete old preview unless it was contained in the EXIF
-                $$et{DEL_PREVIEW} = 1 unless $$et{PREVIEW_INFO}{WasContained};       
+                $$et{DEL_PREVIEW} = 1 unless $$et{PREVIEW_INFO}{WasContained};
                 delete $$et{PREVIEW_INFO};   # done with our preview data
             } else {
                 # Doesn't fit, or we still don't know, so save fixup information
@@ -3703,6 +2526,9 @@ NoOverwrite:            next if $isNew > 0;
     # (could be up to 10 bytes and still be empty)
     $newData = '' if defined $newData and length($newData) < 12;
 
+    # set changed if ForceWrite tag was set to "EXIF"
+    ++$$et{CHANGED} if defined $newData and length $newData and $$et{FORCE_WRITE}{EXIF};
+
     return $newData;    # return our directory data
 }
 
@@ -3724,7 +2550,7 @@ This file contains routines to write EXIF metadata.
 
 =head1 AUTHOR
 
-Copyright 2003-2014, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

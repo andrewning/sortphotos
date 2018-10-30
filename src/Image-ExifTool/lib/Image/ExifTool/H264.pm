@@ -23,8 +23,9 @@ use strict;
 use vars qw($VERSION %convMake);
 use Image::ExifTool qw(:DataAccess :Utils);
 use Image::ExifTool::Exif;
+use Image::ExifTool::GPS;
 
-$VERSION = '1.12';
+$VERSION = '1.17';
 
 sub ProcessSEI($$);
 
@@ -100,15 +101,16 @@ my $parsePictureTiming; # flag to enable parsing of picture timing information (
         Combine => 1,   # the next tag (0x19) contains the rest of the date
         # first byte is timezone information:
         #   0x80 - unused
-        #   0x40 - DST flag (currently not decoded)
+        #   0x40 - DST flag
         #   0x20 - TimeZoneSign
         #   0x1e - TimeZoneValue
         #   0x01 - half-hour flag
         ValueConv => q{
             my ($tz, @a) = unpack('C*',$val);
-            return sprintf('%.2x%.2x:%.2x:%.2x %.2x:%.2x:%.2x%s%.2d:%s', @a,
+            return sprintf('%.2x%.2x:%.2x:%.2x %.2x:%.2x:%.2x%s%.2d:%s%s', @a,
                            $tz & 0x20 ? '-' : '+', ($tz >> 1) & 0x0f,
-                           $tz & 0x01 ? '30' : '00');
+                           $tz & 0x01 ? '30' : '00',
+                           $tz & 0x40 ? ' DST' : '');
         },
         PrintConv => '$self->ConvertDateTime($val)',
     },
@@ -389,7 +391,7 @@ my $parsePictureTiming; # flag to enable parsing of picture timing information (
     },
     0xe4 => { #PH
         Name => 'Model',
-        Condition => '$$self{Make} eq "Sony"',
+        Condition => '$$self{Make} eq "Sony"', # (possibly also Canon models?)
         Description => 'Camera Model Name',
         Notes => 'Sony cameras only, combined with tags 0xe5 and 0xe6',
         Format => 'string',
@@ -431,24 +433,24 @@ my $parsePictureTiming; # flag to enable parsing of picture timing information (
     1.1 => {
         Name => 'ExposureProgram',
         Mask => 0xf0,
-        ValueConv => '$val == 0xf0 ? undef : $val',
+        ValueConv => '$val == 15 ? undef : $val',
         PrintConv => {
-            0x00 => 'Program AE',
-            0x10 => 'Gain', #?
-            0x20 => 'Shutter speed priority AE',
-            0x30 => 'Aperture-priority AE',
-            0x40 => 'Manual',
+            0 => 'Program AE',
+            1 => 'Gain', #?
+            2 => 'Shutter speed priority AE',
+            3 => 'Aperture-priority AE',
+            4 => 'Manual',
         },
     },
     2.1 => {
         Name => 'WhiteBalance',
         Mask => 0xe0,
-        ValueConv => '$val == 0xe0 ? undef : $val',
+        ValueConv => '$val == 7 ? undef : $val',
         PrintConv => {
-            0x00 => 'Auto',
-            0x20 => 'Hold',
-            0x40 => '1-Push',
-            0x60 => 'Daylight',
+            0 => 'Auto',
+            1 => 'Hold',
+            2 => '1-Push',
+            3 => 'Daylight',
         },
     },
     3 => {
@@ -519,6 +521,8 @@ my $parsePictureTiming; # flag to enable parsing of picture timing information (
     #       0x0345 - Panasonic HC-V7272
     #       0x0414 - Panasonic AG-AF100
     #       0x0591 - various Panasonic DMC models
+    #       0x0802 - Panasonic DMC-TZ60 with GPS information off
+    #       0x0803 - Panasonic DMC-TZ60 with GPS information on
     #       0x3001 - various Sony DSC, HDR, NEX and SLT models
     #       0x3003 - various Sony DSC models
     #       0x3100 - various Sony DSC, ILCE, NEX and SLT models
@@ -706,7 +710,8 @@ sub DecodeScalingMatrices($)
 
 #------------------------------------------------------------------------------
 # Parse H.264 sequence parameter set RBSP (ref 1)
-# Inputs) 0) ExifTool ref, 1) tag table ref, 2) data ref
+# Inputs: 0) ExifTool ref, 1) tag table ref, 2) data ref
+# Notes: All this just to get the image size!
 sub ParseSeqParamSet($$$)
 {
     my ($et, $tagTablePtr, $dataPt) = @_;
@@ -828,7 +833,9 @@ sub ParseSeqParamSet($$$)
 
 #------------------------------------------------------------------------------
 # Parse H.264 picture timing SEI message (payload type 1) (ref 1)
-# Inputs) 0) ExifTool ref, 1) data ref
+# Inputs: 0) ExifTool ref, 1) data ref
+# Notes: this routine is for test purposes only, and not called unless the
+#        $parsePictureTiming flag is set
 sub ParsePictureTiming($$)
 {
     my ($et, $dataPt) = @_;
@@ -885,6 +892,26 @@ sub ParsePictureTiming($$)
 # Process H.264 Supplementary Enhancement Information (ref 1/PH)
 # Inputs: 0) Exiftool ref, 1) dirInfo ref, 2) tag table ref
 # Returns: 1 if we processed payload type 5
+# Payload types:
+#   0 - buffer period
+#   1 - pic timing
+#   2 - pan scan rect
+#   3 - filler payload
+#   4 - user data registered itu t t35
+#   5 - user data unregistered
+#   6 - recovery point
+#   7 - dec ref pic marking repetition
+#   8 - spare pic
+#   9 - sene info
+#  10 - sub seq info
+#  11 - sub seq layer characteristics
+#  12 - sub seq characteristics
+#  13 - full frame freeze
+#  14 - full frame freeze release
+#  15 - full frame snapshot
+#  16 - progressive refinement segment start
+#  17 - progressive refinement segment end
+#  18 - motion constrained slice group set
 sub ProcessSEI($$)
 {
     my ($et, $dirInfo) = @_;
@@ -911,6 +938,7 @@ sub ProcessSEI($$)
             last unless $t == 255;
         }
         return 0 if $pos + $size > $end;
+        $et->VPrint(1,"    (SEI type $type)\n");
         if ($type == 1) {                   # picture timing information
             if ($parsePictureTiming) {
                 my $buff = substr($$dataPt, $pos, $size);
@@ -927,10 +955,6 @@ sub ProcessSEI($$)
     # - plus "GA94" for closed-caption data (currently not decoded)
     return 0 unless $size > 20 and substr($$dataPt, $pos, 20) eq
         "\x17\xee\x8c\x60\xf8\x4d\x11\xd9\x8c\xd6\x08\0\x20\x0c\x9a\x66MDPM";
-
-    # load the GPS module because it contains conversion routines and
-    # Composite tags needed for a number of tags we may be extracting
-    require Image::ExifTool::GPS;
 #
 # parse the MDPM records in the UUID 17ee8c60f84d11d98cd60800200c9a66
 # unregistered user data payload (ref PH)
@@ -1031,9 +1055,7 @@ sub ParseH264Video($$)
         $buff .= substr($$dataPt, $pos, $end - $pos);
         if ($verbose > 1) {
             printf $out "  NAL Unit Type: 0x%x (%d bytes)\n",$nal_unit_type, length $buff;
-            my %parms = ( Out => $out );
-            $parms{MaxLen} = 96 if $verbose < 4;
-            HexDump(\$buff, undef, %parms) if $verbose > 2;
+            $et->VerboseDump(\$buff);
         }
         pos($$dataPt) = $pos = $nextPos;
 
@@ -1086,7 +1108,7 @@ information from H.264 video streams.
 
 =head1 AUTHOR
 
-Copyright 2003-2014, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

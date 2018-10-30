@@ -7,8 +7,10 @@
 #               02/25/2004 - PH Added new codes from libgeotiff-1.2.1
 #               02/01/2007 - PH Added new codes from libgeotiff-1.2.3
 #               01/22/2014 - PH Added new code from libgeotiff-1.4.0
+#               01/19/2015 - PH Added ChartTIFF tags
 #
-# Reference:    ftp://ftp.remotesensing.org/geotiff/libgeotiff/libgeotiff-1.1.4.tar.gz
+# References:   1) ftp://ftp.remotesensing.org/geotiff/libgeotiff/libgeotiff-1.1.4.tar.gz
+#               2) http://www.charttiff.com/whitepapers.shtml
 #------------------------------------------------------------------------------
 
 package Image::ExifTool::GeoTiff;
@@ -17,11 +19,12 @@ use strict;
 use vars qw($VERSION);
 use Image::ExifTool qw(:DataAccess :Utils);
 
-$VERSION = '1.10';
+$VERSION = '1.12';
 
 # format codes for geoTiff directory entries
 my %geoTiffFormat = (
-    0      => 'int16u',
+    0      => 'int16u', # (value is stored in offset, and count is 1)
+    0x87af => 'int16u', # (value is stored after directory)
     0x87b0 => 'double',
     0x87b1 => 'string',
 );
@@ -50,6 +53,49 @@ my %epsg_units = (
     9106 => 'Angular Gon',
     9107 => 'Angular DMS',
     9108 => 'Angular DMS Hemisphere',
+    32767 => 'User Defined',
+);
+
+my %epsg_vertcs = (
+    0 => 'Undefined',
+    5001 => 'Airy 1830 ellipsoid',
+    5002 => 'Airy Modified 1849 ellipsoid',
+    5003 => 'ANS ellipsoid',
+    5004 => 'Bessel 1841 ellipsoid',
+    5005 => 'Bessel Modified ellipsoid',
+    5006 => 'Bessel Namibia ellipsoid',
+    5007 => 'Clarke 1858 ellipsoid',
+    5008 => 'Clarke 1866 ellipsoid',
+    5010 => 'Clarke 1880 Benoit ellipsoid',
+    5011 => 'Clarke 1880 IGN ellipsoid',
+    5012 => 'Clarke 1880 RGS ellipsoid',
+    5013 => 'Clarke 1880 Arc ellipsoid',
+    5014 => 'Clarke 1880 SGA 1922 ellipsoid',
+    5015 => 'Everest 1830 1937 Adjustment ellipsoid',
+    5016 => 'Everest 1830 1967 Definition ellipsoid',
+    5017 => 'Everest 1830 1975 Definition ellipsoid',
+    5018 => 'Everest 1830 Modified ellipsoid',
+    5019 => 'GRS 1980 ellipsoid',
+    5020 => 'Helmert 1906 ellipsoid',
+    5021 => 'INS ellipsoid',
+    5022 => 'International 1924 ellipsoid',
+    5023 => 'International 1967 ellipsoid',
+    5024 => 'Krassowsky 1940 ellipsoid',
+    5025 => 'NWL 9D ellipsoid',
+    5026 => 'NWL 10D ellipsoid',
+    5027 => 'Plessis 1817 ellipsoid',
+    5028 => 'Struve 1860 ellipsoid',
+    5029 => 'War Office ellipsoid',
+    5030 => 'WGS 84 ellipsoid',
+    5031 => 'GEM 10C ellipsoid',
+    5032 => 'OSU86F ellipsoid',
+    5033 => 'OSU91A ellipsoid',
+    5101 => 'Newlyn',
+    5102 => 'North American Vertical Datum 1929',
+    5103 => 'North American Vertical Datum 1988',
+    5104 => 'Yellow Sea 1956',
+    5105 => 'Baltic Sea',
+    5106 => 'Caspian Sea',
     32767 => 'User Defined',
 );
 
@@ -2007,62 +2053,76 @@ my %epsg_units = (
     3096 => 'ProjRectifiedGridAngle',
     4096 => {
         Name => 'VerticalCSType',
-        PrintConv => {
-            # epsg_vertcs
-            5001 => 'Airy 1830 ellipsoid',
-            5002 => 'Airy Modified 1849 ellipsoid',
-            5003 => 'ANS ellipsoid',
-            5004 => 'Bessel 1841 ellipsoid',
-            5005 => 'Bessel Modified ellipsoid',
-            5006 => 'Bessel Namibia ellipsoid',
-            5007 => 'Clarke 1858 ellipsoid',
-            5008 => 'Clarke 1866 ellipsoid',
-            5010 => 'Clarke 1880 Benoit ellipsoid',
-            5011 => 'Clarke 1880 IGN ellipsoid',
-            5012 => 'Clarke 1880 RGS ellipsoid',
-            5013 => 'Clarke 1880 Arc ellipsoid',
-            5014 => 'Clarke 1880 SGA 1922 ellipsoid',
-            5015 => 'Everest 1830 1937 Adjustment ellipsoid',
-            5016 => 'Everest 1830 1967 Definition ellipsoid',
-            5017 => 'Everest 1830 1975 Definition ellipsoid',
-            5018 => 'Everest 1830 Modified ellipsoid',
-            5019 => 'GRS 1980 ellipsoid',
-            5020 => 'Helmert 1906 ellipsoid',
-            5021 => 'INS ellipsoid',
-            5022 => 'International 1924 ellipsoid',
-            5023 => 'International 1967 ellipsoid',
-            5024 => 'Krassowsky 1940 ellipsoid',
-            5025 => 'NWL 9D ellipsoid',
-            5026 => 'NWL 10D ellipsoid',
-            5027 => 'Plessis 1817 ellipsoid',
-            5028 => 'Struve 1860 ellipsoid',
-            5029 => 'War Office ellipsoid',
-            5030 => 'WGS 84 ellipsoid',
-            5031 => 'GEM 10C ellipsoid',
-            5032 => 'OSU86F ellipsoid',
-            5033 => 'OSU91A ellipsoid',
-            5101 => 'Newlyn',
-            5102 => 'North American Vertical Datum 1929',
-            5103 => 'North American Vertical Datum 1988',
-            5104 => 'Yellow Sea 1956',
-            5105 => 'Baltic Sea',
-            5106 => 'Caspian Sea',
-            32767 => 'User Defined',
-        },
+        SeparateTable => 'VerticalCS',
+        PrintConv => \%epsg_vertcs,
     },
     4097 => 'VerticalCitation',
     4098 => {
         Name => 'VerticalDatum',
-        PrintConv => {
-            1 => 'Vertical Datum Base',
-            32767 => 'User Defined',
-        },
+        SeparateTable => 'VerticalCS',
+        PrintConv => \%epsg_vertcs,
     },
     4099 => {
         Name => 'VerticalUnits',
         SeparateTable => 'Units',
         PrintConv => \%epsg_units,
     },
+#
+# ChartTiff extensions (ref 2)
+#
+    47001 => {
+        Name => 'ChartFormat',
+        PrintConv => {
+            47500 => 'General',
+            47501 => 'Coastal',
+            47502 => 'Harbor',
+            47503 => 'SailingInternational',
+            47504 => 'SmallCraft Route',
+            47505 => 'SmallCraftArea',
+            47506 => 'SmallCraftFolio',
+            47507 => 'Topographic',
+            47508 => 'Recreation',
+            47509 => 'Index',
+            47510 => 'Inset',
+        },
+    },
+    47002 => 'ChartSource',
+    47003 => 'ChartSourceEdition',
+    47004 => 'ChartSourceDate',
+    47005 => 'ChartCorrDate',
+    47006 => 'ChartCountryOrigin',
+    47007 => 'ChartRasterEdition',
+    47008 => {
+        Name => 'ChartSoundingDatum',
+        PrintConv => {
+            47600 => 'Equatorial Spring Low Water',
+            47601 => 'Indian Spring Low Water',
+            47602 => 'Lowest Astronomical Tide',
+            47603 => 'Lowest Low Water',
+            47604 => 'Lowest Normal Low Water',
+            47605 => 'Mean Higher High Water',
+            47606 => 'Mean High Water',
+            47607 => 'Mean High Water Springs',
+            47608 => 'Mean Lower Low Water',
+            47609 => 'Mean Lower Low Water Springs',
+            47610 => 'Mean Low Water',
+            47611 => 'Mean Sea Level',
+            47612 => 'Tropic Higher High Water',
+            47613 => 'Tropic Lower Low Water',
+        },
+    },
+    47009 => {
+        Name => 'ChartDepthUnits',
+        SeparateTable => 'Units',
+        PrintConv => \%epsg_units,
+    },
+    47010 => 'ChartMagVar',
+    47011 => 'ChartMagVarYear',
+    47012 => 'ChartMagVarAnnChange',
+    47013 => 'ChartWGSNSShift',
+    47015 => 'InsetNWPixelX',
+    47016 => 'InsetNWPixelY',
+    47017 => 'ChartContourInterval',
 );
 
 #------------------------------------------------------------------------------
@@ -2108,31 +2168,30 @@ sub ProcessGeoTiff($)
             my $offset = Get16u($dirData, $pt+6);
             my $format = $geoTiffFormat{$loc};
             my ($val, $dataPt);
-            if ($format eq 'double') {          # in the double parms
-                if (not $doubleData or length($$doubleData) < 8*($offset+$count)) {
-                    $et->Warn("Missing double data for $$tagInfo{Name}");
-                    next;
-                }
+            if (not $format) {
+                $et->Warn("Unknown GeoTiff location ($loc) for $$tagInfo{Name}");
+                next;
+            } elsif ($format eq 'double') {     # in the double parms
                 $dataPt = $doubleData;
-                $offset *= 8;
-                $val = Image::ExifTool::ReadValue($dataPt, $offset, $format,
-                                                  $count, length($$doubleData)-$offset);
             } elsif ($format eq 'string') {     # in the ASCII parms
-                if (not $asciiData or length($$asciiData) < $offset+$count) {
-                    $et->Warn("Missing string data for $$tagInfo{Name}");
-                    next;
-                }
                 $dataPt = $asciiData;
-                $val = substr($$dataPt, $offset, $count);
-                $val =~ s/(\0|\|)$//;   # remove trailing terminator (NULL or '|')
-            } elsif ($format eq 'int16u') {     # use the offset as the value
+            } elsif ($format eq 'int16u') {     # in the GeoTiffDirectory data
                 $dataPt = $dirData;
-                $val = $offset;
-                $offset = $pt+6;
-            } else {
-                $et->Warn("Unknown GeoTiff location: $loc");
+                unless ($loc) {                 # is value is stored in offset?
+                    $count = 1;                 # (implied by location of 0)
+                    $offset = ($pt + 6) / 2;    # offset of the "offset" value
+                }
+            }
+            my $size = Image::ExifTool::FormatSize($format);
+            if (not $dataPt or length($$dataPt) < $size*($offset+$count)) {
+                $et->Warn("Missing $format data for $$tagInfo{Name}");
                 next;
             }
+            $offset *= $size;
+            $val = Image::ExifTool::ReadValue($dataPt, $offset, $format,
+                                              $count, length($$dataPt)-$offset);
+            # remove trailing terminator (NULL or '|') from string value
+            $val =~ s/(\0|\|)$// if $format eq 'string';
             $verbose and $et->VerboseInfo($tag, $tagInfo,
                 'Table'  => $tagTable,
                 'Index'  => $i,
@@ -2141,7 +2200,7 @@ sub ProcessGeoTiff($)
                 'Start'  => $offset,
                 'Format' => $format,
                 'Count'  => $count,
-                'Size'   => $count * Image::ExifTool::FormatSize($format),
+                'Size'   => $count * $size,
             );
             $et->FoundTag($tagInfo, $val);
         }
@@ -2181,7 +2240,7 @@ coordinates.
 
 =head1 AUTHOR
 
-Copyright 2003-2014, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.
@@ -2191,6 +2250,8 @@ under the same terms as Perl itself.
 =over 4
 
 =item ftp://ftp.remotesensing.org/geotiff/libgeotiff/libgeotiff-1.1.4.tar.gz
+
+=item http://www.charttiff.com/whitepapers.shtml
 
 =back
 

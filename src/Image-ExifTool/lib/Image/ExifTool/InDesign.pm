@@ -14,7 +14,7 @@ use strict;
 use vars qw($VERSION);
 use Image::ExifTool qw(:DataAccess :Utils);
 
-$VERSION = '1.04';
+$VERSION = '1.06';
 
 # map for writing metadata to InDesign files (currently only write XMP)
 my %indMap = (
@@ -106,10 +106,8 @@ sub ProcessIND($$)
             printf $out "Contiguous object at offset 0x%x (%d bytes):\n", $raf->Tell(), $len;
             if ($verbose > 2) {
                 my $len2 = $len < 1024000 ? $len : 1024000;
-                my %parms = (Addr => $raf->Tell());
-                $parms{MaxLen} = $verbose > 3 ? 1024 : 96 if $verbose < 5;
                 $raf->Seek(-$raf->Read($buff, $len2), 1) or $err = 1;
-                HexDump(\$buff, undef, %parms);
+                $et->VerboseDump(\$buff, Addr => $raf->Tell());
             }
         }
         # check for XMP if stream data is long enough
@@ -145,14 +143,18 @@ sub ProcessIND($$)
                     Parent  => 'IND',
                     NoDelete => 1, # do not allow this to be deleted when writing
                 );
+                # validate xmp data length (should be same as length in header - 4)
+                my $xmpLen = unpack($streamInt32u, $lenWord);
+                unless ($xmpLen == $len) {
+                    if ($xmpLen < $len) {
+                        $dirInfo{DirLen} = $xmpLen;
+                    } else {
+                        $err = 'Truncated XMP stream (missing ' . ($xmpLen - $len) . ' bytes)';
+                    }
+                }
                 my $tagTablePtr = GetTagTable('Image::ExifTool::XMP::Main');
                 if ($outfile) {
-                    # validate xmp data length (should be same as length in header - 4)
-                    my $xmpLen = unpack($streamInt32u, $lenWord);
-                    unless ($xmpLen == $len) {
-                        $err = "Incorrect XMP stream length ($xmpLen should be $len)";
-                        last;
-                    }
+                    last if $err;
                     # make sure that XMP is writable
                     my $classID = Get32u(\$hdr, 20);
                     $classID & 0x40000000 or $err = 'XMP stream is not writable', last;
@@ -251,12 +253,12 @@ meta information from Adobe InDesign (.IND, .INDD and .INDT) files.
 2) A new XMP stream may not be created, so XMP tags may only be written to
 InDesign files which previously contained XMP.
 
-3) File sizes of greater than 2 GB and are currently not supported because
-the ability to handle large files like this is system dependent.
+3) File sizes of greater than 2 GB are supported only if the system supports
+them and the LargeFileSupport option is enabled.
 
 =head1 AUTHOR
 
-Copyright 2003-2014, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

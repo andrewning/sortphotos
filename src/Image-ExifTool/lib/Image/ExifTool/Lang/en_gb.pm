@@ -11,10 +11,21 @@ package Image::ExifTool::Lang::en_gb;
 use strict;
 use vars qw($VERSION);
 
-$VERSION = '1.09';
+$VERSION = '1.13';
 
 %Image::ExifTool::Lang::en_gb::Translate = (
    'AboveColor' => 'Above Colour',
+   'AdvancedFilter' => {
+      PrintConv => {
+        'Partial Color Blue' => 'Partial Colour Blue',
+        'Partial Color Green' => 'Partial Colour Green',
+        'Partial Color Orange' => 'Partial Colour Orange',
+        'Partial Color Purple' => 'Partial Colour Purple',
+        'Partial Color Red' => 'Partial Colour Red',
+        'Partial Color Yellow' => 'Partial Colour Yellow',
+        'Pop Color' => 'Pop Colour',
+      },
+    },
    'AdvancedSceneMode' => {
       PrintConv => {
         'Color Select' => 'Colour Select',
@@ -23,18 +34,46 @@ $VERSION = '1.09';
    'AllColorFlatField1' => 'All Colour Flat Field 1',
    'AllColorFlatField2' => 'All Colour Flat Field 2',
    'AllColorFlatField3' => 'All Colour Flat Field 3',
+   'Alpha' => {
+      PrintConv => {
+        'Alpha Exists (W color component)' => 'Alpha Exists (W colour component)',
+        'Alpha Exists (color not premultiplied)' => 'Alpha Exists (colour not premultiplied)',
+        'Alpha Exists (color premultiplied)' => 'Alpha Exists (colour premultiplied)',
+      },
+    },
    'AlternateDuotoneColors' => 'Alternate Duotone Colours',
    'AlternateSpotColors' => 'Alternate Spot Colours',
    'ArtFilter' => {
       PrintConv => {
         'Pale & Light Color' => 'Pale & Light Colour',
+        'Pale & Light Color II' => 'Pale & Light Colour II',
+        'Partial Color' => 'Partial Colour',
+        'Partial Color II' => 'Partial Colour II',
+        'Partial Color III' => 'Partial Colour III',
+        'Watercolor' => 'Watercolour',
+        'Watercolor I' => 'Watercolour I',
+        'Watercolor II' => 'Watercolour II',
       },
     },
    'ArtFilterEffect' => {
       PrintConv => {
+        'Green Color Filter' => 'Green Colour Filter',
+        'No Color Filter' => 'No Colour Filter',
+        'Orange Color Filter' => 'Orange Colour Filter',
         'Pale & Light Color' => 'Pale & Light Colour',
+        'Pale & Light Color II' => 'Pale & Light Colour II',
+        'Partial Color' => 'Partial Colour',
+        'Partial Color II' => 'Partial Colour II',
+        'Partial Color III' => 'Partial Colour III',
+        'Red Color Filter' => 'Red Colour Filter',
+        'Watercolor' => 'Watercolour',
+        'Watercolor I' => 'Watercolour I',
+        'Watercolor II' => 'Watercolour II',
+        'Yellow Color Filter' => 'Yellow Colour Filter',
       },
     },
+   'AudioIsInitialized' => 'Audio Is Initialised',
+   'AutoAFPointColorTracking' => 'Auto AF Point Colour Tracking',
    'AutoLightingOptimizer' => 'Auto Lighting Optimiser',
    'AutoLightingOptimizerOn' => 'Auto Lighting Optimiser On',
    'BackgroundColor' => 'Background Colour',
@@ -73,10 +112,21 @@ $VERSION = '1.09';
    'CameraColorCalibration13' => 'Camera Colour Calibration 13',
    'CameraColorCalibration14' => 'Camera Colour Calibration 14',
    'CameraColorCalibration15' => 'Camera Colour Calibration 15',
+   'CameraRawColorTone' => 'Camera Raw Colour Tone',
    'CanonColorInfo1' => 'Canon Colour Info 1',
    'CanonColorInfo2' => 'Canon Colour Info 2',
    'ChromaticityColorant' => 'Chromaticity Colourant',
-   'Color' => 'Colour',
+   'CodingMethods' => {
+      PrintConv => {
+        'JBIG color' => 'JBIG colour',
+      },
+    },
+   'Color' => {
+      Description => 'Colour',
+      PrintConv => {
+        'Color' => 'Colour',
+      },
+    },
    'ColorAberrationControl' => 'Colour Aberration Control',
    'ColorAdjustment' => 'Colour Adjustment',
    'ColorAdjustmentMode' => 'Colour Adjustment Mode',
@@ -91,6 +141,7 @@ $VERSION = '1.09';
    'ColorBalanceVersion' => 'Colour Balance Version',
    'ColorBitDepth' => 'Colour Bit Depth',
    'ColorBlur' => 'Colour Blur',
+   'ColorBlurOn' => 'Colour Blur On',
    'ColorBoostLevel' => 'Colour Boost Level',
    'ColorBoostType' => 'Colour Boost Type',
    'ColorBooster' => 'Colour Booster',
@@ -99,10 +150,12 @@ $VERSION = '1.09';
    'ColorCharacterization' => 'Colour Characterization',
    'ColorClass' => 'Colour Class',
    'ColorCompensationFilter' => 'Colour Compensation Filter',
+   'ColorCompensationFilterCustom' => 'Colour Compensation Filter Custom',
    'ColorCompensationFilterSet' => 'Colour Compensation Filter Set',
    'ColorComponents' => 'Colour Components',
    'ColorControl' => 'Colour Control',
    'ColorCorrection' => 'Colour Correction',
+   'ColorCreatorEffect' => 'Colour Creator Effect',
    'ColorDataVersion' => 'Colour Data Version',
    'ColorDescriptor' => 'Colour Descriptor',
    'ColorEffect' => 'Colour Effect',
@@ -149,6 +202,7 @@ $VERSION = '1.09';
    'ColorPlanes' => 'Colour Planes',
    'ColorPrimaries' => 'Colour Primaries',
    'ColorProfile' => 'Colour Profile',
+   'ColorProfileSettings' => 'Colour Profile Settings',
    'ColorRangeLevels' => 'Colour Range Levels',
    'ColorRepresentation' => 'Colour Representation',
    'ColorReproduction' => 'Colour Reproduction',
@@ -156,9 +210,18 @@ $VERSION = '1.09';
    'ColorResponseUnit' => 'Colour Response Unit',
    'ColorSamplersResource' => 'Colour Samplers Resource',
    'ColorSamplersResource2' => 'Colour Samplers Resource 2',
+   'ColorSaturationAdj' => 'Colour Saturation Adj',
    'ColorSequence' => 'Colour Sequence',
    'ColorSiting' => 'Colour Siting',
-   'ColorSpace' => 'Colour Space',
+   'ColorSpace' => {
+      Description => 'Colour Space',
+      PrintConv => {
+        'Embedded Color Profile' => 'Embedded Colour Profile',
+        'Linked Color Profile' => 'Linked Colour Profile',
+        'No color space specified' => 'No colour space specified',
+        'Windows Color Space' => 'Windows Colour Space',
+      },
+    },
    'ColorSpaceData' => 'Colour Space Data',
    'ColorSpecApproximation' => 'Colour Spec Approximation',
    'ColorSpecData' => 'Colour Spec Data',
@@ -204,7 +267,17 @@ $VERSION = '1.09';
    'ColorTempUnknown19' => 'Colour Temp Unknown 19',
    'ColorTempUnknown2' => 'Colour Temp Unknown 2',
    'ColorTempUnknown20' => 'Colour Temp Unknown 20',
+   'ColorTempUnknown21' => 'Colour Temp Unknown 21',
+   'ColorTempUnknown22' => 'Colour Temp Unknown 22',
+   'ColorTempUnknown23' => 'Colour Temp Unknown 23',
+   'ColorTempUnknown24' => 'Colour Temp Unknown 24',
+   'ColorTempUnknown25' => 'Colour Temp Unknown 25',
+   'ColorTempUnknown26' => 'Colour Temp Unknown 26',
+   'ColorTempUnknown27' => 'Colour Temp Unknown 27',
+   'ColorTempUnknown28' => 'Colour Temp Unknown 28',
+   'ColorTempUnknown29' => 'Colour Temp Unknown 29',
    'ColorTempUnknown3' => 'Colour Temp Unknown 3',
+   'ColorTempUnknown30' => 'Colour Temp Unknown 30',
    'ColorTempUnknown4' => 'Colour Temp Unknown 4',
    'ColorTempUnknown5' => 'Colour Temp Unknown 5',
    'ColorTempUnknown6' => 'Colour Temp Unknown 6',
@@ -213,8 +286,11 @@ $VERSION = '1.09';
    'ColorTempUnknown9' => 'Colour Temp Unknown 9',
    'ColorTemperature' => 'Colour Temperature',
    'ColorTemperatureAdj' => 'Colour Temperature Adj',
+   'ColorTemperatureAuto' => 'Colour Temperature Auto',
    'ColorTemperatureBG' => 'Colour Temperature BG',
+   'ColorTemperatureCustom' => 'Colour Temperature Custom',
    'ColorTemperatureRG' => 'Colour Temperature RG',
+   'ColorTemperatureSet' => 'Colour Temperature Set',
    'ColorTemperatureSetting' => {
       Description => 'Colour Temperature Setting',
       PrintConv => {
@@ -255,6 +331,7 @@ $VERSION = '1.09';
    'ColorantBlue' => 'Colourant Blue',
    'ColorantCount' => 'Colourant Count',
    'ColorantCyan' => 'Colourant Cyan',
+   'ColorantGray' => 'Colourant Gray',
    'ColorantGreen' => 'Colourant Green',
    'ColorantL' => 'Colourant L',
    'ColorantMagenta' => 'Colourant Magenta',
@@ -289,11 +366,17 @@ $VERSION = '1.09';
         'Vibrant (Color Film) or Expressive (My Color)' => 'Vibrant (Colour Film) or Expressive (My Colour)',
       },
     },
+   'CustomColorTone' => 'Custom Colour Tone',
    'D-LightingHQColorBoost' => 'D-Lighting HQ Colour Boost',
    'D-LightingHSColorBoost' => 'D-Lighting HS Colour Boost',
+   'D-RangeOptimizerHighlight' => 'D-Range Optimiser Highlight',
+   'D-RangeOptimizerMode' => 'D-Range Optimiser Mode',
+   'D-RangeOptimizerShadow' => 'D-Range Optimiser Shadow',
+   'D-RangeOptimizerValue' => 'D-Range Optimiser Value',
    'DateTimeDigitized' => 'Date/Time Digitised',
    'DefHilite' => 'Use Default Highlight Colour',
    'DefaultImageColor' => 'Default Image Colour',
+   'DefineQuantizationTable' => 'Define Quantisation Table',
    'DeltaType' => {
       PrintConv => {
         'Color Addition' => 'Colour Addition',
@@ -305,6 +388,8 @@ $VERSION = '1.09';
         'Color Filter' => 'Colour Filter',
         'Extract Color' => 'Extract Colour',
         'Invert Color' => 'Invert Colour',
+        'Replace Color' => 'Replace Colour',
+        'Unicolor Bold' => 'Unicolour Bold',
         'Water Color' => 'Water Colour',
       },
     },
@@ -465,7 +550,23 @@ $VERSION = '1.09';
         'meters' => 'Metres',
       },
     },
+   'DriveMode' => {
+      PrintConv => {
+        'D-Range Optimizer Bracketing High' => 'D-Range Optimiser Bracketing High',
+        'D-Range Optimizer Bracketing Low' => 'D-Range Optimiser Bracketing Low',
+      },
+    },
+   'DriveMode2' => {
+      PrintConv => {
+        'D-Range Optimizer Bracketing High' => 'D-Range Optimiser Bracketing High',
+        'D-Range Optimizer Bracketing Low' => 'D-Range Optimiser Bracketing Low',
+      },
+    },
    'DynamicRangeOptimizer' => 'Dynamic Range Optimiser',
+   'DynamicRangeOptimizerBracket' => 'Dynamic Range Optimiser Bracket',
+   'DynamicRangeOptimizerLevel' => 'Dynamic Range Optimiser Level',
+   'DynamicRangeOptimizerMode' => 'Dynamic Range Optimiser Mode',
+   'DynamicRangeOptimizerSetting' => 'Dynamic Range Optimiser Setting',
    'EasyMode' => {
       PrintConv => {
         'Color Accent' => 'Colour Accent',
@@ -509,7 +610,13 @@ $VERSION = '1.09';
    'FlagColor' => 'Flag Colour',
    'FlashColorFilter' => 'Flash Colour Filter',
    'FocalPlaneColorimetryEstimates' => 'Focal Plane Colourimetry Estimates',
+   'GammaColorTone' => 'Gamma Colour Tone',
    'GenOpColor' => 'Gen Op Colour',
+   'GenreID' => {
+      PrintConv => {
+        'Books|Kids|Basic Concepts|Colors' => 'Books|Kids|Basic Concepts|Colours',
+      },
+    },
    'GreenPaletteColorTableData' => 'Green Palette Colour Table Data',
    'GreenPaletteColorTableDescriptor' => 'Green Palette Colour Table Descriptor',
    'HasColorMap' => 'Has Colour Map',
@@ -538,6 +645,7 @@ $VERSION = '1.09';
       },
     },
    'ImageOptimization' => 'Image Optimisation',
+   'IndexedColorTableCount' => 'Indexed Colour Table Count',
    'InitializedDataSize' => 'Initialised Data Size',
    'InterchangeColorSpace' => 'Interchange Colour Space',
    'Isotherm1Color' => 'Isotherm 1 Colour',
@@ -550,10 +658,27 @@ $VERSION = '1.09';
    'LargePaletteColorLookupTableUID' => 'Large Palette Colour Lookup Table UID',
    'LargeRedPaletteColorTableData' => 'Large Red Palette Colour Table Data',
    'LargeRedPaletteColorTableDescr' => 'Large Red Palette Colour Table Descr',
+   'LayerBlendModes' => {
+      PrintConv => {
+        'Color' => 'Colour',
+        'Color Burn' => 'Colour Burn',
+        'Color Dodge' => 'Colour Dodge',
+        'Darker Color' => 'Darker Colour',
+        'Lighter Color' => 'Lighter Colour',
+      },
+    },
    'MDColorTable' => 'MD Colour Table',
+   'MDItemColorSpace' => 'MD Item Colour Space',
    'MagicFilter' => {
       PrintConv => {
         'Pale & Light Color' => 'Pale & Light Colour',
+        'Pale & Light Color II' => 'Pale & Light Colour II',
+        'Partial Color' => 'Partial Colour',
+        'Partial Color II' => 'Partial Colour II',
+        'Partial Color III' => 'Partial Colour III',
+        'Watercolor' => 'Watercolour',
+        'Watercolor I' => 'Watercolour I',
+        'Watercolor II' => 'Watercolour II',
       },
     },
    'MandatoryBackground' => {
@@ -567,6 +692,7 @@ $VERSION = '1.09';
    'MattColor' => 'Matt Colour',
    'MediaColor' => 'Media Colour',
    'ModifiedColorTemp' => 'Modified Colour Temp',
+   'MonochromeColor' => 'Monochrome Colour',
    'MyColorMode' => {
       Description => 'My Colour Mode',
       PrintConv => {
@@ -596,6 +722,11 @@ $VERSION = '1.09';
       },
     },
    'Photoshop2ColorTable' => 'Photoshop 2 Colour Table',
+   'PhotoshopFormat' => {
+      PrintConv => {
+        'Optimized' => 'Optimised',
+      },
+    },
    'PictureEffect' => {
       PrintConv => {
         'Partial Color (blue)' => 'Partial Colour (blue)',
@@ -615,6 +746,14 @@ $VERSION = '1.09';
       },
     },
    'PictureIndexedColors' => 'Picture Indexed Colours',
+   'PictureMode' => {
+      PrintConv => {
+        'Color Creator' => 'Colour Creator',
+        'Color Profile 1' => 'Colour Profile 1',
+        'Color Profile 2' => 'Colour Profile 2',
+        'Color Profile 3' => 'Colour Profile 3',
+      },
+    },
    'PictureType' => {
       PrintConv => {
         'Bright(ly) Colored Fish' => 'Bright(ly) Coloured Fish',
@@ -635,6 +774,7 @@ $VERSION = '1.09';
       },
     },
    'PseudoColorType' => 'Pseudo Colour Type',
+   'QuantizationDefault' => 'Quantisation Default',
    'QuantizationMethod' => {
       Description => 'Quantisation Method',
       PrintConv => {
@@ -648,6 +788,13 @@ $VERSION = '1.09';
    'RawDevArtFilter' => {
       PrintConv => {
         'Pale & Light Color' => 'Pale & Light Colour',
+        'Pale & Light Color II' => 'Pale & Light Colour II',
+        'Partial Color' => 'Partial Colour',
+        'Partial Color II' => 'Partial Colour II',
+        'Partial Color III' => 'Partial Colour III',
+        'Watercolor' => 'Watercolour',
+        'Watercolor I' => 'Watercolour I',
+        'Watercolor II' => 'Watercolour II',
       },
     },
    'RawDevColorSpace' => 'Raw Dev Colour Space',
@@ -669,6 +816,7 @@ $VERSION = '1.09';
    'ReflectionPrintOutputColorimetry' => 'Reflection Print Output Colourimetry',
    'RenderingIntent' => {
       PrintConv => {
+        'Absolute Colorimetric (LCS_GM_ABS_COLORIMETRIC)' => 'Absolute Colourimetric (LCS_GM_ABS_COLORIMETRIC)',
         'ICC-Absolute Colorimetric' => 'ICC-Absolute Colourimetric',
         'Media-Relative Colorimetric' => 'Media-Relative Colourimetric',
       },
@@ -723,6 +871,7 @@ $VERSION = '1.09';
       },
     },
    'ShutterPresentationColorCIELabVal' => 'Shutter Presentation Colour CIE Lab Val',
+   'SmartAlbumColor' => 'Smart Album Colour',
    'SpecialEffectsOpticalFilter' => {
       PrintConv => {
         'Colored' => 'Coloured',
@@ -738,12 +887,29 @@ $VERSION = '1.09';
       },
     },
    'SubimageColor' => 'Subimage Colour',
+   'SwatchColorantA' => 'Swatch Colourant A',
+   'SwatchColorantB' => 'Swatch Colourant B',
+   'SwatchColorantBlack' => 'Swatch Colourant Black',
+   'SwatchColorantBlue' => 'Swatch Colourant Blue',
+   'SwatchColorantCyan' => 'Swatch Colourant Cyan',
+   'SwatchColorantGray' => 'Swatch Colourant Gray',
+   'SwatchColorantGreen' => 'Swatch Colourant Green',
+   'SwatchColorantL' => 'Swatch Colourant L',
+   'SwatchColorantMagenta' => 'Swatch Colourant Magenta',
+   'SwatchColorantMode' => 'Swatch Colourant Mode',
+   'SwatchColorantRed' => 'Swatch Colourant Red',
+   'SwatchColorantSwatchName' => 'Swatch Colourant Swatch Name',
+   'SwatchColorantTint' => 'Swatch Colourant Tint',
+   'SwatchColorantType' => 'Swatch Colourant Type',
+   'SwatchColorantYellow' => 'Swatch Colourant Yellow',
+   'SwatchGroupsColorants' => 'Swatch Groups Colourants',
    'TestTarget' => {
       PrintConv => {
         'Color Chart' => 'Colour Chart',
       },
     },
    'TextColor' => 'Text Colour',
+   'ToneCurveColorSpace' => 'Tone Curve Colour Space',
    'ToningEffect' => {
       PrintConv => {
         'Color' => 'Colour',
@@ -774,6 +940,7 @@ $VERSION = '1.09';
    'VideoAlphaPremultipleColorBlack' => 'Video Alpha Premultiple Colour Black',
    'VideoAlphaPremultipleColorBlue' => 'Video Alpha Premultiple Colour Blue',
    'VideoAlphaPremultipleColorCyan' => 'Video Alpha Premultiple Colour Cyan',
+   'VideoAlphaPremultipleColorGray' => 'Video Alpha Premultiple Colour Gray',
    'VideoAlphaPremultipleColorGreen' => 'Video Alpha Premultiple Colour Green',
    'VideoAlphaPremultipleColorL' => 'Video Alpha Premultiple Colour L',
    'VideoAlphaPremultipleColorMagenta' => 'Video Alpha Premultiple Colour Magenta',
@@ -785,21 +952,36 @@ $VERSION = '1.09';
    'VideoAlphaPremultipleColorYellow' => 'Video Alpha Premultiple Colour Yellow',
    'VideoColorKind' => 'Video Colour Kind',
    'VideoColorSpace' => 'Video Colour Space',
+   'VisualColor' => {
+      Description => 'Visual Colour',
+      PrintConv => {
+        'Color' => 'Colour',
+      },
+    },
    'WBAdjColorTemp' => 'WB Adj Colour Temp',
    'WBAdjLighting' => {
       PrintConv => {
-        'High Color Rendering Fluorescent (warm white)' => 'High Colour Rendering Fluorescent (0)',
         'High Color Rendering Fluorescent (3700K)' => 'High Colour Rendering Fluorescent (1)',
-        'High Color Rendering Fluorescent (cool white)' => 'High Colour Rendering Fluorescent (2)',
         'High Color Rendering Fluorescent (5000K)' => 'High Colour Rendering Fluorescent (3)',
+        'High Color Rendering Fluorescent (cool white)' => 'High Colour Rendering Fluorescent (2)',
         'High Color Rendering Fluorescent (daylight)' => 'High Colour Rendering Fluorescent (4)',
+        'High Color Rendering Fluorescent (warm white)' => 'High Colour Rendering Fluorescent (0)',
         'Sodium Vapor Lamps' => 'Sodium Vapour Lamps',
+        'Standard Fluorescent (high temperature mercury vapor)' => 'Standard Fluorescent (high temperature mercury vapour)',
       },
     },
+   'WatercolorFilter' => 'Watercolour Filter',
    'WhiteBalance' => {
       PrintConv => {
+        'Color Filter' => 'Colour Filter',
+        'Color Temperature' => 'Colour Temperature',
         'Color Temperature Enhancement' => 'Colour Temperature Enhancement',
         'Color Temperature/Color Filter' => 'Colour Temperature/Colour Filter',
+      },
+    },
+   'WhiteBalance2' => {
+      PrintConv => {
+        'Auto (Keep Warm Color Off)' => 'Auto (Keep Warm Colour Off)',
       },
     },
    'WhiteBalanceSet' => {
@@ -850,7 +1032,7 @@ and values.
 
 =head1 AUTHOR
 
-Copyright 2003-2014, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

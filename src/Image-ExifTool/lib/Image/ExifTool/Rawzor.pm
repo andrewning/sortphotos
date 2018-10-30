@@ -14,7 +14,7 @@ use strict;
 use vars qw($VERSION);
 use Image::ExifTool qw(:DataAccess :Utils);
 
-$VERSION = '1.03';
+$VERSION = '1.05';
 
 # currently support this version Rawzor images
 my $implementedRawzorVersion = 199; # (up to version 1.99)
@@ -104,6 +104,7 @@ sub ProcessRWZ($$)
     }
     my $metaSize = Get32u(\$buff, 36);
     if ($metaSize) {
+        $$et{DontValidateImageData} = 1;
         # validate the metadata header and read the compressed metadata
         my $end0 = Get64u(\$buff, 0);
         my $pos1 = Get64u(\$buff, 8);
@@ -140,8 +141,7 @@ sub ProcessRWZ($$)
     my $origFileType = $$et{VALUE}{FileType};
     if ($origFileType) {
         $et->HandleTag($tagTablePtr, OriginalFileType => $origFileType);
-        $$et{VALUE}{FileType} = 'RWZ';
-        $$et{VALUE}{MIMEType} = 'image/x-rawzor';
+        $et->OverrideFileType('RWZ');
     } else {
         $et->HandleTag($tagTablePtr, OriginalFileType => 'Unknown');
         $et->SetFileType();
@@ -168,7 +168,7 @@ information from Rawzor compressed images.
 
 =head1 AUTHOR
 
-Copyright 2003-2014, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

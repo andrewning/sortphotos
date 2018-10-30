@@ -6,10 +6,11 @@
 # Revisions:    2009/03/24 - P. Harvey Created
 #               2009/05/12 - PH Added RWL file type (same format as RW2)
 #
-# References:   1) CPAN forum post by 'hardloaf' (http://www.cpanforum.com/threads/2183)
+# References:   1) http://u88.n24.queensu.ca/exiftool/forum/index.php/topic,1542.0.html
 #               2) http://www.cybercom.net/~dcoffin/dcraw/
 #               3) http://syscall.eu/#pana
-#               4) Iliah Borg private communication (LibRaw)
+#               4) Klaus Homeister private communication
+#              IB) Iliah Borg private communication (LibRaw)
 #              JD) Jens Duttke private communication (TZ3,FZ30,FZ50)
 #------------------------------------------------------------------------------
 
@@ -20,7 +21,7 @@ use vars qw($VERSION);
 use Image::ExifTool qw(:DataAccess :Utils);
 use Image::ExifTool::Exif;
 
-$VERSION = '1.08';
+$VERSION = '1.23';
 
 sub ProcessJpgFromRaw($$$);
 sub WriteJpgFromRaw($$$);
@@ -47,6 +48,24 @@ my %wbTypeInfo = (
     SeparateTable => 'EXIF LightSource',
 );
 
+my %panasonicWhiteBalance = ( #forum9396
+    0 => 'Auto',
+    1 => 'Daylight',
+    2 => 'Cloudy',
+    3 => 'Tungsten',
+    4 => 'n/a',
+    5 => 'Flash',
+    6 => 'n/a',
+    7 => 'n/a',
+    8 => 'Custom#1',
+    9 => 'Custom#2',
+    10 => 'Custom#3',
+    11 => 'Custom#4',
+    12 => 'Shade',
+    13 => 'Kelvin',
+    16 => 'AWBc', # GH5 and G9 (Makernotes WB==19)
+);
+
 # Tags found in Panasonic RAW/RW2/RWL images (ref PH)
 %Image::ExifTool::PanasonicRaw::Main = (
     GROUPS => { 0 => 'EXIF', 1 => 'IFD0', 2 => 'Image'},
@@ -68,23 +87,38 @@ my %wbTypeInfo = (
     # 0x08: 1
     # 0x09: 1,3,4
     # 0x0a: 12
-    0x08 => { #4
-        Name => 'BlackLevel1',
+    # (IB gave 0x08-0x0a as BlackLevel tags, but Klaus' decoding makes more sense)
+    0x08 => { Name => 'SamplesPerPixel', Writable => 'int16u', Protected => 1 }, #4
+    0x09 => { #4
+        Name => 'CFAPattern',
         Writable => 'int16u',
-        Notes => q{
-            summing BlackLevel1+2+3 values gives the common bias that must be added to
-            the BlackLevelRed/Green/Blue tags below
+        Protected => 1,
+        PrintConv => {
+            0 => 'n/a',
+            1 => '[Red,Green][Green,Blue]', # (CM-1, FZ70)
+            2 => '[Green,Red][Blue,Green]', # (LX-7)
+            3 => '[Green,Blue][Red,Green]', # (ZS100, FZ2500, FZ1000, ...)
+            4 => '[Blue,Green][Green,Red]', # (LC-100, G-7, V-LUX1, ...)
         },
     },
-    0x09 => { Name => 'BlackLevel2', Writable => 'int16u' }, #4
-    0x0a => { Name => 'BlackLevel3', Writable => 'int16u' }, #4
-    # 0x0b: 0x860c,0x880a,0x880c
+    0x0a => { Name => 'BitsPerSample', Writable => 'int16u', Protected => 1 }, #4
+    0x0b => { #4
+        Name => 'Compression',
+        Writable => 'int16u',
+        Protected => 1,
+        PrintConv => {
+            34316 => 'Panasonic RAW 1', # (most models - RAW/RW2/RWL)
+            34826 => 'Panasonic RAW 2', # (DIGILUX 2 - RAW)
+            34828 => 'Panasonic RAW 3', # (D-LUX2,D-LUX3,FZ30,LX1 - RAW)
+            34830 => 'Panasonic RAW 4', #IB (Leica DIGILUX 3, Panasonic DMC-L1)
+        },
+    },
     # 0x0c: 2 (only Leica Digilux 2)
     # 0x0d: 0,1
     # 0x0e,0x0f,0x10: 4095
-    0x0e => { Name => 'LinearityLimitRed',   Writable => 'int16u' }, #4
-    0x0f => { Name => 'LinearityLimitGreen', Writable => 'int16u' }, #4
-    0x10 => { Name => 'LinearityLimitBlue',  Writable => 'int16u' }, #4
+    0x0e => { Name => 'LinearityLimitRed',   Writable => 'int16u' }, #IB
+    0x0f => { Name => 'LinearityLimitGreen', Writable => 'int16u' }, #IB
+    0x10 => { Name => 'LinearityLimitBlue',  Writable => 'int16u' }, #IB
     0x11 => { #JD
         Name => 'RedBalance',
         Writable => 'int16u',
@@ -98,7 +132,7 @@ my %wbTypeInfo = (
         ValueConv => '$val / 256',
         ValueConvInv => 'int($val * 256 + 0.5)',
     },
-    0x13 => { #4
+    0x13 => { #IB
         Name => 'WBInfo',
         SubDirectory => { TagTable => 'Image::ExifTool::PanasonicRaw::WBInfo' },
     },
@@ -107,29 +141,29 @@ my %wbTypeInfo = (
         Writable => 'int16u',
     },
     # 0x18,0x19,0x1a: 0
-    0x18 => { #4
-        Name => 'HighISOMultiplierRed', 
+    0x18 => { #IB
+        Name => 'HighISOMultiplierRed',
         Writable => 'int16u',
         ValueConv => '$val / 256',
         ValueConvInv => 'int($val * 256 + 0.5)',
     },
-    0x19 => { #4
-        Name => 'HighISOMultiplierGreen', 
+    0x19 => { #IB
+        Name => 'HighISOMultiplierGreen',
         Writable => 'int16u',
         ValueConv => '$val / 256',
         ValueConvInv => 'int($val * 256 + 0.5)',
     },
-    0x1a => { #4
-        Name => 'HighISOMultiplierBlue', 
+    0x1a => { #IB
+        Name => 'HighISOMultiplierBlue',
         Writable => 'int16u',
         ValueConv => '$val / 256',
         ValueConvInv => 'int($val * 256 + 0.5)',
     },
     # 0x1b: [binary data] (something to do with the camera ISO cababilities: int16u count N,
-    #                      followed by table of  N entries: int16u ISO, int16u[3] RGB gains - ref 4)
-    0x1c => { Name => 'BlackLevelRed',   Writable => 'int16u' }, #4
-    0x1d => { Name => 'BlackLevelGreen', Writable => 'int16u' }, #4
-    0x1e => { Name => 'BlackLevelBlue',  Writable => 'int16u' }, #4
+    #                      followed by table of  N entries: int16u ISO, int16u[3] RGB gains - ref IB)
+    0x1c => { Name => 'BlackLevelRed',   Writable => 'int16u' }, #IB
+    0x1d => { Name => 'BlackLevelGreen', Writable => 'int16u' }, #IB
+    0x1e => { Name => 'BlackLevelBlue',  Writable => 'int16u' }, #IB
     0x24 => { #2
         Name => 'WBRedLevel',
         Writable => 'int16u',
@@ -142,14 +176,25 @@ my %wbTypeInfo = (
         Name => 'WBBlueLevel',
         Writable => 'int16u',
     },
-    0x27 => { #4
+    0x27 => { #IB
         Name => 'WBInfo2',
         SubDirectory => { TagTable => 'Image::ExifTool::PanasonicRaw::WBInfo2' },
     },
     # 0x27,0x29,0x2a,0x2b,0x2c: [binary data]
-    # 0x2d: 2,3
+    0x2d => { #IB
+        Name => 'RawFormat',
+        Writable => 'int16u',
+        Protected => 1,
+        # 2 - RAW DMC-FZ8/FZ18
+        # 3 - RAW DMC-L10
+        # 4 - RW2 for most other models, including G9 normal resolution and YUNEEC CGO4
+        #     (must add 15 to black levels for RawFormat == 4)
+        # 5 - RW2 DC-GH5s and G9 HiRes
+        # missing - DMC-LX1/FZ30/FZ50/L1/LX1/LX2
+    },
     0x2e => { #JD
         Name => 'JpgFromRaw', # (writable directory!)
+        Groups => { 2 => 'Preview' },
         Writable => 'undef',
         # protect this tag because it contains all the metadata
         Flags => [ 'Binary', 'Protected', 'NestedHtmlDump', 'BlockExtract' ],
@@ -166,6 +211,10 @@ my %wbTypeInfo = (
             ProcessProc => \&ProcessJpgFromRaw,
         },
     },
+    0x2f => { Name => 'CropTop',    Writable => 'int16u' },
+    0x30 => { Name => 'CropLeft',   Writable => 'int16u' },
+    0x31 => { Name => 'CropBottom', Writable => 'int16u' },
+    0x32 => { Name => 'CropRight',  Writable => 'int16u' },
     0x10f => {
         Name => 'Make',
         Groups => { 2 => 'Camera' },
@@ -212,12 +261,36 @@ my %wbTypeInfo = (
         IsOffset => '$$et{TIFF_TYPE} =~ /^(RW2|RWL)$/', # (invalid in DNG-converted files)
         PanasonicHack => 1,
         OffsetPair => 0x117, # (use StripByteCounts as the offset pair)
+        NotRealPair => 1,    # (to avoid Validate warning)
     },
     0x119 => {
         Name => 'DistortionInfo',
         SubDirectory => { TagTable => 'Image::ExifTool::PanasonicRaw::DistortionInfo' },
     },
-    # 0x11b - chromatic aberration correction (ref 3)
+    # 0x11b - chromatic aberration correction (ref 3) (also see forum9366)
+    0x11c => { #forum9373
+        Name => 'Gamma',
+        Writable => 'int16u',
+        ValueConv => '$val / ($val >= 1024 ? 1024 : ($val >= 256 ? 256 : 100))',
+        ValueConvInv => 'int($val * 256 + 0.5)',
+    },
+    0x120 => {
+        Name => 'CameraIFD',
+        SubDirectory => {
+            TagTable => 'Image::ExifTool::PanasonicRaw::CameraIFD',
+            Base => '$start',
+            ProcessProc => \&Image::ExifTool::ProcessTIFF,
+        },
+    },
+    0x121 => { #forum9295
+        Name => 'Multishot',
+        Writable => 'int32u',
+        PrintConv => {
+            0 => 'Off',
+            65536 => 'Pixel Shift',
+        },
+    },
+    # 0x122 - int32u: RAWDataOffset for the GH5s/GX9, or pointer to end of raw data for G9 (forum9295)
     0x2bc => { # PH Extension!!
         Name => 'ApplicationNotes', # (writable directory!)
         Writable => 'int8u',
@@ -226,6 +299,18 @@ my %wbTypeInfo = (
         SubDirectory => {
             DirName => 'XMP',
             TagTable => 'Image::ExifTool::XMP::Main',
+        },
+    },
+    0x001b => { #forum9250
+        Name => 'NoiseReductionParams',
+        Writable => 'undef',
+        Format => 'int16u',
+        Count => -1,
+        Flags => 'Protected',
+        Notes => q{
+            the camera's default noise reduction setup.  The first number is the number
+            of entries, then for each entry there are 4 numbers: an ISO speed, and
+            noise-reduction strengths the R, G and B channels
         },
     },
     0x83bb => { # PH Extension!!
@@ -259,9 +344,10 @@ my %wbTypeInfo = (
             Start => '$val',
         },
     },
+    # 0xffff => 'DCSHueShiftValues', #exifprobe (NC)
 );
 
-# white balance information (ref 4)
+# white balance information (ref IB)
 # (PanasonicRawVersion<200: Digilux 2)
 %Image::ExifTool::PanasonicRaw::WBInfo = (
     PROCESS_PROC => \&Image::ExifTool::ProcessBinaryData,
@@ -287,7 +373,7 @@ my %wbTypeInfo = (
     20 => { Name => 'WB_RBLevels7', Format => 'int16u[2]' },
 );
 
-# white balance information (ref 4)
+# white balance information (ref IB)
 # (PanasonicRawVersion>=200: D-Lux2, D-Lux3, DMC-FZ18/FZ30/LX1/L10)
 %Image::ExifTool::PanasonicRaw::WBInfo2 = (
     PROCESS_PROC => \&Image::ExifTool::ProcessBinaryData,
@@ -373,6 +459,127 @@ my %wbTypeInfo = (
     # 14,15 - checksums
 );
 
+# Panasonic RW2 camera IFD written by GH5 (ref PH)
+# (doesn't seem to be valid for the GF7 or GM5 -- encrypted?)
+%Image::ExifTool::PanasonicRaw::CameraIFD = (
+    GROUPS => { 0 => 'PanasonicRaw', 1 => 'CameraIFD', 2 => 'Camera'},
+    # (don't know what format codes 0x101 and 0x102 are for, so just
+    #  map them into 4 = int32u for now)
+    VARS => { MAP_FORMAT => { 0x101 => 4, 0x102 => 4 } },
+    0x1001 => { #forum9388
+        Name => 'MultishotOn',
+        Writable => 'int32u',
+        PrintConv => { 0 => 'No', 1 => 'Yes' },
+    },
+    0x1100 => { #forum9274
+        Name => 'FocusStepNear',
+        Writable => 'int16s',
+    },
+    0x1101 => { #forum9274 (was forum8484)
+        Name => 'FocusStepCount',
+        Writable => 'int16s',
+    },
+    0x1102 => { #forum9417
+        Name => 'FlashFired',
+        Writable => 'int32u',
+        PrintConv => { 0 => 'No', 1 => 'Yes' },
+    },
+    # 0x1104 - set when camera shoots on lowest possible Extended-ISO (forum9290)
+    0x1105 => { #forum9392
+        Name => 'ZoomPosition',
+        Notes => 'in the range 0-255 for most cameras',
+        Writable => 'int32u',
+    },
+    0x1200 => { #forum9278
+        Name => 'LensAttached',
+        Notes => 'many CameraIFD tags are invalid if there is no lens attached',
+        Writable => 'int32u',
+        PrintConv => { 0 => 'No', 1 => 'Yes' },
+    },
+    # 1201 - LensStyle? ref forum9394
+    0x1203 => { #4
+        Name => 'FocalLengthIn35mmFormat',
+        Writable => 'int16u',
+        PrintConv => '"$val mm"',
+        PrintConvInv => '$val=~s/\s*mm$//;$val',
+    },
+    0x1305 => { #forum9384
+        Name => 'HighISOMode',
+        Writable => 'int16u',
+        RawConv => '$val || undef',
+        PrintConv => { 1 => 'On', 2 => 'Off' },
+    },
+    # 0x140b - scaled overall black level? (ref forum9281)
+    # 0x1411 - scaled black level per channel difference (ref forum9281)
+    # 0x2000 - WB tungsten=3, daylight=4 (ref forum9467)
+    # 0x2009 - scaled black level per channel (ref forum9281)
+    # 0x3000-0x310b - red/blue balances * 1024 (ref forum9467)
+    #  0x3000 modifiedTungsten-Red (-2?)
+    #  0x3001 modifiedTungsten-Blue (-2?)
+    #  0x3002 modifiedDaylight-Red (-2?)
+    #  0x3003 modifiedDaylight-Blue (-2?)
+    #  0x3004 modifiedTungsten-Red (-1?)
+    #  0x3005 modifiedTungsten-Blue (-1?)
+    #  0x3006 modifiedDaylight-Red (-1?)
+    #  0x3007 modifiedDaylight-Blue (-1?)
+    #  0x3100 DefaultTungsten-Red
+    #  0x3101 DefaultTungsten-Blue
+    #  0x3102 DefaultDaylight-Red
+    #  0x3103 DefaultDaylight-Blue
+    #  0x3104 modifiedTungsten-Red (+1?)
+    #  0x3105 modifiedTungsten-Blue (+1?)
+    #  0x3106 modifiedDaylight-Red (+1?)
+    #  0x3107 modifiedDaylight-Blue (+1?)
+    #  0x3108 modifiedTungsten-Red (+2?)
+    #  0x3109 modifiedTungsten-Blue (+2?)
+    #  0x310a modifiedDaylight-Red (+2?)
+    #  0x310b modifiedDaylight-Blue (+2?)
+    0x3200 => { #forum9275
+        Name => 'WB_CFA0_LevelDaylight',
+        Writable => 'int16u',
+    },
+    0x3201 => { #forum9275
+        Name => 'WB_CFA1_LevelDaylight',
+        Writable => 'int16u',
+    },
+    0x3202 => { #forum9275
+        Name => 'WB_CFA2_LevelDaylight',
+        Writable => 'int16u',
+    },
+    0x3203 => { #forum9275
+        Name => 'WB_CFA3_LevelDaylight',
+        Writable => 'int16u',
+    },
+    # 0x3204-0x3207 - user multipliers * 1024 ? (ref forum9275)
+    # 0x320a - scaled maximum value of raw data (scaling = 4x) (ref forum9281)
+    # 0x3209 - gamma (x256) (ref forum9281)
+    0x3300 => { #forum9296/9396
+        Name => 'WhiteBalanceSet',
+        Writable => 'int8u',
+        PrintConv => \%panasonicWhiteBalance,
+        SeparateTable => 'WhiteBalance',
+    },
+    0x3420 => { #forum9276
+        Name => 'WB_RedLevelAuto',
+        Writable => 'int16u',
+    },
+    0x3421 => { #forum9276
+        Name => 'WB_BlueLevelAuto',
+        Writable => 'int16u',
+    },
+    0x3501 => { #4
+        Name => 'Orientation',
+        Writable => 'int8u',
+        PrintConv => \%Image::ExifTool::Exif::orientation,
+    },
+    0x3600 => { #forum9396
+        Name => 'WhiteBalanceDetected',
+        Writable => 'int8u',
+        PrintConv => \%panasonicWhiteBalance,
+        SeparateTable => 'WhiteBalance',
+    },
+);
+
 # PanasonicRaw composite tags
 %Image::ExifTool::PanasonicRaw::Composite = (
     ImageWidth => {
@@ -419,7 +626,7 @@ sub ProcessDistortionInfo($$$)
     my ($et, $dirInfo, $tagTablePtr) = @_;
     my $dataPt = $$dirInfo{DataPt};
     my $start = $$dirInfo{DirStart} || 0;
-    my $size = $$dirInfo{DataLen} || (length($$dataPt) - $start);
+    my $size = $$dirInfo{DirLen} || (length($$dataPt) - $start);
     if ($size == 32) {
         # verify the checksums (ref 3)
         my $csum1 = Checksum($dataPt, $start +  4, 12, 1);
@@ -517,7 +724,7 @@ sub WriteJpgFromRaw($$$)
     my ($et, $dirInfo, $tagTablePtr) = @_;
     my $dataPt = $$dirInfo{DataPt};
     my $byteOrder = GetByteOrder();
-    my $fileType = $$et{FILE_TYPE};   # RAW, RW2 or RWL
+    my $fileType = $$et{TIFF_TYPE};   # RAW, RW2 or RWL
     my $dirStart = $$dirInfo{DirStart};
     if ($dirStart) { # DirStart is non-zero in DNG-converted RW2/RWL
         my $dirLen = $$dirInfo{DirLen} | length($$dataPt) - $dirStart;
@@ -558,7 +765,7 @@ sub ProcessJpgFromRaw($$$)
     my ($et, $dirInfo, $tagTablePtr) = @_;
     my $dataPt = $$dirInfo{DataPt};
     my $byteOrder = GetByteOrder();
-    my $fileType = $$et{FILE_TYPE};   # RAW, RW2 or RWL
+    my $fileType = $$et{TIFF_TYPE};   # RAW, RW2 or RWL
     my $tagInfo = $$dirInfo{TagInfo};
     my $verbose = $et->Options('Verbose');
     my ($indent, $out);
@@ -616,7 +823,7 @@ write meta information in Panasonic/Leica RAW, RW2 and RWL images.
 
 =head1 AUTHOR
 
-Copyright 2003-2014, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

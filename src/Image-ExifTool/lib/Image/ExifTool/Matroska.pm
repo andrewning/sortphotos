@@ -14,7 +14,7 @@ use strict;
 use vars qw($VERSION);
 use Image::ExifTool qw(:DataAccess :Utils);
 
-$VERSION = '1.05';
+$VERSION = '1.09';
 
 my %noYes = ( 0 => 'No', 1 => 'Yes' );
 
@@ -23,6 +23,7 @@ my %noYes = ( 0 => 'No', 1 => 'Yes' );
 #       (the upper bits), which is not included in the tag ID's below
 %Image::ExifTool::Matroska::Main = (
     GROUPS => { 2 => 'Video' },
+    VARS => { NO_LOOKUP => 1 }, # omit tags from lookup
     NOTES => q{
         The following tags are extracted from Matroska multimedia container files. 
         This container format is used by file types such as MKA, MKV, MKS and WEBM. 
@@ -150,7 +151,7 @@ my %noYes = ( 0 => 'No', 1 => 'Yes' );
         SubDirectory => { TagTable => 'Image::ExifTool::Matroska::Main' },
     },
     0x67 => {
-        Name => 'Timecode',
+        Name => 'TimeCode',
         Format => 'unsigned',
         Unknown => 1,
         ValueConv => '$$self{TimecodeScale} ? $val * $$self{TimecodeScale} / 1e9 : $val',
@@ -631,6 +632,48 @@ my %noYes = ( 0 => 'No', 1 => 'Yes' );
     0x484 => { Name => 'TagDefault',        Format => 'unsigned', PrintConv => \%noYes },
     0x487 => { Name => 'TagString',         Format => 'utf8' },
     0x485 => { Name => 'TagBinary',         Binary => 1 },
+#
+# Spherical Video V2 (untested)
+#
+    0x7670 => {
+        Name => 'Projection',
+        SubDirectory => { TagTable => 'Image::ExifTool::Matroska::Projection' },
+    },
+);
+
+# Spherical video v2 projection tags (ref https://github.com/google/spatial-media/blob/master/docs/spherical-video-v2-rfc.md)
+%Image::ExifTool::Matroska::Projection = (
+    GROUPS => { 2 => 'Video' },
+    VARS => { NO_LOOKUP => 1 }, # omit tags from lookup
+    NOTES => q{
+        Projection tags defined by the Spherical Video V2 specification.  See
+        L<https://github.com/google/spatial-media/blob/master/docs/spherical-video-v2-rfc.md>
+        for the specification.
+    },
+    0x7671 => {
+        Name => 'ProjectionType',
+        Format => 'unsigned',
+        DataMember => 'ProjectionType',
+        RawConv => '$$self{ProjectionType} = $val',
+        PrintConv => {
+            0 => 'Rectangular',
+            1 => 'Equirectangular',
+            2 => 'Cubemap',
+            3 => 'Mesh',
+        },
+    },
+    0x7672 => [{
+        Name => 'EquirectangularProj',
+        Condition => '$$self{ProjectionType} == 1',
+        SubDirectory => { TagTable => 'Image::ExifTool::QuickTime::equi' },
+    },{
+        Name => 'CubemapProj',
+        Condition => '$$self{ProjectionType} == 2',
+        SubDirectory => { TagTable => 'Image::ExifTool::QuickTime::cbmp' },
+    }],
+    0x7673 => { Name => 'ProjectionPosYaw',   Format => 'float' },
+    0x7674 => { Name => 'ProjectionPosPitch', Format => 'float' },
+    0x7675 => { Name => 'ProjectionPosRoll',  Format => 'float' },
 );
 
 #------------------------------------------------------------------------------
@@ -869,7 +912,7 @@ information from Matroska multimedia files (MKA, MKV, MKS and WEBM).
 
 =head1 AUTHOR
 
-Copyright 2003-2014, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.
@@ -888,4 +931,3 @@ L<Image::ExifTool::TagNames/Matroska Tags>,
 L<Image::ExifTool(3pm)|Image::ExifTool>
 
 =cut
-

@@ -12,6 +12,7 @@
 #               3) http://www.libpng.org/pub/mng/
 #               4) http://www.libpng.org/pub/png/spec/register/
 #               5) ftp://ftp.simplesystems.org/pub/png/documents/pngext-1.4.0-pdg.html
+#               6) ftp://ftp.simplesystems.org/pub/png/documents/pngext-1.5.0.html
 #
 # Notes:        Writing meta information in PNG images is a pain in the butt
 #               for a number of reasons:  One biggie is that you have to
@@ -23,13 +24,14 @@
 package Image::ExifTool::PNG;
 
 use strict;
-use vars qw($VERSION $AUTOLOAD);
+use vars qw($VERSION $AUTOLOAD %stdCase);
 use Image::ExifTool qw(:DataAccess :Utils);
 
-$VERSION = '1.34';
+$VERSION = '1.46';
 
 sub ProcessPNG_tEXt($$$);
 sub ProcessPNG_iTXt($$$);
+sub ProcessPNG_eXIf($$$);
 sub ProcessPNG_Compressed($$$);
 sub CalculateCRC($;$$$);
 sub HexEncode($);
@@ -38,6 +40,11 @@ sub Add_iCCP($$);
 sub DoneDir($$$;$);
 sub GetLangInfo($$);
 sub BuildTextChunk($$$$$);
+sub ConvertPNGDate($$);
+sub InversePNGDate($$);
+
+# translate lower-case to actual case used for eXIf/zXIf chunks
+%stdCase = ( 'zxif' => 'zxIf', exif => 'eXIf' );
 
 my $noCompressLib;
 
@@ -80,6 +87,12 @@ $Image::ExifTool::PNG::colorType = -1;
         Tags extracted from PNG images.  See
         L<http://www.libpng.org/pub/png/spec/1.2/> for the official PNG 1.2
         specification.
+
+        According to the specification, a PNG file should end at the IEND chunk,
+        however ExifTool will preserve any data found after this when writing unless
+        it is specifically deleted with C<-Trailer:All=>.  When reading, a minor
+        warning is issued if this trailer exists, and ExifTool will attempt to parse
+        this data as additional PNG chunks.
     },
     bKGD => {
         Name => 'BackgroundColor',
@@ -224,7 +237,7 @@ $Image::ExifTool::PNG::colorType = -1;
     tXMP => {
         Name => 'XMP',
         Notes => 'obsolete location specified by a September 2001 XMP draft',
-        NonStandard => 1,
+        NonStandard => 'XMP',
         SubDirectory => { TagTable => 'Image::ExifTool::XMP::Main' },
     },
     vpAg => { # private imagemagick chunk
@@ -238,6 +251,36 @@ $Image::ExifTool::PNG::colorType = -1;
             ProcessProc => \&ProcessPNG_Compressed,
         },
     },
+    # animated PNG (ref https://wiki.mozilla.org/APNG_Specification)
+    acTL => {
+        Name => 'AnimationControl',
+        SubDirectory => {
+            TagTable => 'Image::ExifTool::PNG::AnimationControl',
+        },
+    },
+    # eXIf (ref 6)
+    $stdCase{exif} => {
+        Name => $stdCase{exif},
+        Notes => 'this is where ExifTool will create new EXIF',
+        SubDirectory => {
+            TagTable => 'Image::ExifTool::Exif::Main',
+            DirName => 'EXIF', # (to write as a block)
+            ProcessProc => \&ProcessPNG_eXIf,
+        },
+    },
+    # zXIf
+    $stdCase{zxif} => {
+        Name => $stdCase{zxif},
+        Notes => 'a once-proposed chunk for compressed EXIF',
+        NonStandard => 'EXIF',
+        SubDirectory => {
+            TagTable => 'Image::ExifTool::Exif::Main',
+            DirName => 'EXIF', # (to write as a block)
+            ProcessProc => \&ProcessPNG_eXIf,
+        },
+    },
+    # fcTL - animation frame control for each frame
+    # fdAT - animation data for each frame
 );
 
 # PNG IHDR chunk
@@ -408,6 +451,11 @@ my %unreg = ( Notes => 'unregistered' );
         Name => 'CreationTime',
         Groups => { 2 => 'Time' },
         Shift => 'Time',
+        Notes => 'stored in RFC-1123 format and converted to/from EXIF format by ExifTool',
+        RawConv => \&ConvertPNGDate,
+        ValueConvInv => \&InversePNGDate,
+        PrintConv => '$self->ConvertDateTime($val)',
+        PrintConvInv => '$self->InverseDateTime($val,undef,1)',
     },
     Software    => { },
     Disclaimer  => { },
@@ -415,6 +463,7 @@ my %unreg = ( Notes => 'unregistered' );
     Warning     => { Name => 'PNGWarning', },
     Source      => { },
     Comment     => { },
+    Collection  => { }, # (PNG extensions, 2004)
 #
 # The following tags are not part of the original PNG specification,
 # but are written by ImageMagick and other software
@@ -462,7 +511,8 @@ my %unreg = ( Notes => 'unregistered' );
             # EXIF table must come first because we key on this in ProcessProfile()
             # (No condition because this is just for BuildTagLookup)
             Name => 'APP1_Profile',
-            Notes => 'unregistered.  This is where ExifTool will create new EXIF',
+            %unreg,
+            NonStandard => 'EXIF',
             SubDirectory => {
                 TagTable => 'Image::ExifTool::Exif::Main',
                 ProcessProc => \&ProcessProfile,
@@ -470,7 +520,7 @@ my %unreg = ( Notes => 'unregistered' );
         },
         {
             Name => 'APP1_Profile',
-            NonStandard => 1,
+            NonStandard => 'XMP',
             SubDirectory => {
                 TagTable => 'Image::ExifTool::XMP::Main',
                 ProcessProc => \&ProcessProfile,
@@ -480,6 +530,7 @@ my %unreg = ( Notes => 'unregistered' );
    'Raw profile type exif' => {
         Name => 'EXIF_Profile',
         %unreg,
+        NonStandard => 'EXIF',
         SubDirectory => {
             TagTable => 'Image::ExifTool::Exif::Main',
             ProcessProc => \&ProcessProfile,
@@ -515,7 +566,7 @@ my %unreg = ( Notes => 'unregistered' );
    'Raw profile type xmp' => {
         Name => 'XMP_Profile',
         %unreg,
-        NonStandard => 1,
+        NonStandard => 'XMP',
         SubDirectory => {
             TagTable => 'Image::ExifTool::XMP::Main',
             ProcessProc => \&ProcessProfile,
@@ -528,6 +579,25 @@ my %unreg = ( Notes => 'unregistered' );
             TagTable => 'Image::ExifTool::Photoshop::Main',
             ProcessProc => \&ProcessProfile,
         },
+    },
+);
+
+# Animation control
+%Image::ExifTool::PNG::AnimationControl = (
+    PROCESS_PROC => \&Image::ExifTool::ProcessBinaryData,
+    GROUPS => { 2 => 'Image' },
+    FORMAT => 'int32u',
+    NOTES => q{
+        Tags found in the Animation Conrol chunk.  See
+        L<https://wiki.mozilla.org/APNG_Specification> for details.
+    },
+    0 => {
+        Name => 'AnimationFrames',
+        RawConv => '$self->OverrideFileType("APNG", undef, "PNG"); $val',
+    },
+    1 => {
+        Name => 'AnimationPlays',
+        PrintConv => '$val || "inf"',
     },
 );
 
@@ -549,6 +619,88 @@ sub StandardLangCase($)
     # make 2nd subtag uppercase only if it is 2 letters
     return lc($1) . uc($2) . lc($3) if $lang =~ /^([a-z]{2,3}|[xi])(-[a-z]{2})\b(.*)/i;
     return lc($lang);
+}
+
+#------------------------------------------------------------------------------
+# Convert date from PNG to EXIF format
+# Inputs: 0) Date/time in PNG format, 1) ExifTool ref
+# Returns: EXIF formatted date/time string
+my %monthNum = (
+    Jan=>1, Feb=>2, Mar=>3, Apr=>4, May=>5, Jun=>6,
+    Jul=>7, Aug=>8, Sep=>9, Oct=>10,Nov=>11,Dec=>12
+);
+my %tzConv = (
+    UT  => '+00:00',  GMT => '+00:00',  UTC => '+00:00', # (UTC not in spec -- PH addition)
+    EST => '-05:00',  EDT => '-04:00',
+    CST => '-06:00',  CDT => '-05:00',
+    MST => '-07:00',  MDT => '-06:00',
+    PST => '-08:00',  PDT => '-07:00',
+    A => '-01:00',    N => '+01:00',
+    B => '-02:00',    O => '+02:00',
+    C => '-03:00',    P => '+03:00',
+    D => '-04:00',    Q => '+04:00',
+    E => '-05:00',    R => '+05:00',
+    F => '-06:00',    S => '+06:00',
+    G => '-07:00',    T => '+07:00',
+    H => '-08:00',    U => '+08:00',
+    I => '-09:00',    V => '+09:00',
+    K => '-10:00',    W => '+10:00',
+    L => '-11:00',    X => '+11:00',
+    M => '-12:00',    Y => '+12:00',
+    Z => '+00:00',
+);
+sub ConvertPNGDate($$)
+{
+    my ($val, $et) = @_;
+    # standard format is like "Mon, 1 Jan 2018 12:10:22 EST" (RFC-1123 section 5.2.14)
+    while ($val =~ /(\d+)\s*(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s*(\d+)\s+(\d+):(\d{2})(:\d{2})?\s*(\S*)/i) {
+        my ($day,$mon,$yr,$hr,$min,$sec,$tz) = ($1,$2,$3,$4,$5,$6,$7);
+        $yr += $yr > 70 ? 1900 : 2000 if $yr < 100;     # boost year to 4 digits if necessary
+        $mon = $monthNum{ucfirst lc $mon} or return $val;
+        if (not $tz) {
+            $tz = '';
+        } elsif ($tzConv{uc $tz}) {
+            $tz = $tzConv{uc $tz};
+        } elsif ($tz =~ /^([-+]\d+):?(\d{2})/) {
+            $tz = $1 . ':' . $2;
+        } else {
+            last;       # (non-standard date)
+        }
+        return sprintf("%.4d:%.2d:%.2d %.2d:%.2d%s%s",$yr,$mon,$day,$hr,$min,$sec||':00',$tz);
+    }
+    if (($et->Options('StrictDate') and not $$et{TAGS_FROM_FILE}) or $et->Options('Validate')) {
+        $et->Warn('Non standard PNG date/time format', 1);
+    }
+    return $val;
+}
+
+#------------------------------------------------------------------------------
+# Convert EXIF date/time to PNG format
+# Inputs: 0) Date/time in EXIF format, 1) ExifTool ref
+# Returns: PNG formatted date/time string
+sub InversePNGDate($$)
+{
+    my ($val, $et) = @_;
+    if ($et->Options('StrictDate')) {
+        my $err;
+        if ($val =~ /^(\d{4}):(\d{2}):(\d{2}) (\d{2})(:\d{2})(:\d{2})?(?:\.\d*)?\s*(\S*)/) {
+            my ($yr,$mon,$day,$hr,$min,$sec,$tz) = ($1,$2,$3,$4,$5,$6,$7);
+            $sec or $sec = '';
+            my %monName = map { $monthNum{$_} => $_ } keys %monthNum;
+            $mon = $monName{$mon + 0} or $err = 1;
+            if (length $tz) {
+                $tz =~ /^(Z|[-+]\d{2}:?\d{2})/ or $err = 1;
+                $tz =~ tr/://d;
+                $tz = ' ' . $tz;
+            }
+            $val = "$day $mon $yr $hr$min$sec$tz" unless $err;
+        }
+        if ($err) {
+            warn "Invalid date/time (use YYYY:mm:dd HH:MM:SS[.ss][+/-HH:MM|Z])\n";
+            undef $val;
+        }
+    }
+    return $val;
 }
 
 #------------------------------------------------------------------------------
@@ -578,7 +730,7 @@ sub FoundPNG($$$$;$$$$)
     my ($et, $tagTablePtr, $tag, $val, $compressed, $outBuff, $enc, $lang) = @_;
     return 0 unless defined $val;
     my $verbose = $et->Options('Verbose');
-    my $id = $tag;  # generate tag ID which include language code
+    my $id = $tag;  # generate tag ID which includes language code
     if ($lang) {
         # case of language code must be normalized since they are case insensitive
         $lang = StandardLangCase($lang);
@@ -623,9 +775,7 @@ sub FoundPNG($$$$;$$$$)
             $et->VerboseDir("Unable to decompress $$tagInfo{Name}", 0, length($val));
         }
         # issue warning if relevant
-        if ($deflateErr and (not $outBuff or
-            ($tagInfo and $$tagInfo{SubDirectory} and $$et{EDIT_DIRS}{$$tagInfo{Name}})))
-        {
+        if ($deflateErr and not $outBuff) {
             $et->Warn($deflateErr);
             $noCompressLib = 1 if $deflateErr =~ /^Install/;
         }
@@ -640,61 +790,79 @@ sub FoundPNG($$$$;$$$$)
     if ($tagInfo) {
         my $tagName = $$tagInfo{Name};
         my $processed;
-        if ($$tagInfo{SubDirectory} and not $compressed) {
-            my $len = length $val;
-            if ($verbose and $$et{INDENT} ne '  ') {
-                if ($wasCompressed and $verbose > 2) {
-                    my $name = $tagName;
-                    $wasCompressed and $name = "Decompressed $name";
-                    $et->VerboseDir($name, 0, $len);
-                    $et->VerboseDump(\$val);
-                }
-                # don't indent next directory (since it is really the same data)
-                $$et{INDENT} =~ s/..$//;
+        if ($$tagInfo{SubDirectory}) {
+            if ($$et{OPTIONS}{Validate} and $$tagInfo{NonStandard}) {
+                $et->Warn("Non-standard $$tagInfo{NonStandard} in PNG $tag chunk", 1);
             }
             my $subdir = $$tagInfo{SubDirectory};
-            my $processProc = $$subdir{ProcessProc};
-            # nothing more to do if writing and subdirectory is not writable
-            my $subTable = GetTagTable($$subdir{TagTable});
-            return 1 if $outBuff and not $$subTable{WRITE_PROC};
             my $dirName = $$subdir{DirName} || $tagName;
-            my %subdirInfo = (
-                DataPt   => \$val,
-                DirStart => 0,
-                DataLen  => $len,
-                DirLen   => $len,
-                DirName  => $dirName,
-                TagInfo  => $tagInfo,
-                ReadOnly => 1, # (only used by WriteXMP)
-                OutBuff  => $outBuff,
-            );
-            # no need to re-decompress if already done
-            undef $processProc if $wasCompressed and $processProc eq \&ProcessPNG_Compressed;
-            # rewrite this directory if necessary (but always process TextualData normally)
-            if ($outBuff and not $processProc and $subTable ne \%Image::ExifTool::PNG::TextualData) {
-                return 1 unless $$et{EDIT_DIRS}{$dirName};
-                $$outBuff = $et->WriteDirectory(\%subdirInfo, $subTable);
-                if ($tagName eq 'XMP' and $$outBuff) {
-                    if ($$et{FoundIDAT} and $$et{DEL_GROUP}{XMP}) {
-                        $et->VPrint(0,'  Deleting XMP');
-                        $$outBuff = '';
-                    } else {
-                        # make sure the XMP is marked as read-only
-                        Image::ExifTool::XMP::ValidateXMP($outBuff,'r');
+            if (not $compressed) {
+                my $len = length $val;
+                if ($verbose and $$et{INDENT} ne '  ') {
+                    if ($wasCompressed and $verbose > 2) {
+                        my $name = $tagName;
+                        $wasCompressed and $name = "Decompressed $name";
+                        $et->VerboseDir($name, 0, $len);
+                        $et->VerboseDump(\$val);
                     }
+                    # don't indent next directory (since it is really the same data)
+                    $$et{INDENT} =~ s/..$//;
                 }
-                DoneDir($et, $dirName, $outBuff, $$tagInfo{NonStandard});
-            } else {
-                # issue warning for standard XMP after IDAT (PNGEarlyXMP option)
-                if ($tagName eq 'XMP' and not $$tagInfo{NonStandard} and
-                    $$et{FoundIDAT} and $$et{FoundIDAT} == 2)
-                {
-                    $et->Warn('XMP found after PNG IDAT');
-                    $$et{FoundIDAT} = 1;
+                my $processProc = $$subdir{ProcessProc};
+                # nothing more to do if writing and subdirectory is not writable
+                my $subTable = GetTagTable($$subdir{TagTable});
+                return 1 if $outBuff and not $$subTable{WRITE_PROC};
+                my $dirName = $$subdir{DirName} || $tagName;
+                my %subdirInfo = (
+                    DataPt   => \$val,
+                    DirStart => 0,
+                    DataLen  => $len,
+                    DirLen   => $len,
+                    DirName  => $dirName,
+                    TagInfo  => $tagInfo,
+                    ReadOnly => 1, # (used only by WriteXMP)
+                    OutBuff  => $outBuff,
+                );
+                # no need to re-decompress if already done
+                undef $processProc if $wasCompressed and $processProc and $processProc eq \&ProcessPNG_Compressed;
+                # rewrite this directory if necessary (but always process TextualData normally)
+                if ($outBuff and not $processProc and $subTable ne \%Image::ExifTool::PNG::TextualData) {
+                    return 1 unless $$et{EDIT_DIRS}{$dirName};
+                    $$outBuff = $et->WriteDirectory(\%subdirInfo, $subTable);
+                    if ($tagName eq 'XMP' and $$outBuff) {
+                        if ($$et{FoundIDAT} and $$et{DEL_GROUP}{XMP}) {
+                            $et->VPrint(0,'  Deleting XMP');
+                            $$outBuff = '';
+                        } else {
+                            # make sure the XMP is marked as read-only
+                            Image::ExifTool::XMP::ValidateXMP($outBuff,'r');
+                        }
+                    }
+                    DoneDir($et, $dirName, $outBuff, $$tagInfo{NonStandard});
+                } else {
+                    # issue warning for standard XMP after IDAT (PNGEarlyXMP option)
+                    if ($tagName eq 'XMP' and not $$tagInfo{NonStandard} and
+                        $$et{FoundIDAT} and $$et{FoundIDAT} == 2)
+                    {
+                        $et->Warn('XMP found after PNG IDAT');
+                        $$et{FoundIDAT} = 1;
+                    }
+                    $processed = $et->ProcessDirectory(\%subdirInfo, $subTable, $processProc);
                 }
-                $processed = $et->ProcessDirectory(\%subdirInfo, $subTable, $processProc);
+                $compressed = 1;    # pretend this is compressed since it is binary data
+            } elsif ($outBuff) {
+                if ($$et{DEL_GROUP}{$dirName} or ($dirName eq 'EXIF' and $$et{DEL_GROUP}{IFD0})) {
+                    $$outBuff = '';
+                    ++$$et{CHANGED};
+                    $et->VPrint(0, "  Deleting $tag chunk");
+                } else {
+                    if ($$et{EDIT_DIRS}{$dirName} or ($dirName eq 'EXIF' and $$et{EDIT_DIRS}{IFD0})) {
+                        $et->Warn("Can't write $dirName. Requires Compress::Zlib");
+                    }
+                    # pretend we did this directory so we don't try to recreate it
+                    DoneDir($et, $dirName, $outBuff, $$tagInfo{NonStandard});
+                }
             }
-            $compressed = 1;    # pretend this is compressed since it is binary data
         }
         if ($outBuff) {
             my $writable = $$tagInfo{Writable};
@@ -717,7 +885,7 @@ sub FoundPNG($$$$;$$$$)
                     my $nvHash = $et->GetNewValueHash($tagInfo);
                     $isOverwriting = $et->IsOverwriting($nvHash);
                     if (defined $deflateErr) {
-                        $newVal = $et->GetNewValues($nvHash);
+                        $newVal = $et->GetNewValue($nvHash);
                         # can only write tag now if always overwriting
                         if ($isOverwriting > 0) {
                             $val = '<deflate error>';
@@ -730,7 +898,7 @@ sub FoundPNG($$$$;$$$$)
                             $isOverwriting = $et->IsOverwriting($nvHash, $val);
                         }
                         # (must get new value after IsOverwriting() in case it was shifted)
-                        $newVal = $et->GetNewValues($nvHash);
+                        $newVal = $et->GetNewValue($nvHash);
                     }
                 }
                 if ($isOverwriting) {
@@ -745,17 +913,19 @@ sub FoundPNG($$$$;$$$$)
                     $$outBuff = BuildTextChunk($et, $tag, $tagInfo, $$outBuff, $lang);
                 } elsif ($wasCompressed) {
                     # re-compress the output data
-                    my $deflate;
-                    if (eval { require Compress::Zlib }) {
-                        my $deflate = Compress::Zlib::deflateInit();
-                        if ($deflate) {
-                            $$outBuff = $deflate->deflate($$outBuff);
-                            $$outBuff .= $deflate->flush() if defined $$outBuff;
-                        } else {
-                            undef $$outBuff;
-                        }
+                    my $len = length $$outBuff;
+                    my $deflate = Compress::Zlib::deflateInit();
+                    if ($deflate) {
+                        $$outBuff = $deflate->deflate($$outBuff);
+                        $$outBuff .= $deflate->flush() if defined $$outBuff;
+                    } else {
+                        undef $$outBuff;
                     }
-                    $$outBuff or $et->Warn("PNG:$tagName not written (compress error)");
+                    if (not $$outBuff) {
+                        $et->Warn("PNG:$tagName not written (compress error)");
+                    } elsif (lc $tag eq 'zxif') {
+                        $$outBuff = "\0" . pack('N',$len) . $$outBuff;  # add zXIf header
+                    }
                 }
             }
             return 1;
@@ -865,7 +1035,7 @@ sub ProcessProfile($$$)
             $dir =~ s/_Profile// unless $dir =~ /^ICC/;
             return 1 unless $$editDirs{$dir};
             $$outBuff = $et->WriteDirectory(\%dirInfo, $tagTablePtr);
-            DoneDir($et, $dir, $outBuff);
+            DoneDir($et, $dir, $outBuff, $$tagInfo{NonStandard});
         } else {
             $processed = $et->ProcessDirectory(\%dirInfo, $tagTablePtr);
         }
@@ -876,6 +1046,12 @@ sub ProcessProfile($$$)
         $dirInfo{DirStart} += $hdrLen;
         $dirInfo{DirLen} -= $hdrLen;
         if ($outBuff) {
+            # delete non-standard EXIF if recreating from scratch
+            if ($$et{DEL_GROUP}{EXIF} or $$et{DEL_GROUP}{IFD0}) {
+                $$outBuff = '';
+                $et->VPrint(0, '  Deleting non-standard APP1 EXIF information');
+                return 1;
+            }
             $$outBuff = $et->WriteDirectory(\%dirInfo, $tagTablePtr,
                                             \&Image::ExifTool::WriteTIFF);
             $$outBuff = $Image::ExifTool::exifAPP1hdr . $$outBuff if $$outBuff;
@@ -901,6 +1077,12 @@ sub ProcessProfile($$$)
         # TIFF information
         return 1 if $outBuff and not $$editDirs{IFD0};
         if ($outBuff) {
+            # delete non-standard EXIF if recreating from scratch
+            if ($$et{DEL_GROUP}{EXIF} or $$et{DEL_GROUP}{IFD0}) {
+                $$outBuff = '';
+                $et->VPrint(0, '  Deleting non-standard EXIF/TIFF information');
+                return 1;
+            }
             $$outBuff = $et->WriteDirectory(\%dirInfo, $tagTablePtr,
                                             \&Image::ExifTool::WriteTIFF);
             DoneDir($et, 'IFD0', $outBuff);
@@ -910,7 +1092,7 @@ sub ProcessProfile($$$)
     } else {
         my $profName = $profileType;
         $profName =~ tr/\x00-\x1f\x7f-\xff/./;
-        $et->Warn("Unknown raw profile '$profName'");
+        $et->Warn("Unknown raw profile '${profName}'");
     }
     if ($outBuff and defined $$outBuff and length $$outBuff) {
         if ($$et{CHANGED} != $oldChanged) {
@@ -988,6 +1170,59 @@ sub ProcessPNG_iTXt($$$)
 }
 
 #------------------------------------------------------------------------------
+# Process PNG eXIf/zXIf chunk
+# Inputs: 0) ExifTool object reference, 1) DirInfo reference, 2) Pointer to tag table
+# Returns: 1 on success
+# Notes: writes new chunk data to ${$$dirInfo{OutBuff}} if writing tag
+sub ProcessPNG_eXIf($$$)
+{
+    my ($et, $dirInfo, $tagTablePtr) = @_;
+    my $outBuff = $$dirInfo{OutBuff};
+    my $dataPt = $$dirInfo{DataPt};
+    my $tagInfo = $$dirInfo{TagInfo};
+    my $tag = $$tagInfo{TagID};
+    my $del = $outBuff && ($$et{DEL_GROUP}{EXIF} or $$et{DEL_GROUP}{IFD0});
+    my $type;
+
+    if ($$dataPt =~ /^Exif\0\0/) {
+        $et->Warn('Improper "Exif00" header in EXIF chunk');
+        $$dataPt = substr($$dataPt, 6);
+        $$dirInfo{DataLen} = length $$dataPt;
+        $$dirInfo{DirLen} -= 6 if $$dirInfo{DirLen};
+    }
+    if ($$dataPt =~ /^(\0|II|MM)/) {
+        $type = $1;
+    } elsif ($del) {
+        $et->VPrint(0, "  Deleting invalid $tag chunk");
+        $$outBuff = '';
+        ++$$et{CHANGED};
+        return 1;
+    } else {
+        $et->Warn("Invalid $tag chunk");
+        return 0;
+    }
+    if ($type eq "\0") {    # is this compressed EXIF?
+        my $buf = substr($$dataPt, 5);
+        # go around again to uncompress the data
+        $tagTablePtr = GetTagTable('Image::ExifTool::PNG::Main');
+        return FoundPNG($et, $tagTablePtr, $$tagInfo{TagID}, \$buf, 2, $outBuff);
+    } elsif (not $outBuff) {
+        return $et->ProcessTIFF($dirInfo);
+    # (zxIf was not adopted)
+    #} elsif ($del and ($et->Options('Compress') xor lc($tag) eq 'zxif')) {
+    } elsif ($del and lc($tag) eq 'zxif') {
+        $et->VPrint(0, "  Deleting $tag chunk");
+        $$outBuff = '';
+        ++$$et{CHANGED};
+    } elsif ($$et{EDIT_DIRS}{IFD0}) {
+        $$outBuff = $et->WriteDirectory($dirInfo, $tagTablePtr,
+                                        \&Image::ExifTool::WriteTIFF);
+        DoneDir($et, 'IFD0', $outBuff, $$tagInfo{NonStandard});
+    }
+    return 1;
+}
+
+#------------------------------------------------------------------------------
 # Extract meta information from a PNG image
 # Inputs: 0) ExifTool object reference, 1) dirInfo reference
 # Returns: 1 on success, 0 if this wasn't a valid PNG image, or -1 on write error
@@ -999,10 +1234,12 @@ sub ProcessPNG($$)
     my $datChunk = '';
     my $datCount = 0;
     my $datBytes = 0;
-    my ($sig, $err, $ok);
+    my ($sig, $err);
 
     # check to be sure this is a valid PNG/MNG/JNG image
     return 0 unless $raf->Read($sig,8) == 8 and $pngLookup{$sig};
+
+    $$raf{NoBuffer} = 1 if $et->Options('FastScan'); # disable buffering in FastScan mode
 
     my $earlyXMP = $et->Options('PNGEarlyXMP');
     if ($outfile) {
@@ -1033,14 +1270,26 @@ sub ProcessPNG($$)
     }
     my $verbose = $et->Options('Verbose');
     my $out = $et->Options('TextOut');
-    my ($hbuf, $dbuf, $cbuf, $foundHdr);
+    my ($hbuf, $dbuf, $cbuf, $wasHdr, $wasEnd);
 
     # process the PNG/MNG/JNG chunks
     undef $noCompressLib;
     for (;;) {
-        $raf->Read($hbuf,8) == 8 or $et->Warn("Truncated $fileType image"), last;
+        my $n = $raf->Read($hbuf,8);
+        if ($wasEnd) {
+            last unless $n; # stop now if normal end of PNG
+            $et->WarnOnce("Trailer data after $fileType $endChunk chunk", 1);
+            last if $n < 8;
+            $$et{SET_GROUP1} = 'Trailer';
+        } elsif ($n != 8) {
+            $et->Warn("Truncated $fileType image") unless $wasEnd;
+            last;
+        }
         my ($len, $chunk) = unpack('Na4',$hbuf);
-        $len > 0x7fffffff and $et->Warn("Invalid $fileType box size"), last;
+        if ($len > 0x7fffffff) {
+            $et->Warn("Invalid $fileType chunk size") unless $wasEnd;
+            last;
+        }
         if ($verbose) {
             # don't dump image data chunks in verbose mode (only give count instead)
             if ($datCount and $chunk ne $datChunk) {
@@ -1056,8 +1305,8 @@ sub ProcessPNG($$)
             }
         }
         if ($outfile) {
-            if ($chunk eq 'IEND') {
-                # add any new chunks immediately before the IEND chunk
+            if ($chunk eq $endChunk) {
+                # add any new chunks immediately before the IEND/MEND chunk
                 AddChunks($et, $outfile) or $err = 1;
             } elsif ($chunk eq 'PLTE' or $chunk eq 'IDAT') {
                 if ($chunk eq 'IDAT') {
@@ -1072,27 +1321,45 @@ sub ProcessPNG($$)
             }
         }
         if ($chunk eq $endChunk) {
-            if ($outfile) {
-                # copy over the rest of the file if necessary
-                Write($outfile, $hbuf) or $err = 1;
-                while ($raf->Read($hbuf, 65536)) {
-                    Write($outfile, $hbuf) or $err = 1;
-                }
+            # read CRC
+            unless ($raf->Read($cbuf,4) == 4) {
+                $et->Warn("Truncated $fileType $endChunk chunk") unless $wasEnd;
+                last;
             }
             $verbose and print $out "$fileType $chunk (end of image)\n";
-            $ok = 1;
-            last;
+            $wasEnd = 1;
+            if ($outfile) {
+                # write the IEND/MEND chunk with CRC
+                Write($outfile, $hbuf, $cbuf) or $err = 1;
+                if ($$et{DEL_GROUP}{Trailer}) {
+                    if ($raf->Read($hbuf, 1)) {
+                        $verbose and printf $out "  Deleting PNG trailer\n";
+                        ++$$et{CHANGED};
+                    }
+                } else {
+                    # copy over any existing trailer data
+                    my $tot = 0;
+                    for (;;) {
+                        $n = $raf->Read($hbuf, 65536) or last;
+                        $tot += $n;
+                        Write($outfile, $hbuf) or $err = 1;
+                    }
+                    $tot and $verbose and printf $out "  Copying PNG trailer ($tot bytes)\n";
+                }
+                last;
+            }
+            next;
         }
         # set FoundIDAT flag: 1=after IDAT, 2=after IDAT and warn about late XMP
         $$et{FoundIDAT} = $earlyXMP ? 2 : 1 if $chunk eq 'IDAT';
         # read chunk data and CRC
         unless ($raf->Read($dbuf,$len)==$len and $raf->Read($cbuf, 4)==4) {
-            $et->Warn("Corrupted $fileType image");
+            $et->Warn("Corrupted $fileType image") unless $wasEnd;
             last;
         }
-        unless ($foundHdr) {
+        unless ($wasHdr) {
             if ($chunk eq $hdrChunk) {
-                $foundHdr = 1;
+                $wasHdr = 1;
             } elsif ($hdrChunk eq 'IHDR' and $chunk eq 'CgBI') {
                 $et->Warn('Non-standard PNG image (Apple iPhone format)');
             } else {
@@ -1104,13 +1371,26 @@ sub ProcessPNG($$)
             # check CRC when in verbose mode (since we don't care about speed)
             my $crc = CalculateCRC(\$hbuf, undef, 4);
             $crc = CalculateCRC(\$dbuf, $crc);
-            $crc == unpack('N',$cbuf) or $et->Warn("Bad CRC for $chunk chunk");
+            $crc == unpack('N',$cbuf) or $et->Warn("Bad CRC for $chunk chunk") unless $wasEnd;
             if ($datChunk) {
                 Write($outfile, $hbuf, $dbuf, $cbuf) or $err = 1 if $outfile;
                 next;
             }
             print $out "$fileType $chunk ($len bytes):\n";
             $et->VerboseDump(\$dbuf, Addr => $raf->Tell() - $len - 4) if $verbose > 2;
+        }
+        # translate case of chunk name if necessary
+        if (not $$tagTablePtr{$chunk}) {
+            my $stdChunk = $stdCase{lc $chunk};
+            if ($stdChunk) {
+                if ($outfile and ($$et{EDIT_DIRS}{IFD0} or $stdChunk !~ /^[ez]xif$/i)) {
+                    $et->Warn("Changed $chunk chunk to $stdChunk", 1);
+                    ++$$et{CHANGED};
+                } else {
+                    $et->Warn("$chunk chunk should be $stdChunk", 1);
+                }
+                $chunk = $stdCase{lc $chunk};
+            }
         }
         # only extract information from chunks in our tables
         my ($theBuff, $outBuff);
@@ -1137,7 +1417,8 @@ sub ProcessPNG($$)
             Write($outfile, $hbuf, $dbuf, $cbuf) or $err = 1;
         }
     }
-    return -1 if $outfile and ($err or not $ok);
+    delete $$et{SET_GROUP1};
+    return -1 if $outfile and ($err or not $wasEnd);
     return 1;   # this was a valid PNG/MNG/JNG image
 }
 
@@ -1161,7 +1442,7 @@ and JNG (JPEG Network Graphics) images.
 
 =head1 AUTHOR
 
-Copyright 2003-2014, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

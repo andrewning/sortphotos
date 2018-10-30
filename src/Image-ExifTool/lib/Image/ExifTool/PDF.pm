@@ -21,13 +21,14 @@ use vars qw($VERSION $AUTOLOAD $lastFetched);
 use Image::ExifTool qw(:DataAccess :Utils);
 require Exporter;
 
-$VERSION = '1.37';
+$VERSION = '1.46';
 
 sub FetchObject($$$$);
 sub ExtractObject($$;$$);
 sub ReadToNested($;$);
 sub ProcessDict($$$$;$$);
 sub ProcessAcroForm($$$$;$$);
+sub ExpandArray($);
 sub ReadPDFValue($);
 sub CheckPDF($$$);
 
@@ -51,11 +52,11 @@ my %supportedFilter = (
     '/JPXDecode' => 1, # (Jpeg2000 image - not filtered)
     '/LZWDecode' => 1, # (usually a bitmapped image)
     '/ASCIIHexDecode' => 1,
+    '/ASCII85Decode' => 1,
     # other standard filters that we currently don't support
     #'/JBIG2Decode' => 0, # (JBIG2 image format not supported)
     #'/CCITTFaxDecode' => 0,
     #'/RunLengthDecode' => 0,
-    #'/ASCII85Decode' => 0,
 );
 
 # tags in main PDF directories
@@ -326,6 +327,7 @@ my %supportedFilter = (
     },
     Image_stream => {
         Name => 'EmbeddedImage',
+        Groups => { 2 => 'Preview' },
         Binary => 1,
     },
 );
@@ -745,13 +747,18 @@ sub FetchObject($$$$)
         return ExtractObject($et, \$data);
     }
     my $raf = $$et{RAF};
-    $raf->Seek($offset, 0) or $et->Warn("Bad $tag offset"), return undef;
+    $raf->Seek($offset+$$et{PDFBase}, 0) or $et->Warn("Bad $tag offset"), return undef;
     # verify that we are reading the expected object
     $raf->ReadLine($data) or $et->Warn("Error reading $tag data"), return undef;
     ($obj = $ref) =~ s/R/obj/;
     unless ($data =~ s/^$obj//) {
         $et->Warn("$tag object ($obj) not found at $offset");
         return undef;
+    }
+    # read the first line of data for the object (skipping comments if necessary)
+    for (;;) {
+        last if $data =~ /\S/ and $data !~ /^\s*%/;
+        $raf->ReadLine($data) or $et->Warn("Error reading $tag data"), return undef;
     }
     return ExtractObject($et, \$data, $raf, $xref);
 }
@@ -920,7 +927,7 @@ sub ExtractObject($$;$$)
         }
         if ($$dict{$tag}) {
             # duplicate dictionary entries are not allowed
-            $et->Warn('Duplicate $tag entry in dictionary (ignored)');
+            $et->Warn("Duplicate '${tag}' entry in dictionary (ignored)");
         } else {
             # save the entry
             push @tags, $tag;
@@ -942,7 +949,7 @@ sub ExtractObject($$;$$)
         # (compressed objects are not allowed)
         my $offset = LocateObject($xref, $length) or return $dict;
         $offset or $et->Warn('Bad Length object'), return $dict;
-        $raf->Seek($offset, 0) or $et->Warn('Bad Length offset'), return $dict;
+        $raf->Seek($offset+$$et{PDFBase}, 0) or $et->Warn('Bad Length offset'), return $dict;
         # verify that we are reading the expected object
         $raf->ReadLine($data) or $et->Warn('Error reading Length data'), return $dict;
         $length =~ s/R/obj/;
@@ -1241,7 +1248,7 @@ sub DecodeStream($$)
                 } elsif ($$decodeParms{EarlyChange}) {
                     $et->WarnOnce("LZWDecode EarlyChange currently not supported");
                     return 0;
-                }                    
+                }
             }
             unless (DecodeLZW(\$$dict{_stream})) {
                 $et->WarnOnce('LZW decompress error');
@@ -1254,6 +1261,34 @@ sub DecodeStream($$)
             $$dict{_stream} =~ tr/0-9a-zA-Z//d; # remove illegal characters
             $$dict{_stream} = pack 'H*', $$dict{_stream};
 
+        } elsif ($filter eq '/ASCII85Decode') {
+
+            my ($err, @out, $i);
+            my ($n, $val) = (0, 0);
+            foreach (split //, $$dict{_stream}) {
+                if ($_ ge '!' and $_ le 'u') {;
+                    $val = 85 * $val + ord($_) - 33;
+                    next unless ++$n == 5;
+                } elsif ($_ eq '~') {
+                    $n == 1 and $err = 1;   # error to have a single char in the last group of 5
+                    for ($i=$n; $i<5; ++$i) { $val *= 85; }
+                } elsif ($_ eq 'z') {
+                    $n and $err = 2, last;  # error if 'z' isn't the first char
+                    $n = 5;
+                } else {
+                    next if /^\s$/;         # ignore white space
+                    $err = 3, last;         # any other character is an error
+                }
+                $val = unpack('V', pack('N', $val)); # reverse byte order
+                while (--$n > 0) {
+                    push @out, $val & 0xff;
+                    $val >>= 8;
+                }
+                last if $_ eq '~';
+                # (both $n and $val are zero again now)
+            }
+            $err and $et->WarnOnce("ASCII85Decode error $err");
+            $$dict{_stream} = pack('C*', @out);
         }
     }
     return 1;
@@ -1416,7 +1451,7 @@ sub DecryptInit($$$)
     }
     if ("$ver.$rev" >= 5.6) {
         # apologize for poor performance (AES is a pure Perl implementation)
-        $et->Warn('Decryption is very slow for encryption V5.6 or higher', 1);
+        $et->Warn('Decryption is very slow for encryption V5.6 or higher', 3);
     }
     $et->HandleTag($tagTablePtr, 'P', $$encrypt{P});
 
@@ -1490,7 +1525,7 @@ sub DecryptInit($$$)
             # make sure there is no UTF-8 flag on the password
             if ($] >= 5.006 and (eval { require Encode; Encode::is_utf8($password) } or $@)) {
                 # repack by hand if Encode isn't available
-                $password = $@ ? pack('C*',unpack('U0C*',$password)) : Encode::encode('utf8',$password);
+                $password = $@ ? pack('C*',unpack($] < 5.010000 ? 'U0C*' : 'C0C*',$password)) : Encode::encode('utf8',$password);
             }
         } else {
             return 'Incorrect password';
@@ -1670,6 +1705,22 @@ sub ProcessAcroForm($$$$;$$)
 }
 
 #------------------------------------------------------------------------------
+# Expand array into a string
+# Inputs: 0) array ref
+# Return: string
+sub ExpandArray($)
+{
+    my $val = shift;
+    my @list = @$val;
+    foreach (@list) {
+        ref $_ eq 'SCALAR' and $_ = "ref($$_)", next;
+        ref $_ eq 'ARRAY' and $_ = ExpandArray($_), next;
+        defined $_ or $_ = '<undef>', next;
+    }
+    return '[' . join(',',@list) . ']';
+}
+
+#------------------------------------------------------------------------------
 # Process PDF dictionary extract tag values
 # Inputs: 0) ExifTool object reference, 1) tag table reference
 #         2) dictionary reference, 3) cross-reference table reference,
@@ -1789,14 +1840,7 @@ sub ProcessDict($$$$;$$)
                     SubDirectory => { TagTable => 'Image::ExifTool::PDF::Unknown' },
                 };
             } else {
-                if (ref $val eq 'ARRAY') {
-                    my @list = @$val;
-                    foreach (@list) {
-                        $_ = "ref($$_)" if ref $_ eq 'SCALAR';
-                        $_ = '<undef>' unless defined $_;
-                    }
-                    $val2 = '[' . join(',',@list) . ']';
-                }
+                $val2 = ExpandArray($val) if ref $val eq 'ARRAY';
                 # generate tag info if we will use it later
                 if (not $tagInfo and defined $val and $unknown) {
                     $tagInfo = NewPDFTag($tagTablePtr, $tag);
@@ -1930,7 +1974,7 @@ sub ProcessDict($$$$;$$)
                     # otherwise we must first convert from PDFDocEncoding
                     $val = $et->Decode($val, ($val=~s/^\xfe\xff// ? 'UCS2' : 'PDFDoc'), 'MM');
                 }
-                if ($$tagInfo{List}) {
+                if ($$tagInfo{List} and not $$et{OPTIONS}{NoPDFList}) {
                     # separate tokens in comma or whitespace delimited lists
                     my @values = ($val =~ /,/) ? split /,+\s*/, $val : split ' ', $val;
                     foreach $val (@values) {
@@ -2006,6 +2050,10 @@ sub ProcessDict($$$$;$$)
         }
         # decode stream if necessary
         DecodeStream($et, $dict) or last;
+        if ($verbose > 2) {
+            $et->VPrint(2,"$$et{INDENT}$$et{DIR_NAME} stream data\n");
+            $et->VerboseDump(\$$dict{_stream});
+        }
         # extract information from stream
         my %dirInfo = (
             DataPt   => \$$dict{_stream},
@@ -2037,8 +2085,9 @@ sub ReadPDF($$)
 #
     # (linearization dictionary must be in the first 1024 bytes of the file)
     $raf->Read($buff, 1024) >= 8 or return 0;
-    $buff =~ /^%PDF-(\d+\.\d+)/ or return 0;
-    $pdfVer = $1;
+    $buff =~ /^(\s*)%PDF-(\d+\.\d+)/ or return 0;
+    $$et{PDFBase} = length $1 and $et->Warn('PDF header is not at start of file',1);
+    $pdfVer = $2;
     $et->SetFileType();   # set the FileType tag
     $et->Warn("May not be able to read a PDF version $pdfVer file") if $pdfVer >= 2.0;
     # store PDFVersion tag
@@ -2057,7 +2106,7 @@ sub ReadPDF($$)
             if (ref $dict eq 'HASH' and $$dict{Linearized} and $$dict{L}) {
                 if (not $$et{VALUE}{FileSize}) {
                     undef $lin; # can't determine if it is linearized
-                } elsif ($$dict{L} == $$et{VALUE}{FileSize}) {
+                } elsif ($$dict{L} == $$et{VALUE}{FileSize} - $$et{PDFBase}) {
                     $lin = 'true';
                 }
             }
@@ -2074,8 +2123,9 @@ sub ReadPDF($$)
     $len = 1024 if $len > 1024;
     $raf->Seek(-$len, 2) or return -2;
     $raf->Read($buff, $len) == $len or return -3;
-    # find the LAST xref table in the file (may be multiple %%EOF marks)
-    $buff =~ /^.*startxref(\s+)(\d+)(\s+)%%EOF/s or return -4;
+    # find the LAST xref table in the file (may be multiple %%EOF marks,
+    # and comments between "startxref" and "%%EOF")
+    $buff =~ /^.*startxref(\s+)(\d+)(\s+)(%[^\x0d\x0a]*\s+)*%%EOF/s or return -4;
     my $ws = $1 . $3;
     my $xr = $2;
     push @xrefOffsets, $xr, 'Main';
@@ -2094,7 +2144,7 @@ XRef:
         my $offset = shift @xrefOffsets;
         my $type = shift @xrefOffsets;
         next if $loaded{$offset};   # avoid infinite recursion
-        unless ($raf->Seek($offset, 0)) {
+        unless ($raf->Seek($offset+$$et{PDFBase}, 0)) {
             %loaded or return -5;
             $et->Warn('Bad offset for secondary xref table');
             next;
@@ -2296,7 +2346,7 @@ including AESV2 (AES-128) and AESV3 (AES-256).
 
 =head1 AUTHOR
 
-Copyright 2003-2014, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

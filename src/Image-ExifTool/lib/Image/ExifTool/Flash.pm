@@ -26,7 +26,7 @@ use vars qw($VERSION);
 use Image::ExifTool qw(:DataAccess :Utils);
 use Image::ExifTool::FLAC;
 
-$VERSION = '1.11';
+$VERSION = '1.12';
 
 sub ProcessMeta($$$;$);
 
@@ -52,7 +52,7 @@ my %processMetaPacket = ( onMetaData => 1, onXMPData => 1 );
         PrintConv => 'ConvertDuration($val)',
     },
     69 => {
-        Name => 'FileAttributes',
+        Name => 'FlashAttributes',
         PrintConv => { BITMASK => {
             0 => 'UseNetwork',
             3 => 'ActionScript3',
@@ -363,7 +363,7 @@ Record: for ($rec=0; ; ++$rec) {
                 $pos += 2 + $len;
                 # first string of a typed object is the object name
                 if ($getName) {
-                    $et->VPrint(1,"  | (object name '$tag')\n");
+                    $et->VPrint(1,"  | (object name '${tag}')\n");
                     undef $getName;
                     next; # (ignore name for now)
                 }
@@ -454,7 +454,7 @@ Record: for ($rec=0; ; ++$rec) {
             } else {
                 # give verbose indication if we ignore a lone value
                 my $t = $amfType[$type] || sprintf('type 0x%x',$type);
-                $et->VPrint(1, "  | (ignored lone $t value '$val')\n");
+                $et->VPrint(1, "  | (ignored lone $t value '${val}')\n");
             }
         }
     }
@@ -642,7 +642,7 @@ sub ProcessSWF($$)
     FoundFlashTag($et, FrameCount => $vals[1]);
     FoundFlashTag($et, Duration => $vals[1] * 256 / $vals[0]) if $vals[0];
 
-    # scan through the tags to find FileAttributes and XMP
+    # scan through the tags to find FlashAttributes and XMP
     $buff = substr($buff, $nBytes + 4);
     for (;;) {
         my $buffLen = length $buff;
@@ -679,7 +679,7 @@ sub ProcessSWF($$)
             }
             $et->VPrint(1, "  [extended size $size bytes]\n");
         }
-        if ($tag == 69) {       # FileAttributes
+        if ($tag == 69) {       # FlashAttributes
             last unless $size;
             my $flags = Get8u(\$buff, $pos);
             FoundFlashTag($et, $tag => $flags);
@@ -721,7 +721,7 @@ will add AMF3 support.
 
 =head1 AUTHOR
 
-Copyright 2003-2014, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

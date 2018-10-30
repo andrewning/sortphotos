@@ -127,11 +127,15 @@ sub CheckIPTC($$$)
                 $len = $minlen;
             }
         }
-        if (defined $minlen) {
+        if (defined $minlen and $fmt ne 'string') { # (must truncate strings later, after recoding)
             $maxlen or $maxlen = $minlen;
-            return "String too short (minlen is $minlen)" if $len < $minlen;
-            if ($len > $maxlen and not $et->Options('IgnoreMinorErrors')) {
-                $$et{CHECK_WARN} = "[minor] IPTC:$$tagInfo{Name} exceeds length limit (truncated)";
+            if ($len < $minlen) {
+                unless ($$et{OPTIONS}{IgnoreMinorErrors}) {
+                    return "[Minor] String too short (minlen is $minlen)";
+                }
+                $$et{CHECK_WARN} = "String too short for IPTC:$$tagInfo{Name} (written anyway)";
+            } elsif ($len > $maxlen and not $$et{OPTIONS}{IgnoreMinorErrors}) {
+                $$et{CHECK_WARN} = "[Minor] IPTC:$$tagInfo{Name} exceeds length limit (truncated)";
                 $$valPtr = substr($$valPtr, 0, $maxlen);
             }
         }
@@ -181,6 +185,26 @@ sub FormatIPTC($$$$$;$)
         } elsif ($$xlatPtr and $rec < 7 and $$valPtr =~ /[\x80-\xff]/) {
             TranslateCodedString($et, $valPtr, $xlatPtr, $read);
         }
+        # must check length now (after any string recoding)
+        if (not $read and $format =~ /^string\[(\d+),?(\d*)\]$/) {
+            my ($minlen, $maxlen) = ($1, $2);
+            my $len = length $$valPtr;
+            $maxlen or $maxlen = $minlen;
+            if ($len < $minlen) {
+                if ($et->Warn("String to short for IPTC:$$tagInfo{Name} (padded)", 2)) {
+                    $$valPtr .= ' ' x ($minlen - $len);
+                }
+            } elsif ($len > $maxlen) {
+                if ($et->Warn("IPTC:$$tagInfo{Name} exceeds length limit (truncated)", 2)) {
+                    $$valPtr = substr($$valPtr, 0, $maxlen);
+                    # make sure UTF-8 is still valid
+                    if (($$xlatPtr || $et->Options('Charset')) eq 'UTF8') {
+                        require Image::ExifTool::XMP;
+                        Image::ExifTool::XMP::FixUTF8($valPtr,'.');
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -213,7 +237,7 @@ sub IptcTime($)
         } elsif ($tz =~ /Z/i) {
             $tz = '+0000';  # UTC
         } else {
-            # use local system timezone by default 
+            # use local system timezone by default
             my (@tm, $time);
             if ($date and $date =~ /^(\d{4}):(\d{2}):(\d{2})\s*$/ and eval { require Time::Local }) {
                 # we were given a date too, so determine the local timezone
@@ -242,12 +266,12 @@ sub IptcTime($)
 
 #------------------------------------------------------------------------------
 # Inverse print conversion for IPTC date or time value
-# Inputs: 0) IPTC date or 'now'
+# Inputs: 0) ExifTool ref, 1) IPTC date or 'now'
 # Returns: IPTC date
-sub InverseDateOrTime($)
+sub InverseDateOrTime($$)
 {
-    my $val = shift;
-    return Image::ExifTool::TimeNow() if lc($val) eq 'now';
+    my ($et, $val) = @_;
+    return $et->TimeNow() if lc($val) eq 'now';
     return $val;
 }
 
@@ -512,7 +536,7 @@ sub DoWriteIPTC($$$)
                     $doSet = 1 if not $found and $$nvHash{IsCreating};
                 }
                 if ($doSet) {
-                    @values = $et->GetNewValues($nvHash);
+                    @values = $et->GetNewValue($nvHash);
                     @values and $foundRec{$newRec}->{$newTag} = $found | 0x04;
                     # write tags for each value in list
                     my $value;
@@ -629,7 +653,7 @@ sub WriteIPTC($$$)
         my $nvHash = $$et{NEW_VALUE}{$Image::ExifTool::Photoshop::iptcDigestInfo};
         last unless defined $nvHash;
         last unless IsStandardIPTC($et->MetadataPath());
-        my @values = $et->GetNewValues($nvHash);
+        my @values = $et->GetNewValue($nvHash);
         push @values, @{$$nvHash{DelValue}} if $$nvHash{DelValue};
         my $new = grep /^new$/, @values;
         my $old = grep /^old$/, @values;
@@ -666,6 +690,8 @@ sub WriteIPTC($$$)
         }
         last;
     }
+    # set changed if ForceWrite tag was set to "IPTC"
+    ++$$et{CHANGED} if defined $newData and length $newData and $$et{FORCE_WRITE}{IPTC};
     return $newData;
 }
 
@@ -689,7 +715,7 @@ seldom-used routines.
 
 =head1 AUTHOR
 
-Copyright 2003-2014, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

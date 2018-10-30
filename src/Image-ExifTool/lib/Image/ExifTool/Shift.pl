@@ -470,7 +470,38 @@ Image::ExifTool::Shift.pl - ExifTool time shifting routines
 This module contains routines used by ExifTool to shift date and time
 values.
 
-=head1 DETAILS
+=head1 METHODS
+
+=head2 ShiftTime
+
+Shift date/time value
+
+    use Image::ExifTool;
+    $err = Image::ExifTool::ShiftTime($dateTime, $shift);
+
+=over 4
+
+=item Inputs:
+
+0) Date/time string in EXIF format (eg. C<2016:01:30 11:45:00>).
+
+1) Shift string (see below) with optional leading sign for shift direction.
+
+2) [optional] Direction of shift (-1 or +1), or 0 or undef to use the sign
+from the shift string.
+
+3) [optional] Reference to time-shift hash -- filled in by first call to
+B<ShiftTime>, and used in subsequent calls to shift date/time values by the
+same relative amount (see L</TRICKY> section below).
+
+=item Return value:
+
+Error string, or undef on success and the input date/time string is shifted
+by the specified amount.
+
+=back
+
+=head1 SHIFT STRING
 
 Time shifts are applied to standard EXIF-formatted date/time values (eg.
 C<2005:03:14 18:55:00>).  Date-only and time-only values may also be
@@ -527,7 +558,7 @@ And to save typing, a zero is assumed for any missing numbers:
 
     '1::'       - shift by 1 hour (time, date/time) or 1 year (date)
     '26:: 0'    - shift date by 26 years
-    '+:30       - shift timezone by 30 minutes
+    '+:30'      - shift timezone by 30 minutes
 
 Below are some specific examples applied to real date and/or time values
 ('Dir' is the applied shift direction: '+' is positive, '-' is negative):
@@ -584,7 +615,7 @@ limited to the range 1970 to 2038 on 32-bit systems.
 
 =head1 AUTHOR
 
-Copyright 2003-2014, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

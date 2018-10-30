@@ -7,7 +7,10 @@
 #               02/20/2007 - PH added SD14 tags
 #               24/06/2010 - PH decode some SD15 tags
 #
-# Reference:    http://www.x3f.info/technotes/FileDocs/MakerNoteDoc.html
+# References:   1) http://www.x3f.info/technotes/FileDocs/MakerNoteDoc.html
+#               IB) Iliah Borg private communication (LibRaw)
+#               NJ) Niels Kristian Bech Jensen
+#               JR) Jos Roost
 #------------------------------------------------------------------------------
 
 package Image::ExifTool::Sigma;
@@ -16,39 +19,206 @@ use strict;
 use vars qw($VERSION %sigmaLensTypes);
 use Image::ExifTool::Exif;
 
-$VERSION = '1.14';
+$VERSION = '1.24';
 
-# sigma LensType lookup (ref PH)
+# sigma LensType lookup (ref IB)
 %sigmaLensTypes = (
     Notes => q{
-        Decimal values have been added to differentiate lenses which would otherwise
-        have the same LensType, and are used by the Composite LensID tag when
-        attempting to identify the specific lens model.
+        Sigma LensType values are hexadecimal numbers stored as a string (without
+        the leading "0x").  Decimal values have been added to differentiate lenses
+        which would otherwise have the same LensType, and are used by the Composite
+        LensID tag when attempting to identify the specific lens model.
     },
-    # 0 => 'Sigma 50mm F2.8 EX Macro', (0 used for other lenses too)
-    # 8 - 18-125mm LENSARANGE@18mm=22-4
-    16 => 'Sigma 18-50mm F3.5-5.6 DC',
-    129 => 'Sigma 14mm F2.8 EX Aspherical',
-    131 => 'Sigma 17-70mm F2.8-4.5 DC Macro',
-    145 => 'Sigma Lens (145)',
-    145.1 => 'Sigma 15-30mm F3.5-4.5 EX DG Aspherical',
-    145.2 => 'Sigma 18-50mm F2.8 EX DG', #(NC)
-    145.3 => 'Sigma 20-40mm F2.8 EX DG',
-    165 => 'Sigma 70-200mm F2.8 EX', # ...but what specific model?:
+    # 0x0 => 'Sigma 50mm F2.8 EX Macro', (0x0 used for other lenses too)
+    # 0x8 - 18-125mm LENSARANGE@18mm=22-4
+    0x10, 'Sigma 50mm F2.8 EX DG MACRO',
+    # (0x10 = 16)
+    16.1 => 'Sigma 70mm F2.8 EX DG Macro',
+    16.2 => 'Sigma 105mm F2.8 EX DG Macro',
+    0x16 => 'Sigma 18-50mm F3.5-5.6 DC', #PH
+    0x103 => 'Sigma 180mm F3.5 EX IF HSM APO Macro',
+    0x104 => 'Sigma 150mm F2.8 EX DG HSM APO Macro',
+    0x105 => 'Sigma 180mm F3.5 EX DG HSM APO Macro',
+    0x106 => 'Sigma 150mm F2.8 EX DG OS HSM APO Macro',
+    0x107 => 'Sigma 180mm F2.8 EX DG OS HSM APO Macro',
+    # (0x129 = 297)
+    0x129 => 'Sigma Lens (0x129)', #PH
+    297.1 => 'Sigma 14mm F2.8 EX Aspherical', #PH
+    297.2 => 'Sigma 30mm F1.4',
+    # (0x131 = 305)
+    0x131 => 'Sigma Lens (0x131)',
+    305.1 => 'Sigma 17-70mm F2.8-4.5 DC Macro', #PH
+    305.2 => 'Sigma 70-200mm F2.8 APO EX HSM',
+    305.3 => 'Sigma 120-300mm F2.8 APO EX IF HSM',
+    0x134 => 'Sigma 100-300mm F4 EX DG HSM APO',
+    0x135 => 'Sigma 120-300mm F2.8 EX DG HSM APO',
+    0x136 => 'Sigma 120-300mm F2.8 EX DG OS HSM APO',
+    0x137 => 'Sigma 120-300mm F2.8 DG OS HSM | S',
+    0x143 => 'Sigma 600mm F8 Mirror',
+    # (0x145 = 325)
+    0x145 => 'Sigma Lens (0x145)', #PH
+    325.1 => 'Sigma 15-30mm F3.5-4.5 EX DG Aspherical', #PH
+    325.2 => 'Sigma 18-50mm F2.8 EX DG', #PH (NC)
+    325.3 => 'Sigma 20-40mm F2.8 EX DG', #PH
+    0x150 => 'Sigma 30mm F1.4 DC HSM',
+    # (0x152 = 338)
+    0x152 => 'Sigma Lens (0x152)',
+    338.1 => 'Sigma APO 800mm F5.6 EX DG HSM',
+    338.2 => 'Sigma 12-24mm F4.5-5.6 EX DG ASP HSM',
+    338.3 => 'Sigma 10-20mm F4-5.6 EX DC HSM',
+    0x165 => 'Sigma 70-200mm F2.8 EX', # ...but what specific model?:
     # 70-200mm F2.8 EX APO - Original version, minimum focus distance 1.8m (1999)
     # 70-200mm F2.8 EX DG - Adds 'digitally optimized' lens coatings to reduce flare (2005)
     # 70-200mm F2.8 EX DG Macro (HSM) - Minimum focus distance reduced to 1m (2006)
     # 70-200mm F2.8 EX DG Macro HSM II - Improved optical performance (2007)
-    169 => 'Sigma 18-50mm F2.8 EX DC', #(NC)
-    581 => 'Sigma 18-50mm F2.8 EX DC Macro', # (SD1)
-    583 => 'Sigma 17-50mm F2.8 EX DC OS', # (SD1 kit)
-    1003 => 'Sigma 19mm F2.8', # (DP1 Merrill kit)
-    1004 => 'Sigma 30mm F2.8', # (DP2 Merrill kit)
-    1005 => 'Sigma 50mm F2.8 Macro', # (DP3 Merrill kit)
-    1007 => 'Sigma 30mm F2.8', # (DP2 Quattro kit)
-    8900 => 'Sigma 70-300mm F4-5.6 DG OS', # (SD15)
-    'A100' => 'Sigma 24-70mm F2.8 DG Macro', # (SD15)
-    # 'FFFF' - seen this for a 28-70mm F2.8 lens
+    0x169 => 'Sigma 18-50mm F2.8 EX DC', #PH (NC)
+    0x183 => 'Sigma 500mm F4.5 EX HSM APO',
+    0x184 => 'Sigma 500mm F4.5 EX DG HSM APO',
+    0x185 => 'Sigma 500mm F4 DG OS HSM | S', #JR (NC; based on product number) (016)
+    0x194 => 'Sigma 300mm F2.8 EX HSM APO',
+    0x195 => 'Sigma 300mm F2.8 EX DG HSM APO',
+    0x200 => 'Sigma 12-24mm F4.5-5.6 EX DG ASP HSM',
+    0x201 => 'Sigma 10-20mm F4-5.6 EX DC HSM',
+    0x202 => 'Sigma 10-20mm F3.5 EX DC HSM',
+    0x203 => 'Sigma 8-16mm F4.5-5.6 DC HSM',
+    0x204 => 'Sigma 12-24mm F4.5-5.6 DG HSM II',
+    0x205 => 'Sigma 12-24mm F4 DG HSM | A', #JR (NC; based on product number) (016)
+    0x210 => 'Sigma 18-35mm F1.8 DC HSM | A',
+    0x240 => 'Sigma 135mm F1.8 DG HSM | A', #JR (NC; based on product number) (017)
+    0x256 => 'Sigma 105mm F2.8 EX Macro',
+    0x257 => 'Sigma 105mm F2.8 EX DG Macro',
+    0x258 => 'Sigma 105mm F2.8 EX DG OS HSM Macro',
+    0x270 => 'Sigma 70mm F2.8 EX DG Macro', #NJ (SD1)
+    0x300 => 'Sigma 30mm F1.4 EX DC HSM',
+    0x301 => 'Sigma 30mm F1.4 DC HSM | A',
+    0x302 => 'Sigma 30mm F1.4 DC DN | C', #JR (DN lenses are only for Sony E or MFT mount)
+    0x310 => 'Sigma 50mm F1.4 EX DG HSM',
+    0x311 => 'Sigma 50mm F1.4 DG HSM | A',
+    0x320 => 'Sigma 85mm F1.4 EX DG HSM',
+    0x321 => 'Sigma 85mm F1.4 DG HSM | A', #JR (NC; based on product number) (016)
+    0x330 => 'Sigma 30mm F2.8 EX DN',
+    0x340 => 'Sigma 35mm F1.4 DG HSM',
+    0x345 => 'Sigma 50mm F2.8 EX Macro',
+    0x346 => 'Sigma 50mm F2.8 EX DG Macro',
+    0x350 => 'Sigma 60mm F2.8 DN | A',
+    0x400 => 'Sigma 19mm F2.8 EX DN',
+    0x401 => 'Sigma 24mm F1.4 DG HSM | A',
+    0x411 => 'Sigma 20mm F1.8 EX DG ASP RF',
+    0x412 => 'Sigma 20mm F1.4 DG HSM | A',
+    0x432 => 'Sigma 24mm F1.8 EX DG ASP Macro',
+    0x440 => 'Sigma 28mm F1.8 EX DG ASP Macro',
+    0x450 => 'Sigma 14mm F1.8 DH HSM | A', #JR (NC; based on product number) (017)
+    0x461 => 'Sigma 14mm F2.8 EX ASP HSM',
+    0x475 => 'Sigma 15mm F2.8 EX Diagonal FishEye',
+    0x476 => 'Sigma 15mm F2.8 EX DG Diagonal Fisheye',
+    0x477 => 'Sigma 10mm F2.8 EX DC HSM Fisheye',
+    0x483 => 'Sigma 8mm F4 EX Circular Fisheye',
+    0x484 => 'Sigma 8mm F4 EX DG Circular Fisheye',
+    0x485 => 'Sigma 8mm F3.5 EX DG Circular Fisheye',
+    0x486 => 'Sigma 4.5mm F2.8 EX DC HSM Circular Fisheye',
+    0x506 => 'Sigma 70-300mm F4-5.6 APO Macro Super II',
+    0x507 => 'Sigma 70-300mm F4-5.6 DL Macro Super II',
+    0x508 => 'Sigma 70-300mm F4-5.6 DG APO Macro',
+    0x509 => 'Sigma 70-300mm F4-5.6 DG Macro',
+    0x510 => 'Sigma 17-35 F2.8-4 EX DG ASP',
+    0x512 => 'Sigma 15-30mm F3.5-4.5 EX DG ASP DF',
+    0x513 => 'Sigma 20-40mm F2.8 EX DG',
+    0x519 => 'Sigma 17-35 F2.8-4 EX ASP HSM',
+    0x520 => 'Sigma 100-300mm F4.5-6.7 DL',
+    0x521 => 'Sigma 18-50mm F3.5-5.6 DC Macro',
+    0x527 => 'Sigma 100-300mm F4 EX IF HSM',
+    0x529 => 'Sigma 120-300mm F2.8 EX HSM IF APO',
+    0x547 => 'Sigma 24-60mm F2.8 EX DG',
+    0x548 => 'Sigma 24-70mm F2.8 EX DG Macro',
+    0x549 => 'Sigma 28-70mm F2.8 EX DG',
+    0x566 => 'Sigma 70-200mm F2.8 EX IF APO',
+    0x567 => 'Sigma 70-200mm F2.8 EX IF HSM APO',
+    0x568 => 'Sigma 70-200mm F2.8 EX DG IF HSM APO',
+    0x569 => 'Sigma 70-200 F2.8 EX DG HSM APO Macro',
+    0x571 => 'Sigma 24-70mm F2.8 IF EX DG HSM',
+    0x572 => 'Sigma 70-300mm F4-5.6 DG OS',
+    0x576 => 'Sigma 24-70mm F2.8 DG OS HSM | A', #JR (NC; based on product number) (017)
+    0x579 => 'Sigma 70-200mm F2.8 EX DG HSM APO Macro', # (also II version)
+    0x580 => 'Sigma 18-50mm F2.8 EX DC',
+    0x581 => 'Sigma 18-50mm F2.8 EX DC Macro', #PH (SD1)
+    0x582 => 'Sigma 18-50mm F2.8 EX DC HSM Macro',
+    0x583 => 'Sigma 17-50mm F2.8 EX DC OS HSM', #PH (also SD1 Kit, is this HSM? - PH)
+    0x588 => 'Sigma 24-35mm F2 DG HSM | A',
+    0x589 => 'Sigma APO 70-200mm F2.8 EX DG OS HSM',
+    0x594 => 'Sigma 300-800mm F5.6 EX HSM IF APO',
+    0x595 => 'Sigma 300-800mm F5.6 EX DG APO HSM',
+    0x597 => 'Sigma 200-500mm F2.8 APO EX DG',
+    0x5A8 => 'Sigma 70-300mm F4-5.6 APO DG Macro (Motorized)',
+    0x5A9 => 'Sigma 70-300mm F4-5.6 DG Macro (Motorized)',
+    0x633 => 'Sigma 28-70mm F2.8-4 HS',
+    0x634 => 'Sigma 28-70mm F2.8-4 DG',
+    0x635 => 'Sigma 24-105mm F4 DG OS HSM | A',
+    0x644 => 'Sigma 28-80mm F3.5-5.6 ASP HF Macro',
+    0x659 => 'Sigma 28-80mm F3.5-5.6 Mini Zoom Macro II ASP',
+    0x661 => 'Sigma 28-105mm F2.8-4 IF ASP',
+    0x663 => 'Sigma 28-105mm F3.8-5.6 IF UC-III ASP',
+    0x664 => 'Sigma 28-105mm F2.8-4 IF DG ASP',
+    0x667 => 'Sigma 24-135mm F2.8-4.5 IF ASP',
+    0x668 => 'Sigma 17-70mm F2.8-4 DC Macro OS HSM',
+    0x669 => 'Sigma 17-70mm F2.8-4.5 DC HSM Macro',
+    0x684 => 'Sigma 55-200mm F4-5.6 DC',
+    0x686 => 'Sigma 50-200mm F4-5.6 DC OS HSM',
+    0x689 => 'Sigma 17-70mm F2.8-4.5 DC Macro',
+    0x690 => 'Sigma 50-150mm F2.8 EX DC HSM APO',
+    0x691 => 'Sigma 50-150mm F2.8 EX DC APO HSM II',
+    0x692 => 'Sigma APO 50-150mm F2.8 EX DC OS HSM',
+    0x693 => 'Sigma 50-100mm F1.8 DC HSM | A', #JR (NC; based on product number) (016)
+    0x709 => 'Sigma 28-135mm F3.8-5.6 IF ASP Macro',
+    0x723 => 'Sigma 135-400mm F4.5-5.6 ASP APO',
+    0x725 => 'Sigma 80-400mm F4.5-5.6 EX OS',
+    0x726 => 'Sigma 80-400mm F4.5-5.6 EX DG OS APO',
+    0x727 => 'Sigma 135-400mm F4.5-5.6 DG ASP APO',
+    0x728 => 'Sigma 120-400mm F4.5-5.6 DG APO OS HSM',
+    0x729 => 'Sigma 100-400mm F5-6.3 DG OS HSM | C', #JR (017)
+    0x733 => 'Sigma 170-500mm F5-6.3 ASP APO',
+    0x734 => 'Sigma 170-500mm F5-6.3 DG ASP APO',
+    0x735 => 'Sigma 50-500mm F4-6.3 EX RF HSM APO',
+    0x736 => 'Sigma 50-500mm F4-6.3 EX DG HSM APO',
+    0x737 => 'Sigma 150-500mm F5-6.3 APO DG OS HSM',
+    0x738 => 'Sigma 50-500mm F4.5-6.3 APO DG OS HSM',
+    0x740 => 'Sigma 150-600mm F5-6.3 DG OS HSM | S',
+    0x745 => 'Sigma 150-600mm F5-6.3 DG OS HSM | C',
+    0x777 => 'Sigma 18-200mm F3.5-6.3 DC',
+    0x77D => 'Sigma 18-200mm F3.5-6.3 DC (Motorized)',
+    0x787 => 'Sigma 28-200mm F3.5-5.6 Compact ASP HZ Macro',
+    0x789 => 'Sigma 18-125mm F3.5-5.6 DC',
+    0x793 => 'Sigma 28-300mm F3.5-6.3 Macro',
+    0x794 => 'Sigma 28-200mm F3.5-5.6 DG Compact ASP HZ Macro',
+    0x795 => 'Sigma 28-300mm F3.5-6.3 DG Macro',
+    0x823 => 'Sigma 1.4X TC EX APO',
+    0x824 => 'Sigma 1.4X Teleconverter EX APO DG',
+    0x853 => 'Sigma 18-125mm F3.8-5.6 DC OS HSM',
+    0x861 => 'Sigma 18-50mm F2.8-4.5 DC OS HSM', #NJ (SD1)
+    0x870 => 'Sigma 2.0X Teleconverter TC-2001', #JR
+    0x875 => 'Sigma 2.0X TC EX APO',
+    0x876 => 'Sigma 2.0X Teleconverter EX APO DG',
+    0x879 => 'Sigma 1.4X Teleconverter TC-1401', #JR
+    0x880 => 'Sigma 18-250mm F3.5-6.3 DC OS HSM',
+    0x882 => 'Sigma 18-200mm F3.5-6.3 II DC OS HSM',
+    0x883 => 'Sigma 18-250mm F3.5-6.3 DC Macro OS HSM',
+    0x884 => 'Sigma 17-70mm F2.8-4 DC OS HSM Macro | C',
+    0x885 => 'Sigma 18-200mm F3.5-6.3 DC OS HSM Macro | C',
+    0x886 => 'Sigma 18-300mm F3.5-6.3 DC OS HSM Macro | C',
+    0x888 => 'Sigma 18-200mm F3.5-6.3 DC OS',
+    0x890 => 'Sigma Mount Converter MC-11', #JR
+    0x929 => 'Sigma 19mm F2.8 DN | A',
+    0x929 => 'Sigma 30mm F2.8 DN | A',
+    0x929 => 'Sigma 60mm F2.8 DN | A',
+    0x1003 => 'Sigma 19mm F2.8', #PH (DP1 Merrill kit)
+    0x1004 => 'Sigma 30mm F2.8', #PH (DP2 Merrill kit)
+    0x1005 => 'Sigma 50mm F2.8 Macro', #PH (DP3 Merrill kit)
+    0x1006 => 'Sigma 19mm F2.8', #NJ (DP1 Quattro kit)
+    0x1007 => 'Sigma 30mm F2.8', #PH (DP2 Quattro kit)
+    0x1008 => 'Sigma 50mm F2.8 Macro', #NJ (DP3 Quattro kit)
+    0x1009 => 'Sigma 14mm F4', #NJ (DP0 Quattro kit)
+    0x8900 => 'Sigma 70-300mm F4-5.6 DG OS', #PH (SD15)
+    0xA100 => 'Sigma 24-70mm F2.8 DG Macro', #PH (SD15)
+    # 'FFFF' - seen this for a 28-70mm F2.8 lens - PH
 );
 
 %Image::ExifTool::Sigma::Main = (
@@ -215,6 +385,7 @@ $VERSION = '1.14';
             OffsetPair => 0x001b,
             DataTag => 'PreviewImage',
             Writable => 'int32u',
+            WriteGroup => 'MakerNotes',
             Protected => 2,
         },{ # (written by Sigma Photo Pro)
             Name => 'ChrominanceNoiseReduction',
@@ -223,7 +394,7 @@ $VERSION = '1.14';
             ValueConvInv => 'IsFloat($val) ? sprintf("Chro:%+.1f",$val) : undef',
         },
         # the SD1 writes something else here (rational64s, value 0/10)
-        # (but we can't test by model becaues Sigma Photo Pro writes this too)
+        # (but we can't test by model because Sigma Photo Pro writes this too)
     ],
     0x001b => [ #PH
         {
@@ -236,6 +407,7 @@ $VERSION = '1.14';
             OffsetPair => 0x001a,
             DataTag => 'PreviewImage',
             Writable => 'int32u',
+            WriteGroup => 'MakerNotes',
             Protected => 2,
         },{ # (written by Sigma Photo Pro)
             Name => 'LuminanceNoiseReduction',
@@ -262,6 +434,7 @@ $VERSION = '1.14';
             OffsetPair => 0x001d,
             DataTag => 'PreviewImage',
             Writable => 'int32u',
+            WriteGroup => 'MakerNotes',
             Protected => 2,
         },
     ],
@@ -280,13 +453,14 @@ $VERSION = '1.14';
             OffsetPair => 0x001c,
             DataTag => 'PreviewImage',
             Writable => 'int32u',
+            WriteGroup => 'MakerNotes',
             Protected => 2,
         },
     ],
     # 0x001e - int16u: 0, 4, 13 - flash mode for other models?
     0x001e => { #PH
         Name => 'PreviewImageSize',
-        Condition => '$$self{Model} =~ /^SIGMA (DP\d (Merrill|Quattro))$/i',
+        Condition => '$$self{Model} =~ /^(SIGMA (DP\d (Merrill|Quattro))|sd Quattro)$/i',
         Notes => 'only valid for some models',
         Writable => 'int16u',
         Count => 2,
@@ -330,8 +504,11 @@ $VERSION = '1.14';
         Name => 'LensType',
         Condition => '$$self{Model} =~ /^SIGMA (SD1( Merrill)?|DP\d (Merrill|Quattro))$/i',
         Notes => 'SD1 and Merrill/Quattro models only',
+        ValueConv => '$val =~ /^[0-9a-f]+$/i ? hex($val) : $val',
+        # (truncate decimal part and convert hex)
+        ValueConvInv => '$val=~s/\.\d+$//;$val=~/^0x/ and $val=hex($val);IsInt($val) ? sprintf("%x",$val) : $val',
         SeparateTable => 'LensType',
-        ValueConvInv => '$val=~s/\.\d+$//; $val', # (truncate decimal part)
+        PrintHex => 1,
         PrintConv => \%sigmaLensTypes,
     },
     0x002a => { #PH
@@ -341,7 +518,7 @@ $VERSION = '1.14';
         Writable => 'rational64u',
         Count => 2,
         PrintConv => '$val=~s/ / to /; $val',
-        PrintConvInv => '$val=~s/to /; $val',
+        PrintConvInv => '$val=~s/to //; $val',
     },
     0x002b => { #PH
         Name => 'LensMaxApertureRange',
@@ -403,7 +580,7 @@ $VERSION = '1.14';
         Notes => 'models other than the SD1 and Merrill/Quattro models',
         Writable => 'rational64u',
         PrintConv => 'Image::ExifTool::Exif::PrintExposureTime($val)',
-        PrintConvInv => 'Image::ExifTool::Exif::ConvertFraction($val)',
+        PrintConvInv => '$val',
         Priority => 0,
     },
     0x0033 => { #PH
@@ -484,7 +661,7 @@ $VERSION = '1.14';
         Notes => 'SD1 and Merrill/Quattro models only',
         Writable => 'rational64u',
         PrintConv => 'Image::ExifTool::Exif::PrintExposureTime($val)',
-        PrintConvInv => 'Image::ExifTool::Exif::ConvertFraction($val)',
+        PrintConvInv => '$val',
         Priority => 0,
     },
     0x004b => [{ #PH
@@ -547,6 +724,12 @@ $VERSION = '1.14';
         # seen: Standard, Landscape,Monochrome,Neutral,Portrait,Sepia,Vivid
     },
     # 0x005a/b/c - rational64s: 0/10 for the SD1
+    0x0084 => { #PH
+        Name => 'Model',
+        Description => 'Camera Model Name',
+        Writable => 'string',
+    },
+    # 0x0085
 );
 
 1;  # end
@@ -568,7 +751,7 @@ Sigma and Foveon maker notes in EXIF information.
 
 =head1 AUTHOR
 
-Copyright 2003-2014, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.
