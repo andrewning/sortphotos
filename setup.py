@@ -2,6 +2,10 @@
 # encoding: utf-8
 
 from setuptools import setup, find_packages
+import sys
+
+if sys.version_info.major is 3:
+    sys.exit('Sorry, Python 3 is not supported')
 
 setup(
     name='sortphotos',
