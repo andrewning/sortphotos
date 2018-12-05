@@ -6,6 +6,12 @@ SortPhotos is a Python script that organizes photos into folders by date and/or 
 
 ![Example](example.png)
 
+# Installation
+
+This is a Python2 script.
+
+see: https://docs.python.org/2/install/
+
 # Usage
 
 SortPhotos is intended to be used primarily from the command line.  To see all the options, invoke help
