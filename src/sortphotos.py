@@ -125,7 +125,7 @@ def get_prioritized_timestamp(data, prioritized_groups, prioritized_tags, additi
 			date = None
 			
 			# create a hash slice of data with just the specified tag
-			subdata = {key:value for key,value in data.iteritems() if tag in key}
+			subdata = {key:value for key,value in data.items() if tag in key}
 			if subdata:
 				# re-use get_oldest_timestamp to get the data needed
 				subdata['SourceFile'] = src_file
@@ -146,7 +146,7 @@ def get_prioritized_timestamp(data, prioritized_groups, prioritized_tags, additi
 			date = None
 			
 			# create a hash slice of data to find the oldest date within the specified group
-			subdata = {key:value for key,value in data.iteritems() if key.startswith(group)}
+			subdata = {key:value for key,value in data.items() if key.startswith(group)}
 			if subdata:
 				# find the oldest date for that group
 				subdata['SourceFile'] = src_file
