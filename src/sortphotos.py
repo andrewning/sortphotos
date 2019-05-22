@@ -22,6 +22,7 @@ import filecmp
 from datetime import datetime, timedelta
 import re
 import locale
+import exifread
 
 # Setting locale to the 'local' value
 locale.setlocale(locale.LC_ALL, '')
@@ -177,51 +178,38 @@ def check_for_early_morning_photos(date, day_begins):
 
     return date
 
+# read tags using exifread
+# Open image file for reading (binary mode)
 
-#  this class is based on code from Sven Marnach (http://stackoverflow.com/questions/10075115/call-exiftool-from-a-python-script)
-class ExifTool(object):
-    """used to run ExifTool from Python and keep it open"""
+def get_exif(file_name):
 
-    sentinel = "{ready}"
+    f = open(file_name, 'rb')
 
-    def __init__(self, executable=exiftool_location, verbose=False):
-        self.executable = executable
-        self.verbose = verbose
+    tagjson = {'SourceFile': file_name}
 
-    def __enter__(self):
-        self.process = subprocess.Popen(
-            ['perl', self.executable, "-stay_open", "True",  "-@", "-"],
-            stdin=subprocess.PIPE, stdout=subprocess.PIPE)
-        return self
+    tags = exifread.process_file(f, details=True)
+    f.close()
 
-    def __exit__(self, exc_type, exc_value, traceback):
-        self.process.stdin.write(b'-stay_open\nFalse\n')
-        self.process.stdin.flush()
+    for dt_tag in tags:
+        dt_value = '%s' % tags[dt_tag]
+        tagjson[dt_tag.replace(" ",":")] = dt_value # tag group separator
 
-    def execute(self, *args):
-        args = args + ("-execute\n",)
-        self.process.stdin.write(str.join("\n", args).encode('utf-8'))
-        self.process.stdin.flush()
-        output = ""
-        fd = self.process.stdout.fileno()
-        while not output.rstrip(' \t\n\r').endswith(self.sentinel):
-            increment = os.read(fd, 4096)
-            if self.verbose:
-                sys.stdout.write(increment.decode('utf-8'))
-            output += increment.decode('utf-8')
-        return output.rstrip(' \t\n\r')[:-len(self.sentinel)]
 
-    def get_metadata(self, *args):
+    return tagjson
 
-        try:
-            return json.loads(self.execute(*args))
-        except ValueError:
-            sys.stdout.write('No files to parse or invalid data\n')
-            exit()
+def get_exif_folder(folder_name):
 
+    # scan through all folders and subfolders
+    tagjson = []
+
+    for root, subdirs, files in os.walk(folder_name):
+        for filename in files:
+            file_path = os.path.join(root, filename)
+            tagjson += [get_exif(file_path)]
+
+    return tagjson
 
 # ---------------------------------------
-
 
 
 def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
@@ -274,36 +262,9 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
     if not os.path.exists(src_dir):
         raise Exception('Source directory does not exist')
 
-    # setup arguments to exiftool
-    args = ['-j', '-a', '-G']
+    args = [src_dir]
 
-    # setup tags to ignore
-    if use_only_tags is not None:
-        additional_groups_to_ignore = []
-        additional_tags_to_ignore = []
-        for t in use_only_tags:
-            args += ['-' + t]
-
-    elif use_only_groups is not None:
-        additional_groups_to_ignore = []
-        for g in use_only_groups:
-            args += ['-' + g + ':Time:All']
-
-    else:
-        args += ['-time:all']
-
-
-    if recursive:
-        args += ['-r']
-
-    args += [src_dir]
-
-
-    # get all metadata
-    with ExifTool(verbose=verbose) as e:
-        print('Preprocessing with ExifTool.  May take a while for a large number of files.')
-        sys.stdout.flush()
-        metadata = e.get_metadata(*args)
+    metadata = get_exif_folder(args[0])
 
     # setup output to screen
     num_files = len(metadata)
@@ -374,7 +335,7 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
             filename = date.strftime(rename_format) + ext.lower()
 
         # setup destination file
-        dest_file = os.path.join(dest_file, filename.encode('utf-8'))
+        dest_file = os.path.join(dest_file, filename)
         root, ext = os.path.splitext(dest_file)
 
         if verbose:
