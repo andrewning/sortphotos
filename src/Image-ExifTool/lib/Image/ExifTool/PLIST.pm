@@ -19,8 +19,9 @@ use strict;
 use vars qw($VERSION);
 use Image::ExifTool qw(:DataAccess :Utils);
 use Image::ExifTool::XMP;
+use Image::ExifTool::GPS;
 
-$VERSION = '1.05';
+$VERSION = '1.09';
 
 sub ExtractObject($$;$);
 sub Get24u($$);
@@ -34,6 +35,11 @@ my %readProc = (
     8 => \&Get64u,
     0x104 => \&GetFloat,
     0x108 => \&GetDouble,
+);
+
+# recognize different types of PLIST files based on certain tags
+my %plistType = (
+    adjustmentBaseVersion => 'AAE',
 );
 
 # PLIST tags (generated on-the-fly for most tags)
@@ -75,18 +81,12 @@ my %readProc = (
     'MetaDataList//Geolocation/Latitude' => {
         Name => 'GPSLatitude',
         Groups => { 2 => 'Location' },
-        PrintConv => q{
-            require Image::ExifTool::GPS;
-            Image::ExifTool::GPS::ToDMS($self, $val, 1, 'N');
-        },
+        PrintConv => 'Image::ExifTool::GPS::ToDMS($self, $val, 1, "N")',
     },
     'MetaDataList//Geolocation/Longitude' => {
         Name => 'GPSLongitude',
         Groups => { 2 => 'Location' },
-        PrintConv => q{
-            require Image::ExifTool::GPS;
-            Image::ExifTool::GPS::ToDMS($self, $val, 1, 'E');
-        },
+        PrintConv => 'Image::ExifTool::GPS::ToDMS($self, $val, 1, "E")',
     },
     'MetaDataList//Geolocation/MapDatum' => {
         Name => 'GPSMapDatum',
@@ -178,6 +178,8 @@ sub FoundTag($$$$;$)
         delete $$et{LIST_TAGS}{$$et{LastPListTag}};
     }
     $$et{LastPListTag} = $tagInfo;
+    # override file type if applicable
+    $et->OverrideFileType($plistType{$tag}) if $plistType{$tag} and $$et{FILE_TYPE} eq 'XMP';
     # save the tag
     $et->HandleTag($tagTablePtr, $tag, $val);
 
@@ -323,21 +325,28 @@ sub ExtractObject($$;$)
 #------------------------------------------------------------------------------
 # Process binary PLIST data (ref 2)
 # Inputs: 0) ExifTool object ref, 1) DirInfo ref, 2) tag table ref
-# Returns: 1 on success
+# Returns: 1 on success (and returns plist value as $$dirInfo{Value})
 sub ProcessBinaryPLIST($$$)
 {
     my ($et, $dirInfo, $tagTablePtr) = @_;
     my ($i, $buff, @table);
+    my $dataPt = $$dirInfo{DataPt};
 
     $et->VerboseDir('Binary PLIST');
     SetByteOrder('MM');
 
-    unless ($$dirInfo{RAF}) {
-        my $buf2 = substr(${$$dirInfo{DataPt}}, $$dirInfo{DirStart} || 0, $$dirInfo{DirLen});
-        $$dirInfo{RAF} = new File::RandomAccess(\$buf2);
+    if ($dataPt) {
+        my $start = $$dirInfo{DirStart};
+        if ($start or ($$dirInfo{DirLen} and $$dirInfo{DirLen} != length $$dataPt)) {
+            my $buf2 = substr($$dataPt, $start || 0, $$dirInfo{DirLen});
+            $$dirInfo{RAF} = new File::RandomAccess(\$buf2);
+        } else {
+            $$dirInfo{RAF} = new File::RandomAccess($dataPt);
+        }
+        my $strt = $$dirInfo{DirStart} || 0;
     }
     # read and parse the trailer
-    my $raf = $$dirInfo{RAF};
+    my $raf = $$dirInfo{RAF} or return 0;
     $raf->Seek(-32,2) and $raf->Read($buff,32)==32 or return 0;
     my $intSize = Get8u(\$buff, 6);
     my $refSize = Get8u(\$buff, 7);
@@ -364,8 +373,8 @@ sub ProcessBinaryPLIST($$$)
     );
     # position file pointer at the top object, and extract it
     $raf->Seek($table[$topObj], 0) or return 0;
-    my $result = ExtractObject($et, \%plistInfo);
-    return defined $result ? 1 : 0;
+    $$dirInfo{Value} = ExtractObject($et, \%plistInfo);
+    return defined $$dirInfo{Value} ? 1 : 0;
 }
 
 #------------------------------------------------------------------------------
@@ -429,7 +438,7 @@ This module decodes both the binary and XML-based PLIST format.
 
 =head1 AUTHOR
 
-Copyright 2003-2014, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

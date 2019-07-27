@@ -174,7 +174,7 @@ sub CheckCanonRaw($$$)
     my $tagName = $$tagInfo{Name};
     if ($tagName eq 'JpgFromRaw' or $tagName eq 'ThumbnailImage') {
         unless ($$valPtr =~ /^\xff\xd8/ or $et->Options('IgnoreMinorErrors')) {
-            return '[minor] Not a valid image';
+            return '[Minor] Not a valid image';
         }
     } else {
         my $format = $$tagInfo{Format};
@@ -307,7 +307,7 @@ sub WriteCanonRaw($$$)
         if (@addTags and (not defined($tag) or $tag >= $addTags[0])) {
             my $addTag = shift @addTags;
             $tagInfo = $$newTags{$addTag};
-            my $newVal = $et->GetNewValues($tagInfo);
+            my $newVal = $et->GetNewValue($tagInfo);
             if (defined $newVal) {
                 # pad value to an even length (Canon ImageBrowser and ZoomBrowser
                 # version 6.1.1 have problems with odd-sized embedded JPEG images
@@ -432,7 +432,7 @@ sub WriteCanonRaw($$$)
                 }
                 my $nvHash = $et->GetNewValueHash($tagInfo);
                 if ($et->IsOverwriting($nvHash, $oldVal)) {
-                    my $newVal = $et->GetNewValues($nvHash);
+                    my $newVal = $et->GetNewValue($nvHash);
                     my $verboseVal;
                     $verboseVal = $newVal if $verbose > 1;
                     # convert to specified format if necessary
@@ -623,7 +623,7 @@ files, and would lead to far fewer problems with corrupted metadata.
 
 =head1 AUTHOR
 
-Copyright 2003-2014, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

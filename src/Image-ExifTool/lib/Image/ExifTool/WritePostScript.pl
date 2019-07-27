@@ -290,7 +290,7 @@ sub WriteNewTags($$$)
         my $tagInfo = $$newTags{$tag};
         my $nvHash = $et->GetNewValueHash($tagInfo);
         next unless $$nvHash{IsCreating};
-        my $val = $et->GetNewValues($nvHash);
+        my $val = $et->GetNewValue($nvHash);
         $et->VerboseValue("+ PostScript:$$tagInfo{Name}", $val);
         Write($outfile, EncodeTag($tag, $val)) or $success = 0;
         ++$$et{CHANGED};
@@ -558,15 +558,10 @@ sub WritePS($$)
             # - EVENTUALLY IT WOULD BE BETTER TO FIND ANOTHER IDENTIFICATION METHOD
             #   (because Illustrator doesn't care if the Creator is changed)
             if ($tag eq 'Creator' and $val =~ /^Adobe Illustrator/) {
-                # disable writing XMP to PS-format Adobe Illustrator files and
-                # older Illustrator EPS files becaues it confuses Illustrator
-                # (Illustrator 8 and older write PS-Adobe-3.0, newer write PS-Adobe-3.1)
-                if ($$editDirs{XMP} and $psRev == 0) {
-                    if ($flags{EPS}) {
-                        $et->Warn("Can't write XMP to Illustrator 8 or older EPS files");
-                    } else {
-                        $et->Warn("Can't write XMP to PS-format AI files");
-                    }
+                # disable writing XMP to PostScript-format Adobe Illustrator files
+                # because it confuses Illustrator
+                if ($$editDirs{XMP}) {
+                    $et->Warn("Can't write XMP to PostScript-format Illustrator files");
                     # pretend like we wrote it already so we won't try to add it later
                     $doneDir{XMP} = 1;
                 }
@@ -588,7 +583,7 @@ sub WritePS($$)
                 my $nvHash = $et->GetNewValueHash($tagInfo);
                 if ($et->IsOverwriting($nvHash, $val)) {
                     $et->VerboseValue("- PostScript:$$tagInfo{Name}", $val);
-                    $val = $et->GetNewValues($nvHash);
+                    $val = $et->GetNewValue($nvHash);
                     ++$$et{CHANGED};
                     next unless defined $val;   # next if tag is being deleted
                     $et->VerboseValue("+ PostScript:$$tagInfo{Name}", $val);
@@ -764,7 +759,7 @@ Thanks to Tim Kordick for his help testing the EPS writer.
 
 =head1 AUTHOR
 
-Copyright 2003-2014, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

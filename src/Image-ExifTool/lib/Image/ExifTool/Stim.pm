@@ -15,7 +15,7 @@ use vars qw($VERSION);
 
 $VERSION = '1.01';
 
-# Tags found in Stim APP3 segment in JPEG images
+# Tags found in APP3 Stim segment in JPEG images
 %Image::ExifTool::Stim::Main = (
     GROUPS => { 0 => 'Stim', 1 => 'Stim', 2 => 'Image'},
     NOTES => q{
@@ -174,7 +174,7 @@ information.
 
 =head1 AUTHOR
 
-Copyright 2003-2014, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

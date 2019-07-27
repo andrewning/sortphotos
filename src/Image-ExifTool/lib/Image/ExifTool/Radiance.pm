@@ -56,7 +56,7 @@ $VERSION = '1.01';
 );
 
 #------------------------------------------------------------------------------
-# Extract information from a Radiance JDR file
+# Extract information from a Radiance HDR file
 # Inputs: 0) ExifTool object reference, 1) DirInfo reference
 # Returns: 1 on success, 0 if this wasn't a valid RGBE image
 sub ProcessHDR($$)
@@ -120,7 +120,7 @@ images are a type of high dynamic-range image.
 
 =head1 AUTHOR
 
-Copyright 2003-2014, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

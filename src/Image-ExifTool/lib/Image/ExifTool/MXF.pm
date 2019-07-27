@@ -36,8 +36,9 @@ package Image::ExifTool::MXF;
 use strict;
 use vars qw($VERSION);
 use Image::ExifTool qw(:DataAccess :Utils);
+use Image::ExifTool::GPS;
 
-$VERSION = '1.06';
+$VERSION = '1.08';
 
 sub ProcessPrimer($$$);
 sub ProcessLocalSet($$$);
@@ -57,7 +58,6 @@ my %knownType = (
     Label => 1,     StrongReferenceBatch => 1,
     Lat => 1,       Timestamp => 1,
     Length => 1,    UID => 1,
-           
 );
 
 # common tag info parameters
@@ -78,16 +78,15 @@ my %timestamp = (
 );
 my %geoLat = (
     Groups => { 2 => 'Location' },
-    PrintConv => 'require Image::ExifTool::GPS; Image::ExifTool::GPS::ToDMS($self, $val, 1, "N")',
+    PrintConv => 'Image::ExifTool::GPS::ToDMS($self, $val, 1, "N")',
 );
 my %geoLon = (
     Groups => { 2 => 'Location' },
-    PrintConv => 'require Image::ExifTool::GPS; Image::ExifTool::GPS::ToDMS($self, $val, 1, "E")',
+    PrintConv => 'Image::ExifTool::GPS::ToDMS($self, $val, 1, "E")',
 );
 my %geoLatLon = (
     Groups => { 2 => 'Location' },
     PrintConv => q{
-        require Image::ExifTool::GPS;
         my ($lat, $lon) = split ' ', $val;
         $lat = Image::ExifTool::GPS::ToDMS($self, $lat, 1, 'N');
         $lon = Image::ExifTool::GPS::ToDMS($self, $lon, 1, 'E');
@@ -266,8 +265,8 @@ my %componentDataDef = (
     '060e2b34.0101.0101.02070200.00000000' => { Name => 'ExCCIData', Type => 'DataBlock', Unknown => 1 },
   # '060e2b34.0101.0101.02080000.00000000' => { Name => 'Security', Type => 'Node' },
   # '060e2b34.0101.0101.02080100.00000000' => { Name => 'SystemAccess', Type => 'Node' },
-    '060e2b34.0101.0101.02080101.00000000' => { Name => 'Username', Format => 'string' },
-    '060e2b34.0101.0101.02080101.01000000' => { Name => 'Username', Type => 'UTF-16' },
+    '060e2b34.0101.0101.02080101.00000000' => { Name => 'UserName', Format => 'string' },
+    '060e2b34.0101.0101.02080101.01000000' => { Name => 'UserName', Type => 'UTF-16' },
     '060e2b34.0101.0101.02080102.00000000' => { Name => 'Password', Format => 'string' },
     '060e2b34.0101.0101.02080102.01000000' => { Name => 'Password', Type => 'UTF-16' },
   # '060e2b34.0101.0101.02090000.00000000' => { Name => 'Encryption', Type => 'Node' },
@@ -454,7 +453,7 @@ my %componentDataDef = (
     '060e2b34.0101.0101.04010502.01000000' => { Name => 'ImageHeight', Format => 'int32u' }, # (renamed from StoredHeight)
     '060e2b34.0101.0101.04010502.02000000' => { Name => 'ImageWidth', Format => 'int32u' }, # (renamed from StoredWidth)
   # '060e2b34.0101.0101.04010503.00000000' => { Name => 'DigitalQuantizationAndLevelParameters', Type => 'Node' },
-    '060e2b34.0101.0101.04010503.01000000' => { Name => 'BitsperPixel', Format => 'int8u' },
+    '060e2b34.0101.0101.04010503.01000000' => { Name => 'BitsPerPixel', Format => 'int8u' },
     '060e2b34.0101.0101.04010503.02000000' => { Name => 'RoundingMethodCode', Format => 'string' },
     '060e2b34.0101.0101.04010503.03000000' => { Name => 'BlackReferenceLevel', Format => 'int32u' },
     '060e2b34.0101.0101.04010503.04000000' => { Name => 'WhiteReferenceLevel', Format => 'int32u' },
@@ -783,7 +782,7 @@ my %componentDataDef = (
   # '060e2b34.0101.0101.07012001.10030000' => { Name => 'ElectronicAddressInformation', Type => 'Node' },
     '060e2b34.0101.0101.07012001.10030100' => { Name => 'TelephoneNumber', Format => 'string' },
     '060e2b34.0101.0101.07012001.10030200' => { Name => 'FaxNumber', Format => 'string' },
-    '060e2b34.0101.0101.07012001.10030300' => { Name => 'E-MailAddress', Format => 'string' },
+    '060e2b34.0101.0101.07012001.10030300' => { Name => 'E-mailAddress', Format => 'string' },
   # '060e2b34.0101.0101.07012002.00000000' => { Name => 'PlaceDescriptions', Type => 'Node' },
     '060e2b34.0101.0101.07012002.01000000' => { Name => 'SettingDescription', Format => 'string' },
   # '060e2b34.0101.0101.07020000.00000000' => { Name => 'Temporal', Type => 'Node' },
@@ -1060,7 +1059,7 @@ my %componentDataDef = (
     '060e2b34.0101.0102.04010302.05000000' => { Name => 'VideoLineMap', Format => 'int32s' },
     '060e2b34.0101.0102.04010401.01000000' => { Name => 'AnalogVideoSystemName', Type => 'VideoSignalType', Unknown => 1 },
     '060e2b34.0101.0102.04010501.10000000' => { Name => 'VerticalSub-sampling', Format => 'int32u' },
-    '060e2b34.0101.0102.04010503.01010000' => { Name => 'BitsperPixel', Format => 'int32u' },
+    '060e2b34.0101.0102.04010503.01010000' => { Name => 'BitsPerPixel', Format => 'int32u' },
     '060e2b34.0101.0102.04010503.05000000' => { Name => 'ColorRangeLevels', Format => 'int32u' },
     '060e2b34.0101.0102.04010503.06000000' => { Name => 'PixelLayout', Type => 'RGBALayout', Unknown => 1 },
     '060e2b34.0101.0102.04010503.07000000' => { Name => 'AlphaSampleDepth', Format => 'int32u' },
@@ -1523,7 +1522,7 @@ my %componentDataDef = (
     '060e2b34.0101.0103.07012001.04020801' => { Name => 'SettingCountryName', Type => 'UTF-16' },
     '060e2b34.0101.0103.07012001.10030101' => { Name => 'TelephoneNumber', Type => 'UTF-16' },
     '060e2b34.0101.0103.07012001.10030201' => { Name => 'FaxNumber', Type => 'UTF-16' },
-    '060e2b34.0101.0103.07012001.10030301' => { Name => 'E-MailAddress', Type => 'UTF-16' },
+    '060e2b34.0101.0103.07012001.10030301' => { Name => 'E-mailAddress', Type => 'UTF-16' },
     '060e2b34.0101.0103.07012002.01010000' => { Name => 'SettingDescription', Type => 'UTF-16' },
     '060e2b34.0101.0103.07020101.01050000' => { Name => 'POSIXMicroseconds', Format => 'int64u' },
   # '060e2b34.0101.0103.07020103.10030000' => { Name => 'EventOffsets', Type => 'Node' },
@@ -2416,7 +2415,7 @@ my %componentDataDef = (
     '060e2b34.0401.0107.0d010401.02010100' => { Name => 'CryptographicFrameworkLabel', Type => 'Label', Unknown => 1 },
 );
 
-# header information 
+# header information
 %Image::ExifTool::MXF::Header = (
     GROUPS => { 2 => 'Video' },
     PROCESS_PROC => \&Image::ExifTool::ProcessBinaryData,
@@ -2592,7 +2591,7 @@ sub ProcessPrimer($$$)
         next unless $verbose;
         my $indx = $i . ')';
         $indx .= ' ' if length($indx) < 3;
-        $et->VPrint(0, sprintf("  | $indx 0x%.4x => '$global'\n", $local));
+        $et->VPrint(0, sprintf("  | $indx 0x%.4x => '${global}'\n", $local));
     }
     return 1;
 }
@@ -2988,7 +2987,7 @@ information from MXF (Material Exchange Format) files.
 
 =head1 AUTHOR
 
-Copyright 2003-2014, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

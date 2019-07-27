@@ -8,7 +8,7 @@
 #               16/04/2011 - P. Harvey Decode NikonCaptureEditVersions
 #
 # References:   1) http://www.cybercom.net/~dcoffin/dcraw/
-#               2) Iliah Borg private communication (LibRaw)
+#               IB) Iliah Borg private communication (LibRaw)
 #------------------------------------------------------------------------------
 
 package Image::ExifTool::NikonCapture;
@@ -18,7 +18,7 @@ use vars qw($VERSION);
 use Image::ExifTool qw(:DataAccess :Utils);
 use Image::ExifTool::Exif;
 
-$VERSION = '1.13';
+$VERSION = '1.14';
 
 sub ProcessNikonCapture($$$);
 
@@ -354,12 +354,12 @@ my %unsharpColor = (
             2 => 'Recorded Value',
             3 => 'Use Temperature',
             4 => 'Calculate Automatically',
-            5 => 'Auto2', #2
-            6 => 'Underwater', #2
+            5 => 'Auto2', #IB
+            6 => 'Underwater', #IB
             7 => 'Auto1',
         },
     },
-    0x14 => { #2
+    0x14 => { #IB
         Name => 'WBAdjLighting',
         Format => 'int16u',
         PrintHex => 1,
@@ -724,7 +724,7 @@ sub WriteNikonCapture($$$)
     my $tagID = Get32u($dataPt, $dirStart);
     # sometimes size includes 18 header bytes, and other times it doesn't (eg. ViewNX 2.1.1)
     my $size = Get32u($dataPt, $dirStart + 18);
-    my $pad = $dirLen - $size - 18; 
+    my $pad = $dirLen - $size - 18;
     unless ($tagID == 0x7a86a940 and ($pad >= 0 or $pad == -18)) {
         $et->Warn('Unrecognized Nikon Capture Data header');
         return undef;
@@ -770,7 +770,7 @@ sub WriteNikonCapture($$$)
                 my $oldVal = ReadValue($dataPt,$pos+22,$format,1,$size);
                 my $nvHash = $et->GetNewValueHash($tagInfo);
                 if ($et->IsOverwriting($nvHash, $oldVal)) {
-                    my $val = $et->GetNewValues($tagInfo);
+                    my $val = $et->GetNewValue($tagInfo);
                     $newVal = WriteValue($val, $$tagInfo{Writable}) if defined $val;
                     if (defined $newVal and length $newVal) {
                         ++$$et{CHANGED};
@@ -918,7 +918,7 @@ the maker notes of NEF images.
 
 =head1 AUTHOR
 
-Copyright 2003-2014, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

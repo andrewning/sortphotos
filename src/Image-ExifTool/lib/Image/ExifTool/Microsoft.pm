@@ -16,7 +16,7 @@ use vars qw($VERSION);
 use Image::ExifTool qw(:DataAccess :Utils);
 use Image::ExifTool::XMP;
 
-$VERSION = '1.13';
+$VERSION = '1.20';
 
 sub ProcessXtra($$$);
 
@@ -74,8 +74,8 @@ sub ProcessXtra($$$);
     NOTES => q{
         Microsoft Photo 1.0 schema XMP tags.  This is likely not a complete list,
         but represents tags which have been observed in sample images.  The actual
-        namespace prefix is "MicrosoftPhoto", but ExifTool shortens this to
-        "XMP-microsoft" in the family 1 group name.
+        namespace prefix is "MicrosoftPhoto", but ExifTool shortens this in the
+        family 1 group name.
     },
     CameraSerialNumber => { },
     DateAcquired       => { Groups => { 2 => 'Time' }, %Image::ExifTool::XMP::dateTimeInfo },
@@ -84,14 +84,17 @@ sub ProcessXtra($$$);
     LastKeywordIPTC    => { List => 'Bag' },
     LastKeywordXMP     => { List => 'Bag' },
     LensManufacturer   => { },
-    LensModel          => { },
+    LensModel          => { Avoid => 1 },
     Rating => {
         Name => 'RatingPercent',
         Notes => q{
-            called Rating by the spec.  XMP-xmp:Rating values of 1,2,3,4 and 5 stars
-            correspond to RatingPercent values of 1,25,50,75 and 99 respectively
+            XMP-xmp:Rating values of 1,2,3,4 and 5 stars correspond to RatingPercent
+            values of 1,25,50,75 and 99 respectively
         },
     },
+    CreatorAppId             => { Name => 'CreatorAppID' },
+    CreatorOpenWithUIOptions => { },
+    ItemSubType              => { },
 );
 
 # Microsoft Photo 1.1 schema properties (MP1 - written as 'prefix0' by MSPhoto) (ref PH)
@@ -125,6 +128,15 @@ sub ProcessXtra($$$);
     PanoramicStitchPhi1   => { Writable => 'real' },
     PanoramicStitchTheta0 => { Writable => 'real' },
     PanoramicStitchTheta1 => { Writable => 'real' },
+    WhiteBalance0         => { Writable => 'real' },
+    WhiteBalance1         => { Writable => 'real' },
+    WhiteBalance2         => { Writable => 'real' },
+    Brightness            => { Avoid => 1 },
+    Contrast              => { Avoid => 1 },
+    CameraModelID         => { Avoid => 1 },
+    ExposureCompensation  => { Avoid => 1 },
+    PipelineVersion       => { },
+    StreamType            => { },
 );
 
 # Microsoft Photo 1.2 schema properties (MP) (ref PH)
@@ -180,7 +192,8 @@ my %sRegions = (
 
 # Xtra tags written in MP4 files written by Microsoft Windows Media Player
 # (ref http://msdn.microsoft.com/en-us/library/windows/desktop/dd562330(v=VS.85).aspx)
-# Note: These tags are closely related to Image::ExifTool::ASF::ExtendedDescr
+# Note: These tags are closely related to tags in Image::ExifTool::ASF::ExtendedDescr
+#       and Image::ExifTool::WTV::Metadata
 %Image::ExifTool::Microsoft::Xtra = (
     PROCESS_PROC => \&ProcessXtra,
     GROUPS => { 0 => 'QuickTime', 2 => 'Video' },
@@ -385,9 +398,10 @@ my %sRegions = (
     'WM/ProviderRating'         => 'ProviderRating',
     'WM/ProviderStyle'          => 'ProviderStyle',
     'WM/Publisher'              => 'Publisher',
+    'WM/SharedUserRating'       => 'SharedUserRating',
     'WM/SubscriptionContentID'  => 'SubscriptionContentID',
-    'WM/SubTitle'               => 'SubTitle',
-    'WM/SubTitleDescription'    => 'SubTitleDescription',
+    'WM/SubTitle'               => 'Subtitle',
+    'WM/SubTitleDescription'    => 'SubtitleDescription',
     'WM/TrackNumber'            => 'TrackNumber',
     'WM/UniqueFileIdentifier'   => 'UniqueFileIdentifier',
     'WM/VideoFrameRate'         => 'VideoFrameRate',
@@ -659,7 +673,7 @@ my %sRegions = (
     '{64440492-4C8B-11D1-8B70-080036B11A03} 36'    => 'EncodedBy',
     '{64440492-4C8B-11D1-8B70-080036B11A03} 22'    => 'Producers',
     '{64440492-4C8B-11D1-8B70-080036B11A03} 30'    => 'Publisher',
-    '{56A3372E-CE9C-11D2-9F0E-006097C686F6} 38'    => 'SubTitle',
+    '{56A3372E-CE9C-11D2-9F0E-006097C686F6} 38'    => 'Subtitle',
     '{64440492-4C8B-11D1-8B70-080036B11A03} 34'    => 'UserWebURL',
     '{64440492-4C8B-11D1-8B70-080036B11A03} 23'    => 'Writers',
     '{E3E0584C-B788-4A5A-BB20-7F5A44C9ACDD} 21'    => 'Attachments',
@@ -699,7 +713,7 @@ my %sRegions = (
     '{64440492-4C8B-11D1-8B70-080036B11A03} 21'    => 'ParentalRating',
     '{10984E0A-F9F2-4321-B7EF-BAF195AF4319} 100'   => 'ParentalRatingReason',
     '{9B174B35-40FF-11D2-A27E-00C04FC30871} 5'     => 'SpaceUsed',
-    '{D35F743A-EB2E-47F2-A286-844132CB1427} 100'   => 'EXIFVersion',
+    '{D35F743A-EB2E-47F2-A286-844132CB1427} 100'   => 'ExifVersion',
     '{14B81DA1-0135-4D31-96D9-6CBFC9671A99} 18248' => 'Event',
     '{14B81DA1-0135-4D31-96D9-6CBFC9671A99} 37380' => 'ExposureBias',
     '{14B81DA1-0135-4D31-96D9-6CBFC9671A99} 34850' => 'ExposureProgram',
@@ -754,7 +768,7 @@ my %sRegions = (
 # Extract information from Xtra MP4 atom
 # Inputs: 0) ExifTool object ref, 1) dirInfo ref, 2) tag table ref
 # Returns: 1 on success
-# Reference: http://code.google.com/p/mp4v2/
+# Reference: http://code.google.com/p/mp4v2/ [since removed from trunk]
 sub ProcessXtra($$$)
 {
     my ($et, $dirInfo, $tagTablePtr) = @_;
@@ -770,52 +784,59 @@ sub ProcessXtra($$$)
         my $tagLen = Get32u($dataPt, $pos + 4);
         last if $tagLen + 18 > $size;
         my $tag = substr($$dataPt, $pos + 8, $tagLen);
-        my $version = Get32u($dataPt, $pos + $tagLen + 8);
-        # (have seen a vers=2 type=8 tag that seems to work just like vers=1 - PH)
-        if ($version > 2) {
-            $et->WarnOnce("Unsupported Xtra version ($version)");
-            $pos += $size;
-            next;
+        # (version flags according to the reference, but looks more like a count - PH)
+        my $count = Get32u($dataPt, $pos + $tagLen + 8);
+        my ($i, $valPos, $valLen, $valType, $val, $format, @vals);
+        # point to start of first value (after 4-byte length and 2-byte type)
+        $valPos = $pos + $tagLen + 18;
+        for ($i=0; ;) {
+            # (stored value includes size of $valLen and $valType, so subtract 6)
+            $valLen  = Get32u($dataPt, $valPos - 6) - 6;
+            my $more = $pos + $size - $valPos - $valLen;
+            last if $more < 0;
+            $valType = Get16u($dataPt, $valPos - 2);
+            $val = substr($$dataPt, $valPos, $valLen);
+            # Note: all dumb Microsoft values are little-endian inside a big-endian-format file
+            SetByteOrder('II');
+            if ($valType == 8) {
+                $format = 'Unicode';
+                $val = $et->Decode($val, 'UCS2');
+            } elsif ($valType == 19 and $valLen == 8) {
+                $format = 'int64u';
+                $val = Get64u(\$val, 0);
+            } elsif ($valType == 21 and $valLen == 8) {
+                $format = 'date';
+                $val = Get64u(\$val, 0);
+                # convert time from 100 ns intervals since Jan 1, 1601
+                $val = $val * 1e-7 - 11644473600 if $val;
+                # (the Nikon S100 uses UTC timezone, same as ASF - PH)
+                $val = Image::ExifTool::ConvertUnixTime($val) . 'Z';
+            } elsif ($valType == 72 and $valLen == 16) {
+                $format = 'GUID';
+                $val = uc unpack('H*',pack('NnnNN',unpack('VvvNN',$val)));
+                $val =~ s/(.{8})(.{4})(.{4})(.{4})/$1-$2-$3-$4-/;
+            } elsif ($valType == 65 && $valLen > 4) { #PH (empirical)
+                $format = 'variant';
+                require Image::ExifTool::FlashPix;
+                my $vPos = $valPos; # (necessary because ReadFPXValue updates this)
+                # read entry as a VT_VARIANT (use FlashPix module for this)
+                $val = Image::ExifTool::FlashPix::ReadFPXValue($et, $dataPt, $vPos,
+                       Image::ExifTool::FlashPix::VT_VARIANT(), $valPos+$valLen, 1);
+            } else {
+                $format = "Unknown($valType)";
+            }
+            SetByteOrder('MM'); # back to native QuickTime byte ordering
+            last if ++$i >= $count or $more < 6;
+            push @vals, $val;
+            undef $val;
+            $valPos += $valLen + 6; # step to next value
         }
-        # (stored value includes size of $valLen and $valType, so subtract 6)
-        my $valLen  = Get32u($dataPt, $pos + $tagLen + 12) - 6;
-        last if $tagLen + $valLen + 18 > $size;
-        my $valType = Get16u($dataPt, $pos + $tagLen + 16);
-        my $valPos = $pos + $tagLen + 18;
-        my $val = substr($$dataPt, $valPos, $valLen);
-        my $format;
-
-        # Note: all dumb Microsoft values are little-endian inside a big-endian-format file
-        SetByteOrder('II');
-        if ($valType == 8) {
-            $format = 'Unicode';
-            $val = $et->Decode($val, 'UCS2');
-        } elsif ($valType == 19 and $valLen == 8) {
-            $format = 'int64u';
-            $val = Get64u(\$val, 0);
-        } elsif ($valType == 21 and $valLen == 8) {
-            $format = 'date';
-            $val = Get64u(\$val, 0);
-            # convert time from 100 ns intervals since Jan 1, 1601
-            $val = $val * 1e-7 - 11644473600 if $val;
-            # (the Nikon S100 uses UTC timezone, same as ASF - PH)
-            $val = Image::ExifTool::ConvertUnixTime($val) . 'Z';
-        } elsif ($valType == 72 and $valLen == 16) {
-            $format = 'GUID';
-            $val = uc unpack('H*',pack('NnnNN',unpack('VvvNN',$val)));
-            $val =~ s/(.{8})(.{4})(.{4})(.{4})/$1-$2-$3-$4-/;
-        } elsif ($valType == 65 && $valLen > 4) { #PH (empirical)
-            $format = 'variant';
-            require Image::ExifTool::FlashPix;
-            my $vPos = $valPos; # (necessary because ReadFPXValue updates this)
-            # read entry as a VT_VARIANT (use FlashPix module for this)
-            $val = Image::ExifTool::FlashPix::ReadFPXValue($et, $dataPt, $vPos,
-                   Image::ExifTool::FlashPix::VT_VARIANT(), $valPos+$valLen, 1);
-        } else {
-            $format = "Unknown($valType)";
+        if (@vals) {
+            push @vals, $val if defined $val;
+            $val = \@vals;
+            $valPos = $pos + $tagLen + 18;
+            $valLen = $size - 18 - $tagLen;
         }
-        SetByteOrder('MM'); # back to native QuickTime byte ordering
-        
         if ($tagLen > 0 and $valLen > 0) {
             my $tagInfo = $et->GetTagInfo($tagTablePtr, $tag);
             unless ($tagInfo) {
@@ -823,9 +844,10 @@ sub ProcessXtra($$$)
                 my $name = $tag;
                 $name =~ s{^WM/}{};
               # $name =~ tr/-_A-Za-z0-9//dc;
-                if ($name =~ /^[-\w+]$/) {
+                if ($name =~ /^[-\w]+$/) {
                     $tagInfo = { Name => ucfirst($name) };
                     AddTagToTable($tagTablePtr, $tag, $tagInfo);
+                    $et->VPrint(0, $$et{INDENT}, "[adding Microsoft:$tag]\n");
                 }
             }
             $et->HandleTag($tagTablePtr, $tag, $val,
@@ -835,7 +857,7 @@ sub ProcessXtra($$$)
                 Start   => $valPos,
                 Size    => $valLen,
                 Format  => $format,
-                Extra   => " vers=$version type=$valType",
+                Extra   => " count=$count type=$valType",
             );
         }
         $pos += $size;  # step to next entry
@@ -862,7 +884,7 @@ Microsoft-specific EXIF and XMP tags.
 
 =head1 AUTHOR
 
-Copyright 2003-2014, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

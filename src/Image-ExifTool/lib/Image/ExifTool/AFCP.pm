@@ -14,7 +14,7 @@ use strict;
 use vars qw($VERSION);
 use Image::ExifTool qw(:DataAccess :Utils);
 
-$VERSION = '1.06';
+$VERSION = '1.08';
 
 sub ProcessAFCP($$);
 
@@ -37,6 +37,7 @@ for the AFCP specification.
     TEXT => 'Text',
     Nail => {
         Name => 'ThumbnailImage',
+        Groups => { 2 => 'Preview' },
         # (the specification allows for a variable amount of padding before
         #  the image after a 10-byte header, so look for the JPEG SOI marker,
         #  otherwise assume a fixed 8 bytes of padding)
@@ -49,6 +50,7 @@ for the AFCP specification.
     },
     PrVw => {
         Name => 'PreviewImage',
+        Groups => { 2 => 'Preview' },
         RawConv => q{
             pos($val) = 10;
             my $start = ($val =~ /\xff\xd8\xff/g) ? pos($val) - 3 : 18;
@@ -147,12 +149,7 @@ NoAFCP: for (;;) {
         if ($verbose > 2 and not $outfile) {
             my $dat = $buff . $dir;
             print $out "  AFCP Directory:\n";
-            HexDump(\$dat, undef,
-                Addr   => $$dirInfo{DataPos},
-                Width  => 12,
-                Prefix => $$et{INDENT},
-                Out => $out,
-            );
+            $et->VerboseDump(\$dat, Addr => $$dirInfo{DataPos}, Width  => 12);
         }
         $fix and $et->Warn("Adjusted AFCP offsets by $fix", 1);
 #
@@ -262,7 +259,7 @@ scanning for AFCP information.
 
 =head1 AUTHOR
 
-Copyright 2003-2014, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

@@ -20,7 +20,7 @@ use strict;
 use vars qw($VERSION %uid);
 use Image::ExifTool qw(:DataAccess :Utils);
 
-$VERSION = '1.18';
+$VERSION = '1.19';
 
 # DICOM VR (Value Representation) format conversions
 my %dicomFormat = (
@@ -3568,7 +3568,7 @@ my %implicitVR = (
 # Extract information from a DICOM (DCM) image
 # Inputs: 0) ExifTool object reference, 1) DirInfo reference
 # Returns: 1 on success, 0 if this wasn't a valid DICOM file
-sub ProcessDICM($$)
+sub ProcessDICOM($$)
 {
     my ($et, $dirInfo) = @_;
     my $raf = $$dirInfo{RAF};
@@ -3846,7 +3846,7 @@ No translation of special characters sets is done.
 
 =head1 AUTHOR
 
-Copyright 2003-2014, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

@@ -15,7 +15,7 @@ use Image::ExifTool::Exif;
 use Image::ExifTool::IPTC;
 use Image::ExifTool::XMP;
 
-$VERSION = '1.04';
+$VERSION = '1.05';
 
 sub ProcessPhotoMechanic($$);
 
@@ -108,7 +108,7 @@ my %rawCropConv = (
     NOTES => q{
         Below is a list of the observed PhotoMechanic XMP tags.  The actual
         namespace prefix is "photomechanic" but ExifTool shortens this in
-        the "XMP-photomech" family 1 group name.
+        the family 1 group name.
     },
     ColorClass  => {
         Writable => 'integer',
@@ -191,7 +191,7 @@ sub ProcessPhotoMechanic($$)
             $et->ProcessDirectory(\%dirInfo, $tagTablePtr);
         } elsif ($$et{DEL_GROUP}{PhotoMechanic}) {
             # delete the trailer
-            $verbose and printf $out "  Deleting PhotoMechanic trailer\n";
+            $verbose and print $out "  Deleting PhotoMechanic trailer\n";
             ++$$et{CHANGED};
         } else {
             # rewrite the trailer
@@ -236,7 +236,7 @@ write information written by the Camera Bits Photo Mechanic software.
 
 =head1 AUTHOR
 
-Copyright 2003-2014, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

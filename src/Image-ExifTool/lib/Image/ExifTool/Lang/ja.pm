@@ -11,7 +11,7 @@ package Image::ExifTool::Lang::ja;
 use strict;
 use vars qw($VERSION);
 
-$VERSION = '1.21';
+$VERSION = '1.23';
 
 %Image::ExifTool::Lang::ja::Translate = (
    'AEAperture' => 'AE絞り',
@@ -1279,7 +1279,7 @@ $VERSION = '1.21';
       Description => '圧縮計画',
       PrintConv => {
         'JPEG' => 'JPEG圧縮率',
-        'JPEG (old-style)' => 'JPEG(古い形式)',
+        'JPEG (old-style)' => 'JPEG (古い形式)',
         'None' => '無し',
         'Uncompressed' => '非圧縮',
       },
@@ -1324,16 +1324,19 @@ $VERSION = '1.21';
    'Contrast' => {
       Description => 'コントラスト',
       PrintConv => {
+        '+1 (medium high)' => '+1 (少し高い)',
+        '+2 (high)' => '+2 (ハード)',
+        '+3 (very high)' => '+3 (かなり高い)',
+        '-1 (medium low)' => '-1 (少し低い)',
+        '-2 (low)' => '-2 (ソフト)',
+        '-3 (very low)' => '-3 (かなり低い)',
+        '0 (normal)' => '0 (スタンダード)',
         'Film Simulation' => 'フィルムシミュレーション',
         'High' => 'ハード',
         'Low' => 'ソフト',
-        'Med High' => '少し高い',
-        'Med Low' => '少し低い',
         'Medium High' => '少し高い',
         'Medium Low' => '少し低い',
         'Normal' => 'スタンダード',
-        'Very High' => 'かなり高い',
-        'Very Low' => 'かなり低い',
       },
     },
    'ContrastCurve' => 'コントラストカーブ',
@@ -2750,6 +2753,9 @@ $VERSION = '1.21';
    'HighISONoiseReduction' => {
       Description => '高感度ノイズリダクション',
       PrintConv => {
+        '+2 (strong)' => '+2 (強)',
+        '-2 (weak)' => '-2 (弱)',
+        '-4 (weakest)' => '-4 (微弱)',
         'Auto' => 'オート',
         'High' => '高い',
         'Low' => 'ソフト',
@@ -4522,18 +4528,26 @@ $VERSION = '1.21';
    'Saturation' => {
       Description => '彩度',
       PrintConv => {
+        '+1 (medium high)' => '+1 (少し高い)',
+        '+2 (high)' => '+2 (ハード)',
+        '+3 (very high)' => '+3 (かなり高い)',
+        '+4 (highest)' => '+4',
+        '+4 (maximum)' => '+4',
+        '-1 (medium low)' => '-1 (少し低い)',
+        '-2 (low)' => '-2 (ソフト)',
+        '-3 (very low)' => '-3 (かなり低い)',
+        '-4 (lowest)' => '-4',
+        '-4 (minimum)' => '-4',
+        '0 (normal)' => '0 (スタンダード)',
+        'B&W' => '黒＆白',
         'Film Simulation' => 'フィルムシミュレーション',
         'High' => '高い彩度',
         'Low' => '低い彩度',
-        'Med High' => '少し高い',
-        'Med Low' => '少し低い',
         'Medium High' => '少し高い',
         'Medium Low' => '少し低い',
         'None' => '未設定',
         'None (B&W)' => '無し（黒＆白）',
         'Normal' => '標準',
-        'Very High' => 'かなり高い',
-        'Very Low' => 'かなり低い',
       },
     },
    'SaturationFaithful' => '彩度忠実設定',
@@ -4841,23 +4855,29 @@ $VERSION = '1.21';
    'Sharpness' => {
       Description => 'シャープネス',
       PrintConv => {
+        '+1 (medium hard)' => '+1 (少しハード)',
+        '+2 (hard)' => '+2 (ハード)',
+        '+3 (very hard)' => '+3 (かなりハード)',
+        '+4 (hardest)' => '+4',
+        '+4 (maximum)' => '+4',
+        '-1 (medium soft)' => '-1 (ミドルソフト)',
+        '-2 (soft)' => '-2 (ソフト)',
+        '-3 (very soft)' => '-3 (かなりソフト)',
+        '-4 (minimum)' => '-4',
+        '-4 (softest)' => '-4',
+        '0 (normal)' => '0 (ノーマル)',
         'Film Simulation' => 'フィルムシミュレーション',
         'Hard' => 'ハード',
         'Hard2' => 'ハード2',
-        'Med Hard' => '少しハード',
-        'Med Soft' => '少しソフト',
         'Medium Hard' => 'ミドルハード',
         'Medium Soft' => 'ミドルソフト',
         'Normal' => 'ノーマル',
         'Sharp' => 'シャープ',
         'Soft' => 'ソフト',
         'Soft2' => 'ソフト2',
-        'Very Hard' => 'かなりハード',
-        'Very Soft' => 'かなりソフト',
         'n/a' => '該当無し',
       },
-    },
-   'SharpnessFactor' => 'シャープネス要因',
+    },   'SharpnessFactor' => 'シャープネス要因',
    'SharpnessFaithful' => 'シャープネス忠実設定',
    'SharpnessFrequency' => {
       PrintConv => {
@@ -5232,7 +5252,6 @@ $VERSION = '1.21';
         'Enable' => 'する',
       },
     },
-   'Timezone' => 'タイムゾーン',
    'Title' => 'タイトル',
    'ToneComp' => 'トーン補正',
    'ToneCurve' => {
@@ -5810,7 +5829,7 @@ and values.
 
 =head1 AUTHOR
 
-Copyright 2003-2014, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

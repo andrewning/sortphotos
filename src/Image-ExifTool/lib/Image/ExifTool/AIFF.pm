@@ -18,7 +18,7 @@ use vars qw($VERSION);
 use Image::ExifTool qw(:DataAccess :Utils);
 use Image::ExifTool::ID3;
 
-$VERSION = '1.06';
+$VERSION = '1.09';
 
 # information for time/date-based tags (time zero is Jan 1, 1904)
 my %timeInfo = (
@@ -99,6 +99,14 @@ my %timeInfo = (
             MAC3 => 'MAC 3-to-1',
             MAC6 => 'MAC 6-to-1',
             sowt => 'Little-endian, no compression',
+            alaw => 'a-law',
+            ALAW => 'A-law',
+            ulaw => 'mu-law',
+            ULAW => 'Mu-law',
+           'GSM '=> 'GSM',
+            G722 => 'G722',
+            G726 => 'G726',
+            G728 => 'G728',
         },
     },
     11 => { #PH
@@ -181,6 +189,7 @@ sub ProcessAIFF($$)
 
     # verify this is a valid AIFF file
     return 0 unless $raf->Read($buff, 12) == 12;
+    my $fast3 = $$et{OPTIONS}{FastScan} && $$et{OPTIONS}{FastScan} == 3;
     my $pos = 12;
     # check for DjVu image
     if ($buff =~ /^AT&TFORM/) {
@@ -190,14 +199,16 @@ sub ProcessAIFF($$)
         return 0 unless $raf->Read($buf2, 4) == 4 and $buf2 =~ /^(DJVU|DJVM)/;
         $pos += 4;
         $buff = substr($buff, 4) . $buf2;
-        $tagTablePtr = GetTagTable('Image::ExifTool::DjVu::Main');
         $et->SetFileType('DJVU');
+        return 1 if $fast3;
+        $tagTablePtr = GetTagTable('Image::ExifTool::DjVu::Main');
         # modifiy FileType to indicate a multi-page document
         $$et{VALUE}{FileType} .= " (multi-page)" if $buf2 eq 'DJVM';
         $type = 'DjVu';
     } else {
         return 0 unless $buff =~ /^FORM....(AIF(F|C))/s;
         $et->SetFileType($1);
+        return 1 if $fast3;
         $tagTablePtr = GetTagTable('Image::ExifTool::AIFF::Main');
         $type = 'AIFF';
     }
@@ -211,7 +222,7 @@ sub ProcessAIFF($$)
         $pos += 8;
         my ($tag, $len) = unpack('a4N', $buff);
         my $tagInfo = $et->GetTagInfo($tagTablePtr, $tag);
-        $et->VPrint(0, "AIFF '$tag' chunk ($len bytes of data):\n");
+        $et->VPrint(0, "AIFF '${tag}' chunk ($len bytes of data):\n");
         # AIFF chunks are padded to an even number of bytes
         my $len2 = $len + ($len & 0x01);
         if ($tagInfo) {
@@ -232,7 +243,7 @@ sub ProcessAIFF($$)
             );
         } elsif ($verbose > 2 and $len2 < 1024000) {
             $raf->Read($buff, $len2) == $len2 or $err = 1, last;
-            HexDump(\$buff, undef, MaxLen => 512);
+            $et->VerboseDump(\$buff);
         } else {
             $raf->Seek($len2, 1) or $err=1, last;
         }
@@ -261,7 +272,7 @@ information from AIFF (Audio Interchange File Format) audio files.
 
 =head1 AUTHOR
 
-Copyright 2003-2014, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.
