@@ -11,7 +11,7 @@ package Image::ExifTool::Lang::de;
 use strict;
 use vars qw($VERSION);
 
-$VERSION = '1.33';
+$VERSION = '1.35';
 
 %Image::ExifTool::Lang::de::Translate = (
    'AEAperture' => 'AE-Blende',
@@ -693,6 +693,7 @@ $VERSION = '1.33';
    'AFPointsInFocus' => {
       Description => 'AF-Punkte im Fokus',
       PrintConv => {
+        '(none)' => '(Keine)',
         'All' => 'Alle',
         'All 11 Points' => 'Alle 11 Punkte',
         'Bottom' => 'Unten',
@@ -1182,6 +1183,7 @@ $VERSION = '1.33';
         'No flash & flash' => 'Kein Blitz & Blitz',
         'Off' => 'Aus',
         'On' => 'Ein',
+        'Pre-shot' => 'Vorauslösung',
         'WB' => 'Weißabgleich',
         'WB2' => 'Weißabgleich 2',
       },
@@ -1675,7 +1677,7 @@ $VERSION = '1.33';
     },
    'CanonImageType' => 'Canon-Bildtyp',
    'CanonImageWidth' => 'Canon-Bildbreite',
-   'CanonModelID' => 'Canon-Modell',
+   'CanonModelID' => 'Canon-Modell ID',
    'Caption' => 'Bildtext',
    'Caption-Abstract' => 'Beschreibung/Zusammenfassung',
    'CaptionWriter' => 'Bildtextautor',
@@ -1700,7 +1702,7 @@ $VERSION = '1.33';
     },
    'Category' => 'Kategorie',
    'CenterAFArea' => {
-      Description => 'AF-Messfeldgröße',
+      Description => 'AF-Messfeld Mitte',
       PrintConv => {
         'Normal Zone' => 'Normal',
         'Wide Zone' => 'Groß',
@@ -1714,7 +1716,7 @@ $VERSION = '1.33';
       },
     },
    'CenterWeightedAreaSize' => {
-      Description => 'Messfeldgröße',
+      Description => 'Messfeldgröße Mitte',
       PrintConv => {
         'Average' => 'Durchschnitt',
       },
@@ -1789,9 +1791,9 @@ $VERSION = '1.33';
         'On' => 'Ein',
       },
     },
-   'ColorAdjustment' => 'Farbkorrektur',
+   'ColorAdjustment' => 'Farbeinstellung',
    'ColorAdjustmentMode' => {
-      Description => 'Farbtonkorrektur Modus',
+      Description => 'Farbeinstellung Modus',
       PrintConv => {
         'Off' => 'Aus',
         'On' => 'Ein',
@@ -1808,9 +1810,10 @@ $VERSION = '1.33';
         'On' => 'Ein',
       },
     },
-   'ColorBalanceBlue' => 'Farbbalance Blau',
-   'ColorBalanceGreen' => 'Farbbalance Grün',
-   'ColorBalanceRed' => 'Farbbalance Rot',
+   'ColorBalanceBlue' => 'Farbabgleich Blau',
+   'ColorBalanceGreen' => 'Farbabgleich Grün',
+   'ColorBalanceRed' => 'Farbangleich Rot',
+   'ColorBalanceVersion' => 'Farbabgleich Version',
    'ColorBitDepth' => 'Farbtiefe',
    'ColorBoostType' => {
       PrintConv => {
@@ -3209,7 +3212,8 @@ $VERSION = '1.33';
         'Night View/Portrait' => 'Abendszene/Porträt',
         'Pet' => 'Haustiere',
         'Portrait' => 'Porträt',
-        'Program' => 'Programm',
+        'Program' => 'Programmautomatik',
+        'Program AE' => 'Programmautomatik',
         'Program-shift' => 'Programm-Shift',
         'Program-shift A' => 'Programmverschiebung A',
         'Program-shift S' => 'Programmverschiebung S',
@@ -3249,8 +3253,8 @@ $VERSION = '1.33';
         'Night view/portrait' => 'Abendszene/Porträt',
         'Not Defined' => 'Nicht definiert',
         'Portrait' => 'Porträt',
-        'Program' => 'Programm',
-        'Program AE' => 'Normal-Programm',
+        'Program' => 'Programmautomatik',
+        'Program AE' => 'Programmautomatik',
         'Shutter Priority' => 'Verschlusspriorität',
         'Shutter speed priority AE' => 'Verschlusspriorität',
         'Sports' => 'Sport',
@@ -3531,6 +3535,7 @@ $VERSION = '1.33';
         'F1/Studio Portrait' => 'F1/Studio-Porträt',
         'F1a/Studio Portrait Enhanced Saturation' => 'F1a/Studio-Porträt Erweiterte Sättigung',
         'F1b/Studio Portrait Smooth Skin Tone (ASTIA)' => 'F1b/Studio-Porträt Weiche Hauttöne',
+        'F1b/Studio Portrait Smooth Skin Tone (Astia)' => 'F1b/Studio-Porträt Weiche Hauttöne',
         'F1c/Studio Portrait Increased Sharpness' => 'F1c/Studio-Porträt Erhöhte Schärfe',
         'F3/Studio Portrait Ex' => 'F3/Studio Porträt Ex',
         'n/a' => '(nicht gesetzt)',
@@ -3643,9 +3648,9 @@ $VERSION = '1.33';
         'On' => 'Ein',
       },
     },
-   'FineTuneOptCenterWeighted' => 'Feinabst. der Bel.Messung Mittenbetonte Messung',
-   'FineTuneOptMatrixMetering' => 'Feinabst. der Bel.Messung Matrixmessung',
-   'FineTuneOptSpotMetering' => 'Feinabst. der Bel.Messung Spotmessung',
+   'FineTuneOptCenterWeighted' => 'Feinabstimmung Mittenbetonte Messung',
+   'FineTuneOptMatrixMetering' => 'Feinabstimmung Matrixmessung',
+   'FineTuneOptSpotMetering' => 'Feinabstimmung Spotmessung',
    'FirmwareRevision' => 'Firmware-Revision',
    'FirmwareRevision2' => 'Firmware-Revision 2',
    'FirmwareVersion' => 'Firmware-Version',
@@ -5479,6 +5484,7 @@ $VERSION = '1.33';
    'ManufactureDate' => 'Herstellungsdatum',
    'Marked' => 'Markiert',
    'MasterDocumentID' => 'ID des Originaldokuments',
+   'MatrixMetering' => 'Mehrfeldmessung',
    'MaxAperture' => 'Größte Blende',
    'MaxApertureAtCurrentFocal' => 'Größte Blende bei aktueller Brennweite',
    'MaxApertureAtMaxFocal' => 'Größte Blende bei größter Brennweite',
@@ -5505,6 +5511,7 @@ $VERSION = '1.33';
    'MeasurementObserver' => 'Messung nach',
    'MediaBlackPoint' => 'Medium-Schwarzpunkt',
    'MediaWhitePoint' => 'Medium-Weißpunkt',
+   'Medium' => 'Mittelgroß',
    'MenuButtonDisplayPosition' => {
       Description => 'Positionsanzeige Menuetaste',
       PrintConv => {
@@ -5526,7 +5533,7 @@ $VERSION = '1.33';
       Description => 'Belichtungsmessung',
       PrintConv => {
         'Center-weighted' => 'Mittenbetont',
-        'Matrix' => 'Matrixmessung',
+        'Matrix' => 'Mehrfeldmessung',
         'Spot' => 'Spotmessung',
       },
     },
@@ -5590,7 +5597,7 @@ $VERSION = '1.33';
       },
     },
    'MinoltaMakerNote' => 'Minolta-Herstellerinformationen',
-   'MinoltaModelID' => 'Minolta-Modell',
+   'MinoltaModelID' => 'Minolta-Modell ID',
    'MinoltaQuality' => {
       Description => 'Minolta-Bildqualität',
       PrintConv => {
@@ -5620,6 +5627,7 @@ $VERSION = '1.33';
     },
    'Model' => 'Kameramodell',
    'Model2' => 'Kameramodell (2)',
+   'ModelID' => 'Modell ID',
    'ModelingFlash' => {
       Description => 'Einstelllicht',
       PrintConv => {
@@ -6119,7 +6127,7 @@ $VERSION = '1.33';
         'Full' => 'Voll',
       },
     },
-   'PentaxModelID' => 'Pentax-Modell',
+   'PentaxModelID' => 'Pentax-Modell ID',
    'PentaxVersion' => 'Pentax-Version',
    'People' => 'Menschen',
    'Permits' => {
@@ -6296,7 +6304,7 @@ $VERSION = '1.33';
         'Pink' => 'Rosa',
         'Portrait' => 'Porträt',
         'Portrait 2' => 'Porträt 2',
-        'Program' => 'Programm',
+        'Program' => 'Programmautomatik',
         'Program (HyP)' => 'Programmautomatik (Hyper-Programm)',
         'Program AE' => 'Programmautomatik',
         'Program Av Shift' => 'Av Shift-Belichtungsprogramm',
@@ -6584,7 +6592,7 @@ $VERSION = '1.33';
    'Province-State' => 'Bundesland/Kanton',
    'Publisher' => 'Herausgeber',
    'Quality' => {
-      Description => 'Bildqualität',
+      Description => 'Qualität',
       PrintConv => {
         'Best' => 'Optimal',
         'Better' => 'Besser',
@@ -6602,6 +6610,7 @@ $VERSION = '1.33';
         'n/a' => '(nicht gesetzt)',
       },
     },
+   'Quality2' => 'Qualität 2',
    'QualityMode' => {
       PrintConv => {
         'Fine' => 'Fein',
@@ -7119,7 +7128,7 @@ $VERSION = '1.33';
         'Off' => 'Aus',
         'Pet' => 'Haustiere',
         'Portrait' => 'Porträt',
-        'Program' => 'Programm',
+        'Program' => 'Programmautomatik',
         'Self Portrait' => 'Selbstporträt',
         'Self Portrait+Self Timer' => 'Selbstporträt+Selbstauslöser',
         'Shutter Priority' => 'Verschlusspriorität',
@@ -7151,7 +7160,7 @@ $VERSION = '1.33';
         'Night Landscape' => 'Landschaft bei Nacht',
         'Night Portrait' => 'Nachtporträt',
         'Portrait' => 'Porträt',
-        'Program' => 'Programm',
+        'Program' => 'Programmautomatik',
         'Shutter Priority' => 'Verschlusspriorität',
         'Snow' => 'Schnee',
         'Sunset' => 'Sonnenuntergang',
@@ -7494,7 +7503,7 @@ $VERSION = '1.33';
         'Night Scenery' => 'Nachtszene',
         'Pet' => 'Haustiere',
         'Portrait' => 'Porträt',
-        'Program' => 'Programm',
+        'Program' => 'Programmautomatik',
         'Self Portrait' => 'Selbstportait',
         'Shutter Priority' => 'Verschlusspriorität',
         'Snow' => 'Schnee',
@@ -7704,7 +7713,7 @@ $VERSION = '1.33';
       Description => 'Unterdatei-Typ',
       PrintConv => {
         'Alternate reduced-resolution image' => 'Alternatives Bild in reduzierter Auflösung',
-        'Full-resolution Image' => 'Bild in voller Auflösung',
+        'Full-resolution image' => 'Bild in voller Auflösung',
         'Reduced-resolution image' => 'Bild in reduzierter Auflösung',
         'Single page of multi-page image' => 'Einzelbild eines mehrseitigen Bildes',
         'Single page of multi-page reduced-resolution image' => 'Einzelbild eines mehrseitigen Bildes in reduzierter Auflösung',
@@ -8691,14 +8700,15 @@ and values.
 
 =head1 AUTHOR
 
-Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2020, Phil Harvey (philharvey66 at gmail.com)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.
 
 =head1 ACKNOWLEDGEMENTS
 
-Thanks to Jens Duttke and Herbert Kauer for providing this translation.
+Thanks to Jens Duttke, Herbert Kauer and Jobi for providing this
+translation.
 
 =head1 SEE ALSO
 

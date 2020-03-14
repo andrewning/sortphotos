@@ -3,9 +3,9 @@
 #
 # Description:  Read and write meta information
 #
-# URL:          http://owl.phy.queensu.ca/~phil/exiftool/
+# URL:          https://exiftool.org/
 #
-# Legal:        Copyright (c) 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
+# Legal:        Copyright (c) 2003-2020, Phil Harvey (philharvey66 at gmail.com)
 #               This library is free software; you can redistribute it and/or
 #               modify it under the same terms as Perl itself.
 #------------------------------------------------------------------------------
@@ -65,44 +65,46 @@ supported by ExifTool (r = read, w = write, c = create):
 
   File Types
   ------------+-------------+-------------+-------------+------------
-  3FR   r     | DR4   r/w/c | J2C   r     | ODP   r     | RAW   r/w
-  3G2   r/w   | DSS   r     | JNG   r/w   | ODS   r     | RIFF  r
-  3GP   r/w   | DV    r     | JP2   r/w   | ODT   r     | RSRC  r
-  A     r     | DVB   r/w   | JPEG  r/w   | OFR   r     | RTF   r
-  AA    r     | DVR-MS r    | JSON  r     | OGG   r     | RW2   r/w
-  AAE   r     | DYLIB r     | K25   r     | OGV   r     | RWL   r/w
-  AAX   r/w   | EIP   r     | KDC   r     | OPUS  r     | RWZ   r
-  ACR   r     | EPS   r/w   | KEY   r     | ORF   r/w   | RM    r
-  AFM   r     | EPUB  r     | LA    r     | OTF   r     | SEQ   r
-  AI    r/w   | ERF   r/w   | LFP   r     | PAC   r     | SKETCH r
-  AIFF  r     | EXE   r     | LNK   r     | PAGES r     | SO    r
-  APE   r     | EXIF  r/w/c | M2TS  r     | PBM   r/w   | SR2   r/w
-  ARQ   r/w   | EXR   r     | M4A/V r/w   | PCD   r     | SRF   r
-  ARW   r/w   | EXV   r/w/c | MAX   r     | PDB   r     | SRW   r/w
-  ASF   r     | F4A/V r/w   | MEF   r/w   | PDF   r/w   | SVG   r
-  AVI   r     | FFF   r/w   | MIE   r/w/c | PEF   r/w   | SWF   r
-  AZW   r     | FLA   r     | MIFF  r     | PFA   r     | THM   r/w
-  BMP   r     | FLAC  r     | MKA   r     | PFB   r     | TIFF  r/w
-  BPG   r     | FLIF  r/w   | MKS   r     | PFM   r     | TORRENT r
-  BTF   r     | FLV   r     | MKV   r     | PGF   r     | TTC   r
-  CHM   r     | FPF   r     | MNG   r/w   | PGM   r/w   | TTF   r
-  COS   r     | FPX   r     | MOBI  r     | PLIST r     | VCF   r
-  CR2   r/w   | GIF   r/w   | MODD  r     | PICT  r     | VRD   r/w/c
-  CR3   r/w   | GPR   r/w   | MOI   r     | PMP   r     | VSD   r
-  CRM   r/w   | GZ    r     | MOS   r/w   | PNG   r/w   | WAV   r
-  CRW   r/w   | HDP   r/w   | MOV   r/w   | PPM   r/w   | WDP   r/w
-  CS1   r/w   | HDR   r     | MP3   r     | PPT   r     | WEBP  r
-  DCM   r     | HEIC  r     | MP4   r/w   | PPTX  r     | WEBM  r
-  DCP   r/w   | HEIF  r     | MPC   r     | PS    r/w   | WMA   r
-  DCR   r     | HTML  r     | MPG   r     | PSB   r/w   | WMV   r
-  DFONT r     | ICC   r/w/c | MPO   r/w   | PSD   r/w   | WTV   r
-  DIVX  r     | ICS   r     | MQV   r/w   | PSP   r     | WV    r
-  DJVU  r     | IDML  r     | MRW   r/w   | QTIF  r/w   | X3F   r/w
-  DLL   r     | IIQ   r/w   | MXF   r     | R3D   r     | XCF   r
-  DNG   r/w   | IND   r/w   | NEF   r/w   | RA    r     | XLS   r
-  DOC   r     | INX   r     | NRW   r/w   | RAF   r/w   | XLSX  r
-  DOCX  r     | ISO   r     | NUMBERS r   | RAM   r     | XMP   r/w/c
-  DPX   r     | ITC   r     | O     r     | RAR   r     | ZIP   r
+  3FR   r     | DR4   r/w/c | ITC   r     | ODP   r     | RIFF  r
+  3G2   r/w   | DSS   r     | J2C   r     | ODS   r     | RSRC  r
+  3GP   r/w   | DV    r     | JNG   r/w   | ODT   r     | RTF   r
+  A     r     | DVB   r/w   | JP2   r/w   | OFR   r     | RW2   r/w
+  AA    r     | DVR-MS r    | JPEG  r/w   | OGG   r     | RWL   r/w
+  AAE   r     | DYLIB r     | JSON  r     | OGV   r     | RWZ   r
+  AAX   r/w   | EIP   r     | K25   r     | OPUS  r     | RM    r
+  ACR   r     | EPS   r/w   | KDC   r     | ORF   r/w   | SEQ   r
+  AFM   r     | EPUB  r     | KEY   r     | OTF   r     | SKETCH r
+  AI    r/w   | ERF   r/w   | LA    r     | PAC   r     | SO    r
+  AIFF  r     | EXE   r     | LFP   r     | PAGES r     | SR2   r/w
+  APE   r     | EXIF  r/w/c | LNK   r     | PBM   r/w   | SRF   r
+  ARQ   r/w   | EXR   r     | LRV   r/w   | PCD   r     | SRW   r/w
+  ARW   r/w   | EXV   r/w/c | M2TS  r     | PCX   r     | SVG   r
+  ASF   r     | F4A/V r/w   | M4A/V r/w   | PDB   r     | SWF   r
+  AVI   r     | FFF   r/w   | MAX   r     | PDF   r/w   | THM   r/w
+  AVIF  r/w   | FITS  r     | MEF   r/w   | PEF   r/w   | TIFF  r/w
+  AZW   r     | FLA   r     | MIE   r/w/c | PFA   r     | TORRENT r
+  BMP   r     | FLAC  r     | MIFF  r     | PFB   r     | TTC   r
+  BPG   r     | FLIF  r/w   | MKA   r     | PFM   r     | TTF   r
+  BTF   r     | FLV   r     | MKS   r     | PGF   r     | TXT   r
+  CHM   r     | FPF   r     | MKV   r     | PGM   r/w   | VCF   r
+  COS   r     | FPX   r     | MNG   r/w   | PLIST r     | VRD   r/w/c
+  CR2   r/w   | GIF   r/w   | MOBI  r     | PICT  r     | VSD   r
+  CR3   r/w   | GPR   r/w   | MODD  r     | PMP   r     | WAV   r
+  CRM   r/w   | GZ    r     | MOI   r     | PNG   r/w   | WDP   r/w
+  CRW   r/w   | HDP   r/w   | MOS   r/w   | PPM   r/w   | WEBP  r
+  CS1   r/w   | HDR   r     | MOV   r/w   | PPT   r     | WEBM  r
+  CSV   r     | HEIC  r/w   | MP3   r     | PPTX  r     | WMA   r
+  DCM   r     | HEIF  r/w   | MP4   r/w   | PS    r/w   | WMV   r
+  DCP   r/w   | HTML  r     | MPC   r     | PSB   r/w   | WTV   r
+  DCR   r     | ICC   r/w/c | MPG   r     | PSD   r/w   | WV    r
+  DFONT r     | ICS   r     | MPO   r/w   | PSP   r     | X3F   r/w
+  DIVX  r     | IDML  r     | MQV   r/w   | QTIF  r/w   | XCF   r
+  DJVU  r     | IIQ   r/w   | MRW   r/w   | R3D   r     | XLS   r
+  DLL   r     | IND   r/w   | MXF   r     | RA    r     | XLSX  r
+  DNG   r/w   | INSP  r/w   | NEF   r/w   | RAF   r/w   | XMP   r/w/c
+  DOC   r     | INSV  r     | NRW   r/w   | RAM   r     | ZIP   r
+  DOCX  r     | INX   r     | NUMBERS r   | RAR   r     |
+  DPX   r     | ISO   r     | O     r     | RAW   r/w   |
 
   Meta Information
   ----------------------+----------------------+---------------------
@@ -423,6 +425,9 @@ in the full ExifTool distribution for examples.
 
 =item Option Parameters:
 
+Note that these API options may also be used in the exiftool application via
+the command-line B<-api> option.
+
 =over 4
 
 =item Binary
@@ -525,12 +530,22 @@ without recoding.  Default is 0.
 
 =item Compact
 
-Option to write compact XMP output.  The XMP specification suggests that the
-data be padded with blanks to allow in-place editing. With this flag set to
-1, the 2 kB of padding is not written.  Note that this only effects embedded
-XMP since padding is never written for stand-alone XMP files.  When set to
-2, spaces to indent XMP for readability are also dropped.  Default is undef.
-Also see the XMPShorthand option for reducing the size of XMP.
+Comma-delimited list of settings for writing compact XMP.  Below is a list
+of available settings.  Note that 'NoPadding' effects only embedded XMP
+since padding is never written for stand-alone XMP files.  Also note that
+'OneDesc' is not recommended when writing XMP larger than 64 kB to a JPG
+file because it interferes with ExifTool's technique of splitting off large
+rdf:Description elements into the extended XMP.  Case is not significant for
+any of these options.  Aliases are given in brackets. Default is undef.
+
+  NoPadding - Avoid 2 kB of recommended padding at end of XMP (NoPad)
+  NoIndent  - No spaces to indent lines (NoSpace, NoSpaces)
+  NoNewline - Avoid unnecessary newlines (NoNewlines)
+  Shorthand - Use XMP Shorthand format
+  OneDesc   - Combine properties into a single rdf:Description (OneDescr)
+  AllSpace  - Equivalent to 'NoPadding,NoIndent,NoNewline'
+  AllFormat - Equivalent to 'Shorthand,OneDesc'
+  All       - Equivalent to 'AllSpace,AllFormat'
 
 =item Composite
 
@@ -599,39 +614,53 @@ GUID specified by the HasExtendedXMP tag, so by default ExifTool will ignore
 other extended XMP, but this option allows full control over the extended
 XMP to be extracted.
 
-     0   - ignore all extended XMP
-     1   - read extended XMP with valid GUID only (default)
-     2   - read extended XMP with any GUID
-  <guid> - read extended XMP with a specific GUID
+     0   - Ignore all extended XMP
+     1   - Read extended XMP with valid GUID only (default)
+     2   - Read extended XMP with any GUID
+  <guid> - Read extended XMP with a specific GUID
 
 =item ExtractEmbedded
 
 Flag to extract information from embedded documents in EPS files, embedded
 EPS information and JPEG and Jpeg2000 images in PDF files, embedded MPF
-images in JPEG and MPO files, streaming metadata in AVCHD videos, and the
-resource fork of Mac OS files.  Default is undef.
+images in JPEG and MPO files, timed metadata in videos, and the resource
+fork of Mac OS files.  Default is undef.
 
 =item FastScan
 
-Flag to increase speed of extracting information from JPEG images.  With
-this option set to 1, ExifTool will not scan to the end of a JPEG image to
-check for an AFCP, CanonVRD, FotoStation, PhotoMechanic, MIE or PreviewImage
-trailer.  This also stops the parsing after the first comment in GIF images,
-and at the audio/video data with RIFF-format files (AVI, WAV, etc), so any
-trailing metadata (eg. XMP written by some utilities) may be missed.  Also
-disables input buffering for some types of files to reduce memory usage when
-reading from a non-seekable stream.  When combined with the ScanForXMP
-option, prevents scanning for XMP in recognized file types.  With a value of
-2, ExifTool will also avoid extracting any EXIF MakerNote information.  When
-set to 3, the file is not actually parsed, and only an initial guess at
-FileType and some pseudo tags are returned.  Default is undef.
+Flag to increase speed when reading files by avoiding extraction of some
+types of metadata.  With this option set to 1, ExifTool will not scan to the
+end of a JPEG image to check for an AFCP, CanonVRD, FotoStation,
+PhotoMechanic, MIE or PreviewImage trailer.  This also stops the parsing
+after the first comment in GIF images, and at the audio/video data of
+RIFF-format files (AVI, WAV, etc), so any trailing metadata (eg. XMP written
+by some utilities) may be missed.  Also disables input buffering for some
+types of files to reduce memory usage when reading from a non-seekable
+stream, and bypasses CRC validation for speed when writing PNG files.  When
+combined with the ScanForXMP option, prevents scanning for XMP in recognized
+file types.  With a value of 2, ExifTool will also avoid extracting any EXIF
+MakerNote information, and will stop parsing at the IDAT chunk of PNG
+images.  (By the PNG specification, metadata is allowed after IDAT, but
+ExifTool always writes it before because some utilities will ignore it
+otherwise.)  When set to 3 or 4, only pseudo system tags and FileType are
+generated.  For 3, the file header is read to provide an educated guess at
+FileType.  For 4, the file is not read at all and FileType is determined
+based on the file's extension.  Default is undef.
 
 =item Filter
 
 Perl expression used to filter values for all tags.  The expression acts on
 the value of the Perl default variable ($_), and changes the value of this
-variable as required.  The value is not changed if $_ is set to undef. 
-Applies to all returned values unless PrintConv option is disabled.
+variable as required.  The value is not changed if $_ is set to undef.  List
+items are filtered individually.  Applies to all returned values unless
+PrintConv option is disabled.
+
+=item FilterW
+
+Perl expression used to filter PrintConv values when writing.  The
+expression acts on the value of the Perl default variable ($_), and changes
+the value of this variable as required.  The value is not changed if $_ is
+set to undef.
 
 =item FixBase
 
@@ -657,8 +686,9 @@ it is within GeoMaxExtSecs, otherwise geotagging fails).  Default is 1800.
 
 Maximum extrapolation time in seconds for geotagging.  Geotagging fails if
 the Geotime value lies outside a GPS track by a number of seconds greater
-than this.  Otherwise, the coordinates of the nearest fix are taken. 
-Default is 1800.
+than this.  Otherwise, for an extrapolation the coordinates of the nearest
+fix are taken (ie. it is assumed that you weren't moving during this
+period).  Default is 1800.
 
 =item GeoMaxHDOP
 
@@ -772,9 +802,10 @@ L<Image::ExifTool::TagNames/MacOS MDItem Tags> for more information).
 
 =item MissingTagValue
 
-Value for missing tags in tag name expressions.  If not set, a minor error
-is issued for missing values, or the value is set to '' if
-L</IgnoreMinorErrors> is set.  Default is undef.
+Value for missing tags in tag name expressions (or tags where the advanced
+formatting expression returns undef).  If not set, a minor error is issued
+for missing values, or the value is set to '' if L</IgnoreMinorErrors> is
+set.  Default is undef.
 
 =item NoPDFList
 
@@ -787,27 +818,17 @@ Password for reading/writing password-protected PDF documents.  Ignored if a
 password is not required.  Character encoding of the password is determined
 by the value of the Charset option at processing time.  Default is undef.
 
-=item PNGEarlyXMP
-
-Flag to write XMP in PNG images before the IDAT (image data) chunk.  By
-default, ExifTool adds new XMP to the end of a PNG file (just before IEND).
-This is allowed by the PNG and XMP specifications, but some utilities seem
-to ignore XMP if it comes after the image data.  The PNGEarlyXMP option
-causes ExifTool to instead add new XMP before the PNG IDAT chunk.  However,
-since ExifTool uses a single-pass writing algorithm, it has no way to tell
-if XMP already exists later in the file before writing the new XMP in this
-location.  If this happens, a minor error is issued when the extra XMP is
-encountered, and the file is not written.  Adding the L</IgnoreMinorErrors>
-option causes the XMP after IDAT to be deleted, thus resolving the conflict
-(at the expense of possible metadata loss), and allowing the file to be
-written.  The PNGEarlyXMP option is applied automatically when deleting all
-XMP and writing new XMP back in one step.  When reading, this option causes
-a warning to be issued if standard XMP is found after the IDAT chunk.
-
 =item PrintConv
 
 Flag to enable automatic print conversion.  Also enables inverse
 print conversion for writing.  Default is 1.
+
+=item QuickTimeHandler
+
+Flag set to add an 'mdir' Handler to a newly created Meta box when adding
+QuickTime ItemList tags.  Adobe Bridge does not add this Handler, but it is
+commonly found in samples from other software, so it is possible that this
+could affect the interoperability of ItemList tags.  Default is undef.
 
 =item QuickTimeUTC
 
@@ -837,6 +858,19 @@ delimited string of names (any delimiter is allowed), or undef to clear the
 current RequestTags list.  Groups are requested by adding a colon after the
 name (eg. "MacOS:").  Names are converted to lower case as they are added to
 the list.  Default is undef.
+
+=item SaveFormat
+
+Flag to save EXIF/TIFF format type as the family 6 group name when
+extracting information.  Without this option set, the family 6 group names
+are not generated.  Default is undef.  See the L</GetGroup> option for more
+details.
+
+=item SavePath
+
+Flag to save the metadata path as the family 5 group name when extracting
+information.  Without this option set, the family 5 group names are not
+generated.  Default is undef.  See the L</GetGroup> option for more details.
 
 =item ScanForXMP
 
@@ -943,8 +977,8 @@ user parameters (with lower-case names).
 
 =item Validate
 
-Flag to perform extra validation checks when reading, causing extra warnings
-to be generated if problems are found.  Default is undef.
+Flag to perform extra validation metadata checks when reading, causing extra
+warnings to be generated if problems are found.  Default is undef.
 
 =item Verbose
 
@@ -967,7 +1001,9 @@ list below.  Default is 'wcg'.
 
 The level of the group differs for different types of metadata. For XMP or
 IPTC this is the full XMP/IPTC block (the family 0 group), but for EXIF this
-is the individual IFD (the family 1 group).
+is the individual IFD (the family 1 group).  The 'w' and 'c' modes are
+tested only when L</SetNewValue> is called, but the 'g' mode is also tested
+in L</WriteInfo>.
 
 =item XAttrTags
 
@@ -978,10 +1014,6 @@ and L<Image::ExifTool::TagNames/MacOS XAttr Tags> for more information).
 
 Flag to enable automatic conversion for unknown XMP tags with values that
 look like rational numbers or dates.  Default is 1.
-
-=item XMPShorthand
-
-Flag set to write xmp in shorthand format.  Default is undef.
 
 =back
 
@@ -1030,9 +1062,9 @@ Binary, Charset, CharsetEXIF, CharsetFileName, CharsetID3, CharsetIPTC,
 CharsetPhotoshop, CharsetQuickTime, CharsetRIFF, Composite, ExtendedXMP,
 ExtractEmbedded, FastScan, FixBase, HtmlDump, HtmlDumpBase,
 IgnoreMinorErrors, Lang, LargeFileSupport, MakerNotes, MDItemTags,
-NoPDFList, Password, PNGEarlyXMP, QuickTimeUTC (enforced 1904 time zero),
-RequestAll, RequestTags, ScanForXMP, Struct, TextOut, Unknown, Verbose,
-XAttrTags and XMPAutoConv.
+NoPDFList, Password, QuickTimeUTC (enforced 1904 time zero), RequestAll,
+RequestTags, SaveFormat, SavePath, ScanForXMP, Struct, TextOut, Unknown,
+Verbose, XAttrTags and XMPAutoConv.
 
 =item Return Value:
 
@@ -1163,7 +1195,8 @@ called with a source file name.
 The following ExifTool options are effective in the call to L</WriteInfo>:
 
 ByteOrder, Charset, CharsetEXIF, CharsetFileName, CharsetIPTC, Compact,
-Compress, FixBase, IgnoreMinorErrors, Password, PNGEarlyXMP and Verbose.
+Compress, FixBase, IgnoreMinorErrors, Password, QuickTimeHandler, Verbose
+and WriteMode.
 
 =head2 GetTagList
 
@@ -1290,8 +1323,8 @@ optional group specifier), use L</GetInfo> instead.
 The following options are in effect when L</GetValue> is called:
 
 Charset, CoordFormat, DateFormat, Escape, Filter, GlobalTimeShift, Lang,
-ListItem, ListJoin, PrintConv, QuickTimeUTC (conversion to local time), and
-StrictDate.
+ListItem, ListJoin, PrintConv, QuickTimeUTC (conversion to local time),
+StrictDate and TimeZone.
 
 =over 4
 
@@ -1398,8 +1431,8 @@ name for each value, or call with a reference to the list of values.
     # write structured information as a serialized string
     $exifTool->SetNewValue('XMP:Flash'=>'{mode=on,fired=true,return=not}');
 
-(See L<http://owl.phy.queensu.ca/~phil/exiftool/struct.html#Serialize> for
-a description of the structure serialization technique.)
+(See L<https://exiftool.org/struct.html#Serialize> for a description of the
+structure serialization technique.)
 
 =over 4
 
@@ -1437,9 +1470,9 @@ hash reference or a serialized string (see the last two examples above).
 =item AddValue
 
 Specifies that the value be added to an existing list in a file rather than
-overwriting.  Valid settings are 0 (overwrite any existing tag value), 1
-(add to an existing list and warn for non-list tags) or 2 (add to existing
-list and overwrite non-list tags).  Default is 0.
+overwriting the existing values.  Valid settings are 0 (overwrite any
+existing tag value), 1 (add to an existing list and warn for non-list tags)
+or 2 (add to existing list and overwrite non-list tags).  Default is 0.
 
 =item DelValue
 
@@ -1501,8 +1534,8 @@ Flag to replace the previous new values for this tag (ie. replace the values
 set in previous calls to L</SetNewValue>).  This option is most commonly
 used to replace previously-set new values for list-type tags.  Valid values
 are 0 (set new value normally -- adds to new values for list-type tags), 1
-(reset previous new values for this tag and replace with the specified new
-value) or 2 (reset previous new values only).
+(reset any previous new values before setting new value) or 2 (reset
+previous new values only; new value argument is ignored).  Default is 0.
 
 =item Shift
 
@@ -1546,7 +1579,7 @@ explicitly, either by group (with 'Adobe:*') or as a block (with 'Adobe').
 The following ExifTool options are effective in the call to L</SetNewValue>:
 
 Charset, DateFormat, Escape, IgnoreMinorErrors, Lang, ListJoin, ListSplit,
-PrintConv, QuickTimeUTC, StrictDate, Verbose and WriteMode.
+PrintConv, QuickTimeUTC, StrictDate, TimeZone, Verbose and WriteMode.
 
 =head2 GetNewValue
 
@@ -1814,11 +1847,11 @@ systems only.
 
 Set the file name and directory, or create a hard link.  If not specified,
 the new file name is derived from the new values of the FileName and
-Directory tags, or from the HardLink tag if creating a link.  If the
-FileName tag contains a '/', then the file is renamed into a new directory.
-If FileName ends with '/', then it is taken as a directory name and the file
-is moved into the new directory.  The new value for the Directory tag takes
-precedence over any directory specified in FileName.
+Directory tags, or from the HardLink or SymLink tag if creating a link.  If
+the FileName tag contains a '/', then the file is renamed into a new
+directory.  If FileName ends with '/', then it is taken as a directory name
+and the file is moved into the new directory.  The new value for the
+Directory tag takes precedence over any directory specified in FileName.
 
     $result = $exifTool->SetFileName($file);
     $result = $exifTool->SetFileName($file, $newName);
@@ -1833,14 +1866,14 @@ precedence over any directory specified in FileName.
 
 2) [optional] New file name
 
-3) [optional] 'Link' to create a hard link instead of renaming the file, or
-'Test' to test renaming feature by printing the old and new names instead of
-changing anything.
+3) [optional] 'HardLink' or 'SymLink' to create a hard or symbolic link
+instead of renaming the file, or 'Test' to test renaming feature by printing
+the old and new names instead of changing anything.
 
 =item Return Value:
 
-1 if the file name or directory was changed, 0 if nothing was done, or -1 if
-there was an error renaming the file.
+1 on success, 0 if nothing was done, or -1 if there was an error renaming the
+file or creating the link.
 
 =item Notes:
 
@@ -1854,8 +1887,9 @@ Set the order of the preferred groups when adding new information.  In
 subsequent calls to L</SetNewValue>, new information will be created in the
 first valid group of this list.  This has an impact only if the group is not
 specified when calling L</SetNewValue> and if the tag name exists in more
-than one group.  The default order is EXIF, IPTC then XMP.  Any family 0
-group name may be used.  Case is not significant.
+than one group.  The default order is EXIF, IPTC, XMP, MakerNotes,
+QuickTime, Photoshop, ICC_Profile, CanonVRD, Adobe.  Any family 0 group name
+may be used.  Case is not significant.
 
     $exifTool->SetNewGroups('XMP','EXIF','IPTC');
 
@@ -1984,6 +2018,8 @@ The group family numbers are currently available:
     2) Category                 (eg. Author, Time)
     3) Document Number          (eg. Main, Doc1, Doc3-2)
     4) Instance Number          (eg. Copy1, Copy2, Copy3...)
+    5) Metadata Path            (eg. JPEG-APP1-IFD0-ExifIFD)
+    6) EXIF/TIFF Format         (eg. int8u, int32u, undef, string)
 
 Families 0 and 1 are based on the file structure, and are similar except
 that family 1 is more specific and sub-divides some groups to give more
@@ -2009,13 +2045,23 @@ L</ExtractEmbedded> option for extracting tags from embedded documents.)
 Nested sub-documents (if they exist) are indicated by numbers separated with
 dashes in the group name, to an arbitrary depth. (eg. 'Doc2-3-1' is the 1st
 sub-sub-document of the 3rd sub-document of the 2nd embedded document of the
-main file.)
+main file.)  Document numbers are also used to differentiate samples for
+timed metadata in videos.
 
 Family 4 provides a method for differentiating tags when multiple tags exist
 with the same name in the same location.  The primary instance of a tag (the
 tag extracted when the Duplicates option is disabled and no group is
-specified) has no family 4 group name, but additional instances have have
-family 4 group names of 'Copy1', 'Copy2', 'Copy3', etc.
+specified) has no family 4 group name, but additional instances have family
+4 group names of 'Copy1', 'Copy2', 'Copy3', etc.  For convenience, the
+primary tag may also be accessed using a group name of 'Copy0'.
+
+Family 5 is experimental, and gives the complete path for the metadata in
+the file.  Generated only if the L</SavePath> option is used when
+extracting.
+
+Family 6 is currently used only for EXIF/TIFF metadata, and gives the format
+type of the extracted value.  Generated only if the L</SaveFormat> option is
+used when extracting.
 
 See L</GetAllGroups [static]> for complete lists of group names.
 
@@ -2188,46 +2234,48 @@ Here is a complete list of groups for each of these families:
 
 AFCP, AIFF, APE, APP0, APP1, APP11, APP12, APP13, APP14, APP15, APP4, APP5,
 APP6, APP8, ASF, Audible, CanonVRD, Composite, DICOM, DNG, DV, DjVu, Ducky,
-EXE, EXIF, ExifTool, FLAC, FLIR, File, Flash, FlashPix, Font, FotoStation,
-GIF, GIMP, GeoTiff, GoPro, H264, HTML, ICC_Profile, ID3, IPTC, ISO, ITC,
-JFIF, JPEG, JSON, Jpeg2000, LNK, Leaf, Lytro, M2TS, MIE, MIFF, MNG, MOI,
-MPC, MPEG, MPF, MXF, MakerNotes, Matroska, Meta, Ogg, OpenEXR, Opus, PDF,
-PICT, PLIST, PNG, PSP, Palm, PanasonicRaw, PhotoCD, PhotoMechanic,
-Photoshop, PostScript, PrintIM, QuickTime, RAF, RIFF, RSRC, RTF, Radiance,
-Rawzor, Real, Red, SVG, SigmaRaw, Stim, Theora, Torrent, VCard, Vorbis, WTV,
-XML, XMP, ZIP
+EXE, EXIF, ExifTool, FITS, FLAC, FLIR, File, Flash, FlashPix, Font,
+FotoStation, GIF, GIMP, GeoTiff, GoPro, H264, HTML, ICC_Profile, ID3, IPTC,
+ISO, ITC, JFIF, JPEG, JSON, Jpeg2000, LNK, Leaf, Lytro, M2TS, MIE, MIFF,
+MNG, MOI, MPC, MPEG, MPF, MXF, MakerNotes, Matroska, Meta, Ogg, OpenEXR,
+Opus, PDF, PICT, PLIST, PNG, PSP, Palm, Parrot, PanasonicRaw, PhotoCD,
+PhotoMechanic, Photoshop, PostScript, PrintIM, QuickTime, RAF, RIFF, RSRC,
+RTF, Radiance, Rawzor, Real, Red, SVG, SigmaRaw, Stim, Theora, Torrent,
+Trailer, VCard, Vorbis, WTV, XML, XMP, ZIP
 
 =item Family 1 (Specific Location):
 
 AC3, AFCP, AIFF, APE, ASF, AVI1, Adobe, AdobeCM, AdobeDNG, Apple, Audible,
 CIFF, CameraIFD, Canon, CanonCustom, CanonRaw, CanonVRD, Casio, Chapter#,
 Composite, DICOM, DJI, DNG, DV, DjVu, DjVu-Meta, Ducky, EPPIM, EXE, EXIF,
-ExifIFD, ExifTool, FLAC, FLIR, File, Flash, FlashPix, Font, FotoStation,
-FujiFilm, FujiIFD, GE, GIF, GIMP, GPS, GeoTiff, GlobParamIFD, GoPro,
-GraphConv, H264, HP, HTC, HTML, HTML-dc, HTML-ncc, HTML-office, HTML-prod,
-HTML-vw96, HTTP-equiv, ICC-chrm, ICC-clrt, ICC-header, ICC-meas, ICC-meta,
-ICC-view, ICC_Profile, ICC_Profile#, ID3, ID3v1, ID3v1_Enh, ID3v2_2,
-ID3v2_3, ID3v2_4, IFD0, IFD1, IPTC, IPTC#, ISO, ITC, InteropIFD, JFIF, JFXX,
-JPEG, JPEG-HDR, JSON, JVC, Jpeg2000, KDC_IFD, Kodak, KodakBordersIFD,
-KodakEffectsIFD, KodakIFD, KyoceraRaw, LNK, Leaf, LeafSubIFD, Leica, Lytro,
-M2TS, MAC, MIE-Audio, MIE-Camera, MIE-Canon, MIE-Doc, MIE-Extender,
-MIE-Flash, MIE-GPS, MIE-Geo, MIE-Image, MIE-Lens, MIE-Main, MIE-MakerNotes,
-MIE-Meta, MIE-Orient, MIE-Preview, MIE-Thumbnail, MIE-UTM, MIE-Unknown,
-MIE-Video, MIFF, MNG, MOBI, MOI, MPC, MPEG, MPF0, MPImage, MS-DOC, MXF,
-MacOS, MakerNotes, MakerUnknown, Matroska, MediaJukebox, MetaIFD, Microsoft,
-Minolta, MinoltaRaw, Motorola, NITF, Nikon, NikonCapture, NikonCustom,
-NikonScan, Nintendo, Ocad, Ogg, Olympus, OpenEXR, Opus, PDF, PICT, PNG,
-PNG-pHYs, PSP, Palm, Panasonic, PanasonicRaw, Pentax, PhaseOne, PhotoCD,
-PhotoMechanic, Photoshop, PictureInfo, PostScript, PreviewIFD, PrintIM,
-ProfileIFD, Qualcomm, QuickTime, RAF, RAF2, RIFF, RMETA, RSRC, RTF,
-Radiance, Rawzor, Real, Real-CONT, Real-MDPR, Real-PROP, Real-RA3, Real-RA4,
-Real-RA5, Real-RJMD, Reconyx, Red, Ricoh, SPIFF, SR2, SR2DataIFD, SR2SubIFD,
-SRF#, SVG, Samsung, Sanyo, Scalado, Sigma, SigmaRaw, Sony, SonyIDC, Stim,
-SubIFD, System, Theora, Torrent, Track#, VCalendar, VCard, Version0, Vorbis,
-WTV, XML, XMP, XMP-DICOM, XMP-GAudio, XMP-GImage, XMP-GPano, XMP-GSpherical,
-XMP-MP, XMP-MP1, XMP-PixelLive, XMP-aas, XMP-acdsee, XMP-album,
-XMP-apple-fi, XMP-aux, XMP-cc, XMP-cell, XMP-creatorAtom, XMP-crs, XMP-dc,
-XMP-dex, XMP-digiKam, XMP-drone-dji, XMP-dwc, XMP-exif, XMP-exifEX,
+ExifIFD, ExifTool, FITS, FLAC, FLIR, File, Flash, FlashPix, Font,
+FotoStation, FujiFilm, FujiIFD, GE, GIF, GIMP, GPS, GeoTiff, GlobParamIFD,
+GoPro, GraphConv, H264, HP, HTC, HTML, HTML-dc, HTML-ncc, HTML-office,
+HTML-prod, HTML-vw96, HTTP-equiv, ICC-chrm, ICC-clrt, ICC-header, ICC-meas,
+ICC-meta, ICC-view, ICC_Profile, ICC_Profile#, ID3, ID3v1, ID3v1_Enh,
+ID3v2_2, ID3v2_3, ID3v2_4, IFD0, IFD1, IPTC, IPTC#, ISO, ITC, Insta360,
+InteropIFD, ItemList, JFIF, JFXX, JPEG, JPEG-HDR, JSON, JVC, Jpeg2000,
+KDC_IFD, Keys, Kodak, KodakBordersIFD, KodakEffectsIFD, KodakIFD,
+KyoceraRaw, LNK, Leaf, LeafSubIFD, Leica, Lytro, M2TS, MAC, MIE-Audio,
+MIE-Camera, MIE-Canon, MIE-Doc, MIE-Extender, MIE-Flash, MIE-GPS, MIE-Geo,
+MIE-Image, MIE-Lens, MIE-Main, MIE-MakerNotes, MIE-Meta, MIE-Orient,
+MIE-Preview, MIE-Thumbnail, MIE-UTM, MIE-Unknown, MIE-Video, MIFF, MNG,
+MOBI, MOI, MPC, MPEG, MPF0, MPImage, MS-DOC, MXF, MacOS, MakerNotes,
+MakerUnknown, Matroska, MediaJukebox, Meta, MetaIFD, Microsoft, Minolta,
+MinoltaRaw, Motorola, NITF, Nikon, NikonCapture, NikonCustom, NikonScan,
+Nintendo, Ocad, Ogg, Olympus, OpenEXR, Opus, PDF, PICT, PNG, PNG-pHYs, PSP,
+Palm, Panasonic, PanasonicRaw, Pentax, PhaseOne, PhotoCD, PhotoMechanic,
+Photoshop, PictureInfo, PostScript, PreviewIFD, PrintIM, ProfileIFD,
+Qualcomm, QuickTime, RAF, RAF2, RIFF, RMETA, RSRC, RTF, Radiance, Rawzor,
+Real, Real-CONT, Real-MDPR, Real-PROP, Real-RA3, Real-RA4, Real-RA5,
+Real-RJMD, Reconyx, Red, Ricoh, SPIFF, SR2, SR2DataIFD, SR2SubIFD, SRF#,
+SVG, Samsung, Sanyo, Scalado, Sigma, SigmaRaw, Sony, SonyIDC, Stim, SubIFD,
+System, Theora, Torrent, Track#, UserData, VCalendar, VCard, Version0,
+Vorbis, WTV, XML, XMP, XMP-DICOM, XMP-Device, XMP-GAudio, XMP-GDepth,
+XMP-GFocus, XMP-GImage, XMP-GPano, XMP-GSpherical, XMP-LImage, XMP-MP,
+XMP-MP1, XMP-PixelLive, XMP-aas, XMP-acdsee, XMP-album, XMP-apple-fi,
+XMP-aux, XMP-cc, XMP-cell, XMP-creatorAtom, XMP-crs, XMP-dc, XMP-dex,
+XMP-digiKam, XMP-drone-dji, XMP-dwc, XMP-exif, XMP-exifEX,
 XMP-expressionmedia, XMP-extensis, XMP-fpv, XMP-getty, XMP-ics,
 XMP-iptcCore, XMP-iptcExt, XMP-lr, XMP-mediapro, XMP-microsoft,
 XMP-mwg-coll, XMP-mwg-kw, XMP-mwg-rs, XMP-pdf, XMP-pdfx, XMP-photomech,
@@ -2237,8 +2285,8 @@ XMP-xmpNote, XMP-xmpPLUS, XMP-xmpRights, XMP-xmpTPg, ZIP
 
 =item Family 2 (Category):
 
-Audio, Author, Camera, Document, ExifTool, Image, Location, Other, Preview,
-Printing, Time, Unknown, Video
+Audio, Author, Camera, Device, Document, ExifTool, Image, Location, Other,
+Preview, Printing, Time, Unknown, Video
 
 =item Family 3 (Document Number):
 
@@ -2247,6 +2295,15 @@ Doc#, Main
 =item Family 4 (Instance Number):
 
 Copy#
+
+=item Family 5 (Metadata Path):
+
+eg. JPEG-APP1-IFD0-ExifIFD
+
+=item Family 6 (EXIF/TIFF Format):
+
+int8u, string, int16u, int32u, rational64u, int8s, undef, int16s, int32s,
+rational64s, float, double, ifd, unicode, complex, int64u, int64s, ifd64
 
 =back
 
@@ -2613,7 +2670,7 @@ specified by the L</Charset> option.
 
 =head1 AUTHOR
 
-Copyright 2003-2018, Phil Harvey
+Copyright 2003-2020, Phil Harvey
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

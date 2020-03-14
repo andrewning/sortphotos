@@ -19,7 +19,7 @@ use Image::ExifTool qw(:DataAccess);
 use Image::ExifTool::Canon;
 use Image::ExifTool::Exif;
 
-$VERSION = '1.55';
+$VERSION = '1.56';
 
 sub ProcessCanonCustom($$$);
 sub ProcessCanonCustom2($$$);
@@ -1319,7 +1319,7 @@ my %convPFn = ( PrintConv => \&ConvertPfn, PrintConvInv => \&ConvertPfnInv );
     },
     0x0108 => {
         Name => 'SafetyShift',
-        Notes => 'value of 2 not used by 40D, 50D, 60D, 5DmkII and 7D',
+        Notes => 'value of 2 not used by some models', # eg. 40D, 50D, 60D, 5DmkII, 7D, 250D
         PrintConv => {
             0 => 'Disable',
             1 => 'Enable (Tv/Av)',
@@ -1328,7 +1328,7 @@ my %convPFn = ( PrintConv => \&ConvertPfn, PrintConvInv => \&ConvertPfnInv );
     },
     0x0109 => {
         Name => 'UsableShootingModes',
-        Count => 2,
+        Count => 2, # (Count is 1 for 1DXmkIII -- need to decode this)
         PrintConv => [
             \%disableEnable,
             'sprintf("Flags 0x%x",$val)', # (M, Tv, Av, P, Bulb)
@@ -1340,7 +1340,7 @@ my %convPFn = ( PrintConv => \&ConvertPfn, PrintConvInv => \&ConvertPfnInv );
     },
     0x010a => {
         Name => 'UsableMeteringModes',
-        Count => 2,
+        Count => 2, # (Count is 1 for 1DXmkIII -- need to decode this)
         PrintConv => [
             \%disableEnable,
             'sprintf("Flags 0x%x",$val)', # (evaluative,partial,spot,center-weighted average)
@@ -1678,11 +1678,13 @@ my %convPFn = ( PrintConv => \&ConvertPfn, PrintConvInv => \&ConvertPfnInv );
     0x040a => { # new for 5DmkIII
         Name => 'ViewfinderWarnings',
         PrintConv => { BITMASK => { #(NC)
-            0 => 'Monochrome',              # (have seen for: 5DmkII, 6D)
-            1 => 'WB corrected',            # (have seen for: 5DmkII, 6D)
+            0 => 'Monochrome',              # (have seen for: 5DmkII, 6D, 250D, 90D)
+            1 => 'WB corrected',            # (have seen for: 5DmkII, 6D, 90D)
             2 => 'One-touch image quality', # (have seen for: 5DmkII; doesn't exist for 6D)
             3 => 'ISO expansion',           # (have seen for: 5DmkII)
             4 => 'Spot metering',           # (have seen for: 5DmkII, 6D)
+            6 => 'Noise reduction',         # (have seen for: 250D, 90D)
+            7 => 'HDR',                     # (have seen for: 90D)
         }},
     },
     0x040b => { # new for 5DmkIII
@@ -1920,6 +1922,7 @@ my %convPFn = ( PrintConv => \&ConvertPfn, PrintConvInv => \&ConvertPfnInv );
                 1 => 'AF point button: Auto selection; Rear dial: Manual selection',
             },
         },
+        # (this is 2 values for 90D,M6mkII, seen: "1046 1046")
     ],
     0x0510 => [ # new for 40D
         {
@@ -1963,6 +1966,7 @@ my %convPFn = ( PrintConv => \&ConvertPfn, PrintConvInv => \&ConvertPfnInv );
                 1 => 'Enable',
                 2 => 'Register',
                 3 => 'Select AF-modes',
+                # also seen: 87 (90D), 1142 (RP)
             },
             'sprintf("Flags 0x%x",$val)', # (70D=Manual 1pt,Manual zone,Auto 19pt)
         ],
@@ -2090,7 +2094,7 @@ my %convPFn = ( PrintConv => \&ConvertPfn, PrintConvInv => \&ConvertPfnInv );
     },
     0x0612 => { # (1DX)
         Name => 'RestrictDriveModes',
-        Count => 2,
+        Count => 2, # (Count is 1 for 1DXmkIII -- need to decode this)
         PrintConv => [
             \%disableEnable,
             'sprintf("Flags 0x%x",$val)', # (Single,Cont Hi,Cont Lo,Timer 10,Timer 2,Silent,Super Hi)
@@ -2114,6 +2118,17 @@ my %convPFn = ( PrintConv => \&ConvertPfn, PrintConvInv => \&ConvertPfnInv );
                 1 => 'AE lock/AF',
                 2 => 'AF/AF lock, No AE lock',
                 3 => 'AE/AF, No AE lock',
+            },
+        },
+        {
+            Name => 'Shutter-AELock',
+            Condition => '$count == 2',
+            Notes => '250D',
+            PrintConv => {
+                '0 0' => 'AF/AE lock',
+                '1 0' => 'AE lock/AF',
+                '2 0' => 'AF/AF lock, No AE lock',
+                '3 0' => 'AE/AF, No AE lock',
             },
         },
         {
@@ -2232,6 +2247,13 @@ my %convPFn = ( PrintConv => \&ConvertPfn, PrintConvInv => \&ConvertPfnInv );
                 4 => 'Menu display',
                 5 => 'Disabled',
             },
+        },
+        {
+            Name => 'SetButtonWhenShooting',
+            Notes => '250D',
+            Condition => '$count == 2',
+            # (not sure how to decode this.  seen: "37 0")
+            PrintConv => { },
         },
         {
             Name => 'SetButtonWhenShooting',
@@ -2508,6 +2530,10 @@ my %convPFn = ( PrintConv => \&ConvertPfn, PrintConvInv => \&ConvertPfnInv );
         Name => 'AddIPTCInformation',
         PrintConv => \%disableEnable,
     },
+    0x0816 => { # (90D,RP)
+        Name => 'AudioCompression',
+        PrintConv => \%enableDisable,
+    }
 );
 
 #------------------------------------------------------------------------------
@@ -2753,7 +2779,7 @@ Image::ExifTool to read this information.
 
 =head1 AUTHOR
 
-Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2020, Phil Harvey (philharvey66 at gmail.com)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

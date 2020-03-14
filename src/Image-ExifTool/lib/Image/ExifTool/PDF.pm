@@ -21,7 +21,7 @@ use vars qw($VERSION $AUTOLOAD $lastFetched);
 use Image::ExifTool qw(:DataAccess :Utils);
 require Exporter;
 
-$VERSION = '1.46';
+$VERSION = '1.49';
 
 sub FetchObject($$$$);
 sub ExtractObject($$;$$);
@@ -95,7 +95,7 @@ my %supportedFilter = (
     WRITABLE => 'string',
     # set PRIORITY to 0 so most recent Info dictionary takes precedence
     # (Acrobat Pro bug? doesn't use same object/generation number for
-    #  new Info dictionary when doing incrmental update)
+    #  new Info dictionary when doing incremental update)
     PRIORITY => 0,
     NOTES => q{
         As well as the tags listed below, the PDF specification allows for
@@ -271,6 +271,13 @@ my %supportedFilter = (
 %Image::ExifTool::PDF::ColorSpace = (
     DefaultRGB => {
         SubDirectory => { TagTable => 'Image::ExifTool::PDF::DefaultRGB' },
+        ConvertToDict => 1, # (not seen yet, but just in case)
+    },
+    DefaultCMYK => {
+        SubDirectory => { TagTable => 'Image::ExifTool::PDF::DefaultRGB' },
+        # hack: this is stored as an array instead of a dictionary in my
+        # sample, so convert to a dictionary to extract the ICCBased element
+        ConvertToDict => 1,
     },
     Cs1 => {
         SubDirectory => { TagTable => 'Image::ExifTool::PDF::Cs1' },
@@ -303,7 +310,7 @@ my %supportedFilter = (
     EXTRACT_UNKNOWN => 0,   # extract known but numbered tags (Im1, Im2, etc)
     Im => {
         Notes => q{
-            the ExtractEmbedded option enables information to be extracted from these
+            the L<ExtractEmbedded|../ExifTool.html#ExtractEmbedded> option enables information to be extracted from these
             embedded images
         },
         SubDirectory => { TagTable => 'Image::ExifTool::PDF::Im' },
@@ -313,7 +320,7 @@ my %supportedFilter = (
 # tags in PDF Im# dictionary
 %Image::ExifTool::PDF::Im = (
     NOTES => q{
-        Information extracted from embedded images with the ExtractEmbedded option.
+        Information extracted from embedded images with the L<ExtractEmbedded|../ExifTool.html#ExtractEmbedded> option.
         The EmbeddedImage and its metadata are extracted only for JPEG and Jpeg2000
         image formats.
     },
@@ -337,7 +344,7 @@ my %supportedFilter = (
     EXTRACT_UNKNOWN => 0,   # extract known but numbered tags (MC0, MC1, etc)
     MC => {
         Notes => q{
-            the ExtractEmbedded option enables information to be extracted from these
+            the L<ExtractEmbedded|../ExifTool.html#ExtractEmbedded> option enables information to be extracted from these
             embedded metadata dictionaries
         },
         SubDirectory => { TagTable => 'Image::ExifTool::PDF::MC' },
@@ -397,7 +404,7 @@ my %supportedFilter = (
     },
     AIPrivateData => {
         Notes => q{
-            the ExtractEmbedded option enables information to be extracted from embedded
+            the L<ExtractEmbedded|../ExifTool.html#ExtractEmbedded> option enables information to be extracted from embedded
             PostScript documents in the AIPrivateData# and AIPDFPrivateData# streams
         },
         JoinStreams => 1,   # join streams from numbered tags and process as one
@@ -685,6 +692,41 @@ sub LocateObject($$)
 }
 
 #------------------------------------------------------------------------------
+# Check that the correct object is located at the specified file offset
+# Inputs: 0) ExifTool ref, 1) object name, 2) object reference string, 3) file offset
+# Returns: first non-blank line at start of object, or undef on error
+sub CheckObject($$$$)
+{
+    my ($et, $tag, $ref, $offset) = @_;
+    my ($data, $obj, $dat, $pat);
+
+    my $raf = $$et{RAF};
+    $raf->Seek($offset+$$et{PDFBase}, 0) or $et->Warn("Bad $tag offset"), return undef;
+    # verify that we are reading the expected object
+    $raf->ReadLine($data) or $et->Warn("Error reading $tag data"), return undef;
+    ($obj = $ref) =~ s/R/obj/;
+    unless ($data =~ s/^$obj//) {
+        # handle cases where other whitespace characters are used in the object ID string
+        while ($data =~ /^\d+(\s+\d+)?\s*$/) {
+            $raf->ReadLine($dat);
+            $data .= $dat;
+        }
+        ($pat = $obj) =~ s/ /\\s+/g;
+        unless ($data =~ s/$pat//) {
+            $tag = ucfirst $tag;
+            $et->Warn("$tag object ($obj) not found at offset $offset");
+            return undef;
+        }
+    }
+    # read the first line of data from the object (ignoring blank lines and comments)
+    for (;;) {
+        last if $data =~ /\S/ and $data !~ /^\s*%/;
+        $raf->ReadLine($data) or $et->Warn("Error reading $tag data"), return undef;
+    }
+    return $data;
+}
+
+#------------------------------------------------------------------------------
 # Fetch indirect object from file (from inside a stream if required)
 # Inputs: 0) ExifTool object reference, 1) object reference string,
 #         2) xref lookup, 3) object name (for warning messages)
@@ -737,7 +779,7 @@ sub FetchObject($$$$)
             return undef;
         }
         # extract the object at the specified index in the stream
-        # (offsets in table are in sequential order, so we can subract from
+        # (offsets in table are in sequential order, so we can subtract from
         #  the next offset to get the object length)
         $offset = $$table[$i + 1];
         my $len = ($$table[$i + 3] || length($$obj{_stream})) - $offset;
@@ -746,21 +788,11 @@ sub FetchObject($$$$)
         undef $lastFetched if $cryptStream;
         return ExtractObject($et, \$data);
     }
-    my $raf = $$et{RAF};
-    $raf->Seek($offset+$$et{PDFBase}, 0) or $et->Warn("Bad $tag offset"), return undef;
-    # verify that we are reading the expected object
-    $raf->ReadLine($data) or $et->Warn("Error reading $tag data"), return undef;
-    ($obj = $ref) =~ s/R/obj/;
-    unless ($data =~ s/^$obj//) {
-        $et->Warn("$tag object ($obj) not found at $offset");
-        return undef;
-    }
-    # read the first line of data for the object (skipping comments if necessary)
-    for (;;) {
-        last if $data =~ /\S/ and $data !~ /^\s*%/;
-        $raf->ReadLine($data) or $et->Warn("Error reading $tag data"), return undef;
-    }
-    return ExtractObject($et, \$data, $raf, $xref);
+    # load the start of the object
+    $data = CheckObject($et, $tag, $ref, $offset);
+    return undef unless defined $data;
+
+    return ExtractObject($et, \$data, $$et{RAF}, $xref);
 }
 
 #------------------------------------------------------------------------------
@@ -948,22 +980,11 @@ sub ExtractObject($$;$$)
         # get the location of the object specifying the length
         # (compressed objects are not allowed)
         my $offset = LocateObject($xref, $length) or return $dict;
-        $offset or $et->Warn('Bad Length object'), return $dict;
-        $raf->Seek($offset+$$et{PDFBase}, 0) or $et->Warn('Bad Length offset'), return $dict;
-        # verify that we are reading the expected object
-        $raf->ReadLine($data) or $et->Warn('Error reading Length data'), return $dict;
-        $length =~ s/R/obj/;
-        unless ($data =~ /^$length\s+(\d+)?/) {
-            $et->Warn("Length object ($length) not found at $offset");
-            return $dict;
-        }
-        if (defined $1) {
-            $length = $1;
-        } else {
-            $raf->ReadLine($data) or $et->Warn('Error reading stream Length'), return $dict;
-            $data =~ /^\s*(\d+)/ or $et->Warn('Stream length not found'), return $dict;
-            $length = $1;
-        }
+        $offset or $et->Warn('Bad stream Length object'), return $dict;
+        $data = CheckObject($et, 'stream Length', $length, $offset);
+        defined $data or return $dict;
+        $data =~ /^\s*(\d+)/ or $et->Warn('Stream Length not found'), return $dict;
+        $length = $1;
         $raf->Seek($oldpos, 0); # restore position to start of stream
     }
     # extract the trailing stream data
@@ -1869,7 +1890,15 @@ sub ProcessDict($$$$;$$)
             # process the subdirectory
             my @subDicts;
             if (ref $val eq 'ARRAY') {
-                @subDicts = @{$val};
+                # hack to convert array to dictionary if necessary
+                if ($$tagInfo{ConvertToDict} and @$val == 2 and not ref $$val[0]) {
+                    my $tg = $$val[0];
+                    $tg =~ s(^/)();   # remove name
+                    my %dict = ( _tags => [ $tg ], $tg => $$val[1] );
+                    @subDicts = ( \%dict );
+                } else {
+                    @subDicts = @{$val};
+                }
             } else {
                 @subDicts = ( $val );
             }
@@ -2089,7 +2118,7 @@ sub ReadPDF($$)
     $$et{PDFBase} = length $1 and $et->Warn('PDF header is not at start of file',1);
     $pdfVer = $2;
     $et->SetFileType();   # set the FileType tag
-    $et->Warn("May not be able to read a PDF version $pdfVer file") if $pdfVer >= 2.0;
+    $et->Warn("The PDF $pdfVer specification is held hostage by the ISO") if $pdfVer >= 2.0;
     # store PDFVersion tag
     my $tagTablePtr = GetTagTable('Image::ExifTool::PDF::Root');
     $et->HandleTag($tagTablePtr, 'Version', $pdfVer);
@@ -2174,6 +2203,9 @@ XRef:
                     $raf->Read($buff, 20) == 20 or return -6;
                     $buff =~ /^\s*(\d{10}) (\d{5}) (f|n)/s or return -4;
                     my $num = $start + $i;
+                    # locate object to generate entry from stream if necessary
+                    # (must do this before we test $xref{$num})
+                    LocateAnyObject(\%xref, $num) if $xref{dicts};
                     # save offset for newest copy of all objects
                     # (or next object number for free objects)
                     unless (defined $xref{$num}) {
@@ -2346,7 +2378,7 @@ including AESV2 (AES-128) and AESV3 (AES-256).
 
 =head1 AUTHOR
 
-Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2020, Phil Harvey (philharvey66 at gmail.com)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

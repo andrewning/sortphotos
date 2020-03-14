@@ -153,7 +153,7 @@ sub UnescapeRTF($$$)
         $val =~ tr/\n\r//d; # ignore CR's and LF's
         return $val;
     }
-    # CR/LF is signficant if it terminates a control sequence (so change these to a space)
+    # CR/LF is significant if it terminates a control sequence (so change these to a space)
     # (was $val =~ s/(^|[^\\])((?:\\\\)*)(\\[a-zA-Z]+(?:-?\d+)?)[\n\r]/$1$2$3 /g;)
     $val =~ s/\\(?:([a-zA-Z]+(?:-?\d+)?)[\n\r]|(.))/'\\'.($1 ? "$1 " : $2)/sge;
     # protect the newline control sequence by converting to a \par command
@@ -361,7 +361,7 @@ information from RTF (Rich Text Format) documents.
 
 =head1 AUTHOR
 
-Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2020, Phil Harvey (philharvey66 at gmail.com)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.
