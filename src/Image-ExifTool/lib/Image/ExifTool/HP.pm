@@ -119,7 +119,7 @@ sub ProcessTDHD($$$);
     NOTES => q{
         These tags are extracted from the APP6 "TDHD" segment of Photosmart R837
         JPEG images.  Many other unknown tags exist in is data, and can be seen with
-        the Unknown (-u) option.
+        the L<Unknown|../ExifTool.html#Unknown> (-u) option.
     },
     # (all subdirectories except TDHD and LSLV are automatically recognized
     # by their "type" word of 0x10001)
@@ -250,7 +250,7 @@ Hewlett-Packard maker notes.
 
 =head1 AUTHOR
 
-Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2020, Phil Harvey (philharvey66 at gmail.com)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

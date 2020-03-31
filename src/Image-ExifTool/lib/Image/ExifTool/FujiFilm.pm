@@ -4,7 +4,7 @@
 # Description:  Read/write FujiFilm maker notes and RAF images
 #
 # Revisions:    11/25/2003 - P. Harvey Created
-#               11/14/2007 - PH Added abilty to write RAF images
+#               11/14/2007 - PH Added ability to write RAF images
 #
 # References:   1) http://park2.wakwak.com/~tsuruzoh/Computer/Digicams/exif-e.html
 #               2) http://homepage3.nifty.com/kamisaka/makernote/makernote_fuji.htm (2007/09/11)
@@ -14,11 +14,12 @@
 #               6) http://forums.dpreview.com/forums/readflat.asp?forum=1012&thread=31350384
 #                  and http://forum.photome.de/viewtopic.php?f=2&t=353&p=742#p740
 #               7) Kai Lappalainen private communication
-#               8) http://u88.n24.queensu.ca/exiftool/forum/index.php/topic,5223.0.html
+#               8) https://exiftool.org/forum/index.php/topic,5223.0.html
 #               9) Zilvinas Brobliauskas private communication
 #               10) Albert Shan private communication
-#               11) http://u88.n24.queensu.ca/exiftool/forum/index.php/topic,8377.0.html
-#               12) http://u88.n24.queensu.ca/exiftool/forum/index.php/topic,9607.0.html
+#               11) https://exiftool.org/forum/index.php/topic,8377.0.html
+#               12) https://exiftool.org/forum/index.php/topic,9607.0.html
+#               13) https://exiftool.org/forum/index.php/topic=10481.0.html
 #               IB) Iliah Borg private communication (LibRaw)
 #               JD) Jens Duttke private communication
 #------------------------------------------------------------------------------
@@ -30,12 +31,13 @@ use vars qw($VERSION);
 use Image::ExifTool qw(:DataAccess :Utils);
 use Image::ExifTool::Exif;
 
-$VERSION = '1.63';
+$VERSION = '1.78';
 
 sub ProcessFujiDir($$$);
 sub ProcessFaceRec($$$);
 
 # the following RAF version numbers have been tested for writing:
+# (as of ExifTool 11.70, this lookup is no longer used if the version number is numerical)
 my %testedRAF = (
     '0100' => 'E550, E900, F770, S5600, S6000fd, S6500fd, HS10/HS11, HS30, S200EXR, X100, XF1, X-Pro1, X-S1, XQ2 Ver1.00, X-T100, GFX 50R, XF10',
     '0101' => 'X-E1, X20 Ver1.01, X-T3',
@@ -49,11 +51,14 @@ my %testedRAF = (
     '0144' => 'X100T Ver1.44',
     '0159' => 'S2Pro Ver1.00',
     '0200' => 'X10 Ver2.00',
+    '0201' => 'X-H1 Ver2.01',
     '0212' => 'S3Pro Ver2.12',
     '0216' => 'S3Pro Ver2.16', # (NC)
     '0218' => 'S3Pro Ver2.18',
+    '0240' => 'X-E1 Ver2.40',
     '0264' => 'F700 Ver2.00',
     '0266' => 'S9500 Ver1.01',
+    '0261' => 'X-E1 Ver2.61',
     '0269' => 'S9500 Ver1.02',
     '0271' => 'S3Pro Ver2.71', # UV/IR model?
     '0300' => 'X-E2',
@@ -83,22 +88,34 @@ my %faceCategories = (
         Name => 'Version',
         Writable => 'undef',
     },
-    0x0010 => { #PH (how does this compare to actual serial number?)
+    0x0010 => { #PH/IB
         Name => 'InternalSerialNumber',
         Writable => 'string',
         Notes => q{
-            this number is unique, and contains the date of manufacture, but doesn't
-            necessarily correspond to the camera body number -- this needs to be checked
+            this number is unique for most models, and contains the camera model ID and
+            the date of manufacture
         },
         # eg)  "FPX20017035 592D31313034060427796060110384"
         # "FPX 20495643     592D313335310701318AD010110047" (F40fd)
-        #                               yymmdd
+        #                   HHHHHHHHHHHHyymmdd
+        #   HHHHHHHHHHHH = camera body number in hex
+        #   yymmdd       = date of manufacture
         PrintConv => q{
-            return $val unless $val=~/^(.*)(\d{2})(\d{2})(\d{2})(.{12})$/;
-            my $yr = $2 + ($2 < 70 ? 2000 : 1900);
-            return "$1 $yr:$3:$4 $5";
+            if ($val =~ /^(.*?\s*)([0-9a-fA-F]*)(\d{2})(\d{2})(\d{2})(.{12})\s*\0*$/s
+                and $4 >= 1 and $4 <= 12 and $5 >= 1 and $5 <= 31)
+            {
+                my $yr = $3 + ($3 < 70 ? 2000 : 1900);
+                my $sn = pack 'H*', $2;
+                return "$1$sn $yr:$4:$5 $6";
+            } else {
+                # handle a couple of models which use a slightly different format
+                $val =~ s/\b(592D(3[0-9])+)/pack("H*",$1).' '/e;
+            }
+            return $val;
         },
-        PrintConvInv => '$_=$val; s/ (19|20)(\d{2}):(\d{2}):(\d{2}) /$2$3$4/; $_',
+        # (this inverse conversion doesn't work in all cases, so it is best to write
+        #  the ValueConv value if an authentic internal serial number is required)
+        PrintConvInv => '$_=$val; s/(\S+) (19|20)(\d{2}):(\d{2}):(\d{2}) /unpack("H*",$1)."$3$4$5"/e; $_',
     },
     0x1000 => {
         Name => 'Quality',
@@ -128,6 +145,8 @@ my %faceCategories = (
         Writable => 'int16u',
         PrintConv => {
             0x0   => 'Auto',
+            0x1   => 'Auto (white priority)', #forum10890
+            0x2   => 'Auto (ambiance priority)', #forum10890
             0x100 => 'Daylight',
             0x200 => 'Cloudy',
             0x300 => 'Daylight Fluorescent',
@@ -248,10 +267,22 @@ my %faceCategories = (
             16 => 'Commander',
             0x8000 => 'Not Attached', #10 (X-T2) (or external flash off)
             0x8120 => 'TTL', #10 (X-T2)
+            0x8320 => 'TTL Auto - Did not fire',
             0x9840 => 'Manual', #10 (X-T2)
+            0x9860 => 'Flash Commander', #13
             0x9880 => 'Multi-flash', #10 (X-T2)
             0xa920 => '1st Curtain (front)', #10 (EF-X500 flash)
+            0xaa20 => 'TTL Slow - 1st Curtain (front)', #13
+            0xab20 => 'TTL Auto - 1st Curtain (front)', #13
+            0xad20 => 'TTL - Red-eye Flash - 1st Curtain (front)', #13
+            0xae20 => 'TTL Slow - Red-eye Flash - 1st Curtain (front)', #13
+            0xaf20 => 'TTL Auto - Red-eye Flash - 1st Curtain (front)', #13
             0xc920 => '2nd Curtain (rear)', #10
+            0xca20 => 'TTL Slow - 2nd Curtain (rear)', #13
+            0xcb20 => 'TTL Auto - 2nd Curtain (rear)', #13
+            0xcd20 => 'TTL - Red-eye Flash - 2nd Curtain (rear)', #13
+            0xce20 => 'TTL Slow - Red-eye Flash - 2nd Curtain (rear)', #13
+            0xcf20 => 'TTL Auto - Red-eye Flash - 2nd Curtain (rear)', #13
             0xe920 => 'High Speed Sync (HSS)', #10
         },
     },
@@ -273,6 +304,7 @@ my %faceCategories = (
         PrintConv => {
             0 => 'Auto',
             1 => 'Manual',
+            65535 => 'Movie', #forum10766
         },
     },
     0x1022 => { #8/forum6579
@@ -344,6 +376,7 @@ my %faceCategories = (
             0x1a => 'Portrait 2', #PH (NC, T500, maybe "Smile & Shoot"?)
             0x1b => 'Dog Face Detection', #7
             0x1c => 'Cat Face Detection', #7
+            0x30 => 'HDR', #forum10799
             0x40 => 'Advanced Filter',
             0x100 => 'Aperture-priority AE',
             0x200 => 'Shutter speed priority AE',
@@ -435,6 +468,17 @@ my %faceCategories = (
         PrintConv => '$val > 0 ? "+$val" : $val',
         PrintConvInv => '$val + 0',
     },
+    # 0x104b - BWAdjustment for Green->Magenta (forum10800)
+    0x104d => { #forum9634
+        Name => 'CropMode',
+        Writable => 'int16u',
+        PrintConv => { # (perhaps this is a bit mask?)
+            0 => 'n/a',
+            1 => 'Full-frame on GFX', #IB
+            2 => 'Sports Finder Mode', # (mechanical shutter)
+            4 => 'Electronic Shutter 1.25x Crop', # (continuous high)
+        },
+    },
     0x1050 => { #forum6109
         Name => 'ShutterType',
         Writable => 'int16u',
@@ -474,9 +518,9 @@ my %faceCategories = (
         SubDirectory => { TagTable => 'Image::ExifTool::FujiFilm::DriveSettings' },
     },
     # (0x1150-0x1152 exist only for Pro Low-light and Pro Focus PictureModes)
-    # 0x1150 - Pro Low-light - val=1; Pro Focus - val=2 (ref 7)
-    # 0x1151 - Pro Low-light - val=4 (number of pictures taken?); Pro Focus - val=2,3 (ref 7)
-    # 0x1152 - Pro Low-light - val=1,3,4 (stacked pictures used?); Pro Focus - val=1,2 (ref 7)
+    # 0x1150 - Pro Low-light - val=1; Pro Focus - val=2 (ref 7); HDR - val=128 (forum10799)
+    # 0x1151 - Pro Low-light - val=4 (number of pictures taken?); Pro Focus - val=2,3 (ref 7); HDR - val=3 (forum10799)
+    # 0x1152 - Pro Low-light - val=1,3,4 (stacked pictures used?); Pro Focus - val=1,2 (ref 7); HDR - val=3 (forum10799)
     0x1153 => { #forum7668
         Name => 'PanoramaAngle',
         Writable => 'int16u',
@@ -577,6 +621,8 @@ my %faceCategories = (
             0x501 => 'Pro Neg. Hi', #PH (X-Pro1)
             0x600 => 'Classic Chrome', #forum6109
             0x700 => 'Eterna', #12
+            0x800 => 'Classic Negative', #forum10536
+            0x900 => 'Bleach Bypass', #forum10890
         },
     },
     0x1402 => { #2
@@ -584,7 +630,7 @@ my %faceCategories = (
         Writable => 'int16u',
         PrintHex => 1,
         PrintConv => {
-            0x000 => 'Auto (100-400%)',
+            0x000 => 'Auto',
             0x001 => 'Manual', #(ref http://forum.photome.de/viewtopic.php?f=2&t=353)
             0x100 => 'Standard (100%)',
             0x200 => 'Wide1 (230%)',
@@ -595,6 +641,7 @@ my %faceCategories = (
     0x1403 => { #2 (only valid for manual DR, ref 6)
         Name => 'DevelopmentDynamicRange',
         Writable => 'int16u',
+        # (shows 200, 400 or 800 for HDR200,HDR400,HDR800, ref forum10799)
     },
     0x1404 => { #2
         Name => 'MinFocalLength',
@@ -614,12 +661,21 @@ my %faceCategories = (
     },
     # 0x1408 - values: '0100', 'S100', 'VQ10'
     # 0x1409 - values: same as 0x1408
-    # 0x140a - values: 0, 1, 3, 5, 7 (bit 2=red-eye detection, ref 11)
+    # 0x140a - values: 0, 1, 3, 5, 7 (bit 2=red-eye detection, ref 11/13)
     0x140b => { #6
         Name => 'AutoDynamicRange',
         Writable => 'int16u',
         PrintConv => '"$val%"',
         PrintConvInv => '$val=~s/\s*\%$//; $val',
+    },
+    0x104e => { #forum10800 (X-Pro3)
+        Name => 'ColorChromeFXBlue',
+        Writable => 'int32s',
+        PrintConv => {
+            0 => 'Off',
+            32 => 'Weak', # (NC)
+            64 => 'Strong',
+        },
     },
     0x1422 => { #8
         Name => 'ImageStabilization',
@@ -629,6 +685,7 @@ my %faceCategories = (
             0 => 'None',
             1 => 'Optical', #PH
             2 => 'Sensor-shift', #PH
+            3 => 'OIS Lens', #forum9815 (optical+sensor?)
             512 => 'Digital', #PH
         },{
             0 => 'Off',
@@ -643,6 +700,8 @@ my %faceCategories = (
         PrintConv => {
             0 => 'Unrecognized',
             0x100 => 'Portrait Image',
+            0x103 => 'Night Portrait', #forum10651
+            0x105 => 'Backlit Portrait', #forum10651
             0x200 => 'Landscape Image',
             0x300 => 'Night Scene',
             0x400 => 'Macro',
@@ -677,7 +736,11 @@ my %faceCategories = (
     0x1444 => { #12 (X-T3, only exists if DRangePriority is 'Auto')
         Name => 'DRangePriorityAuto',
         Writable => 'int16u',
-        PrintConv => { 1 => 'Weak', 2 => 'Strong' },
+        PrintConv => {
+            1 => 'Weak',
+            2 => 'Strong',
+            3 => 'Plus',    #forum10799
+        },
     },
     0x1445 => { #12 (X-T3, only exists if DRangePriority is 'Fixed')
         Name => 'DRangePriorityFixed',
@@ -687,12 +750,41 @@ my %faceCategories = (
     0x1446 => { #12
         Name => 'FlickerReduction',
         Writable => 'int32u',
+        # seen values: Off=0x0000, On=0x2100,0x3100
         PrintConv => q{
-            my $on = ((($val >> 12) & 0xff) == 3) ? 'On' : 'Off';
+            my $on = ((($val >> 8) & 0x0f) == 1) ? 'On' : 'Off';
             return sprintf('%s (0x%.4x)', $on, $val);
         },
         PrintConvInv => '$val=~/(0x[0-9a-f]+)/i; hex $1',
     },
+    0x3803 => { #forum10037
+        Name => 'VideoRecordingMode',
+        Groups => { 2 => 'Video' },
+        Writable => 'int32u',
+        PrintHex => 1,
+        PrintConv => {
+            0x00 => 'Normal',
+            0x10 => 'F-log',
+            0x20 => 'HLG',
+        },
+    },
+    0x3804 => { #forum10037
+        Name => 'PeripheralLighting',
+        Groups => { 2 => 'Video' },
+        Writable => 'int16u',
+        PrintConv => { 0 => 'Off', 1 => 'On' },
+    },
+    # 0x3805 - int16u: seen 1
+    0x3806 => { #forum10037
+        Name => 'VideoCompression',
+        Groups => { 2 => 'Video' },
+        Writable => 'int16u',
+        PrintConv => {
+            1 => 'Log GOP',
+            2 => 'All Intra',
+        },
+    },
+    # 0x3810 - int32u: related to video codec (ref forum10037)
     0x3820 => { #PH (HS20EXR MOV)
         Name => 'FrameRate',
         Writable => 'int16u',
@@ -707,6 +799,17 @@ my %faceCategories = (
         Name => 'FrameHeight',
         Writable => 'int16u',
         Groups => { 2 => 'Video' },
+    },
+    0x3824 => { #forum10480 (X series)
+        Name => 'FullHDHighSpeedRec',
+        Writable => 'int32u',
+        Groups => { 2 => 'Video' },
+        PrintConv => { 1 => 'Off', 2 => 'On' },
+    },
+    0x4005 => { #forum9634
+        Name => 'FaceElementSelected', # (could be face or eye)
+        Writable => 'int16u',
+        Count => 4,
     },
     0x4100 => { #PH
         Name => 'FacesDetected',
@@ -813,9 +916,10 @@ my %faceCategories = (
         Name => 'FocusMode2',
         Mask => 0x000000ff,
         PrintConv => {
-            0 => 'AF-M',
-            1 => 'AF-S',
-            2 => 'AF-C',
+            0x00 => 'AF-M',
+            0x01 => 'AF-S',
+            0x02 => 'AF-C',
+            0x11 => 'AF-S (Auto)',
         },
     },
     0.2 => {
@@ -977,8 +1081,29 @@ my %faceCategories = (
         Groups => { 1 => 'RAF2' }, # (so RAF2 shows up in family 1 list)
         Count => 2,
         Notes => 'including borders',
-        ValueConv => 'my @v=reverse split(" ",$val);"@v"',
+        ValueConv => 'my @v=reverse split(" ",$val);"@v"', # reverse to show width first
         PrintConv => '$val=~tr/ /x/; $val',
+    },
+    0x110 => {
+        Name => 'RawImageCropTopLeft',
+        Format => 'int16u',
+        Count => 2,
+        Notes => 'top margin first, then left margin',
+    },
+    0x111 => {
+        Name => 'RawImageCroppedSize',
+        Format => 'int16u',
+        Count => 2,
+        Notes => 'including borders',
+        ValueConv => 'my @v=reverse split(" ",$val);"@v"', # reverse to show width first
+        PrintConv => '$val=~tr/ /x/; $val',
+    },
+    0x115 => {
+        Name => 'RawImageAspectRatio',
+        Format => 'int16u',
+        Count => 2,
+        ValueConv => 'my @v=reverse split(" ",$val);"@v"', # reverse to show width first
+        PrintConv => '$val=~tr/ /:/; $val',
     },
     0x121 => [
         {
@@ -1367,9 +1492,10 @@ sub WriteRAF($$)
         return 1;
     }
     # check to make sure this version of RAF has been tested
-    unless ($testedRAF{$ver}) {
-        $et->Warn("RAF version $ver not yet tested", 1);
-    }
+    #(removed in ExifTool 11.70)
+    #unless ($testedRAF{$ver}) {
+    #    $et->Warn("RAF version $ver not yet tested", 1);
+    #}
     # read the embedded JPEG
     unless ($raf->Seek($jpos, 0) and $raf->Read($jpeg, $jlen) == $jlen) {
         $et->Error('Error reading RAF meta information');
@@ -1532,7 +1658,7 @@ FujiFilm maker notes in EXIF information, and to read/write FujiFilm RAW
 
 =head1 AUTHOR
 
-Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2020, Phil Harvey (philharvey66 at gmail.com)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

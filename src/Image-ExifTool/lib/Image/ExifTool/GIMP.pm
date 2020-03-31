@@ -228,7 +228,7 @@ sub ProcessXCF($$)
 
     # skip over precision for XCV version 4 or later
     $raf->Seek(4, 1) if $$et{XCFVersion} =~ /^v0*(\d+)/ and $1 >= 4;
-     
+
     # loop through image properties
     for (;;) {
         $raf->Read($buff, 8) == 8 or last;
@@ -270,7 +270,7 @@ GIMP software.
 
 =head1 AUTHOR
 
-Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2020, Phil Harvey (philharvey66 at gmail.com)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

@@ -19,7 +19,7 @@ use strict;
 use vars qw($VERSION $warnString);
 use Image::ExifTool qw(:DataAccess :Utils);
 
-$VERSION = '1.23';
+$VERSION = '1.26';
 
 sub WarnProc($) { $warnString = $_[0]; }
 
@@ -41,6 +41,14 @@ my %openDocType = (
 my %iWorkFile = (
     'Index/Slide.iwa' => 'KEY',
     'Index/Tables/DataList.iwa' => 'NUMBERS',
+);
+
+my %iWorkType = (
+    NUMBERS => 'NUMBERS',
+    PAGES   => 'PAGES',
+    KEY     => 'KEY',
+    KTH     => 'KTH',
+    NMBTEMPLATE => 'NMBTEMPLATE',
 );
 
 # ZIP metadata blocks
@@ -274,7 +282,7 @@ sub ProcessRAR($$)
         last if $size < 0;
         next unless $size;  # ignore blocks with no data
         # don't try to read very large blocks unless LargeFileSupport is enabled
-        if ($size > 0x80000000 and not $et->Options('LargeFileSupport')) {
+        if ($size >= 0x80000000 and not $et->Options('LargeFileSupport')) {
             $et->Warn('Large block encountered. Aborting.');
             last;
         }
@@ -300,6 +308,9 @@ sub ProcessRAR($$)
         $raf->Seek($size, 1) or last if $size;
     }
     $$et{DOC_NUM} = 0;
+    if ($docNum > 1 and not $et->Options('Duplicates')) {
+        $et->Warn("Use the Duplicates option to extract tags for all $docNum files", 1);
+    }
 
     return 1;
 }
@@ -379,13 +390,14 @@ sub ProcessZIP($$)
 {
     my ($et, $dirInfo) = @_;
     my $raf = $$dirInfo{RAF};
-    my ($buff, $buf2, $zip, $docNum);
+    my ($buff, $buf2, $zip);
 
     return 0 unless $raf->Read($buff, 30) == 30 and $buff =~ /^PK\x03\x04/;
 
     my $tagTablePtr = GetTagTable('Image::ExifTool::ZIP::Main');
+    my $docNum = 0;
 
-    # use Archive::Zip if avilable
+    # use Archive::Zip if available
     for (;;) {
         unless (eval { require Archive::Zip } and eval { require IO::File }) {
             if ($$et{FILE_EXT} and $$et{FILE_EXT} ne 'ZIP') {
@@ -440,11 +452,18 @@ sub ProcessZIP($$)
 
         # check for an Office Open file (DOCX, etc)
         # --> read '[Content_Types].xml' to determine the file type
-        my ($mime, @members, $epub);
+        my ($mime, @members);
         my $cType = $zip->memberNamed('[Content_Types].xml');
         if ($cType) {
             ($buff, $status) = $zip->contents($cType);
-            if (not $status and $buff =~ /ContentType\s*=\s*(['"])([^"']+)\.main(\+xml)?\1/) {
+            if (not $status and (
+                # first look for the main document with the expected name
+                $buff =~ m{\sPartName\s*=\s*['"](?:/ppt/presentation.xml|/word/document.xml|/xl/workbook.xml)['"][^>]*\sContentType\s*=\s*(['"])([^"']+)\.main(\+xml)?\1} or
+                # then look for the main part
+                $buff =~ /<Override[^>]*\sPartName[^<]+\sContentType\s*=\s*(['"])([^"']+)\.main(\+xml)?\1/ or
+                # and if all else fails, use the default main
+                $buff =~ /ContentType\s*=\s*(['"])([^"']+)\.main(\+xml)?\1/))
+            {
                 $mime = $2;
             }
         }
@@ -558,7 +577,6 @@ sub ProcessZIP($$)
         # otherwise just extract general ZIP information
         $et->SetFileType();
         @members = $zip->members();
-        $docNum = 0;
         my ($member, $iWorkType);
         # special files to extract
         my %extract = (
@@ -587,7 +605,8 @@ sub ProcessZIP($$)
                     $et->FoundTag($extract{$file} => $buff);
                 }
             } elsif ($file eq 'Index/Document.iwa' and not $iWorkType) {
-                $iWorkType = 'PAGES';
+                my $type = $iWorkType{$$et{FILE_EXT} || ''};
+                $iWorkType = $type || 'PAGES';
             } elsif ($iWorkFile{$file}) {
                 $iWorkType = $iWorkFile{$file};
             }
@@ -599,12 +618,14 @@ sub ProcessZIP($$)
     if ($zip) {
         delete $$dirInfo{ZIP};
         delete $$et{DOC_NUM};
+        if ($docNum > 1 and not $et->Options('Duplicates')) {
+            $et->Warn("Use the Duplicates option to extract tags for all $docNum files", 1);
+        }
         return 1;
     }
 #
 # process the ZIP file by hand (funny, but this seems easier than using Archive::Zip)
 #
-    $docNum = 0;
     $et->VPrint(1, "  -- processing as binary data --\n");
     $raf->Seek(30, 0);
     $et->SetFileType();
@@ -650,6 +671,9 @@ sub ProcessZIP($$)
         $raf->Read($buff, 30) == 30 and $buff =~ /^PK\x03\x04/ or last;
     }
     delete $$et{DOC_NUM};
+    if ($docNum > 1 and not $et->Options('Duplicates')) {
+        $et->Warn("Use the Duplicates option to extract tags for all $docNum files", 1);
+    }
     return 1;
 }
 
@@ -676,7 +700,7 @@ Electronic Publication (EPUB), and Sketch design files (SKETCH).
 
 =head1 AUTHOR
 
-Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2020, Phil Harvey (philharvey66 at gmail.com)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.
