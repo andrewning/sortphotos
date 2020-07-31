@@ -228,7 +228,8 @@ class ExifTool(object):
 def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
         copy_files=False, test=False, remove_duplicates=True, day_begins=0,
         additional_groups_to_ignore=['File'], additional_tags_to_ignore=[],
-        use_only_groups=None, use_only_tags=None, verbose=True, keep_filename=False):
+        use_only_groups=None, use_only_tags=None, verbose=True, keep_filename=False,
+        clean_src_dir=False):
     """
     This function is a convenience wrapper around ExifTool based on common usage scenarios for sortphotos.py
 
@@ -268,12 +269,28 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
         a list of tags that will be exclusived searched across for date info
     verbose : bool
         True if you want to see details of file processing
+    clean_src_dir: bool
+        True if you want to remove the duplicate images from the src_dir
 
     """
 
     # some error checking
     if not os.path.exists(src_dir):
         raise Exception('Source directory does not exist')
+
+    if clean_src_dir:
+        print(f'Deleting empty directories in {src_dir}')
+        bash_command = f'find {src_dir} -type d -empty -delete'
+        process = subprocess.Popen(
+            bash_command.split(), stdout=subprocess.PIPE)
+        output, error = process.communicate()
+
+    # clear out empty files since EXIF tool doesn't handle them properly
+    if verbose:
+        print(f'Removing all empty files')
+    bash_command = f'find {src_dir} -type f -empty -delete'
+    process = subprocess.Popen(bash_command.split(), stdout=subprocess.PIPE)
+    output, error = process.communicate()
 
     # setup arguments to exiftool
     args = ['-j', '-a', '-G']
@@ -365,7 +382,10 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
         for thedir in dirs:
             dest_file = os.path.join(dest_file, thedir)
             if not test and not os.path.exists(dest_file):
-                os.makedirs(dest_file)
+                try:
+                    os.makedirs(dest_file)
+                except:
+                    print(f'Tried to make directory for {dest_file} but got an error')
 
         # rename file if necessary
         filename = os.path.basename(src_file)
@@ -400,6 +420,11 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
                     dest_compare = dest_file
                 if remove_duplicates and filecmp.cmp(src_file, dest_compare):  # check for identical files
                     fileIsIdentical = True
+                    if clean_src_dir:
+                        try:
+                            os.remove(src_file)
+                        except:
+                            printf('Could not remove file {src_file}')
                     if verbose:
                         print('Identical file already exists.  Duplicate will be ignored.\n')
                     break
@@ -438,6 +463,11 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
             print()
             # sys.stdout.flush()
 
+    if clean_src_dir:
+        print(f'Deleting empty directories in {src_dir}')
+        bash_command = f'find {src_dir} -type d -empty -delete'
+        process = subprocess.Popen(bash_command.split(), stdout=subprocess.PIPE)
+        output, error = process.communicate()
 
     if not verbose:
         print()
@@ -489,15 +519,17 @@ def main():
     parser.add_argument('--use-only-tags', type=str, nargs='+',
                     default=None,
                     help='specify a restricted set of tags to search for date information\n\
-    e.g., EXIF:CreateDate')
+    e.g., EXIF: CreateDate ')
+    parser.add_argument('--clean_src_dir', type=bool, default=False, help='remove duplicates from src_dir')
 
     # parse command line arguments
     args = parser.parse_args()
 
     sortPhotos(args.src_dir, args.dest_dir, args.sort, args.rename, args.recursive,
-        args.copy, args.test, not args.keep_duplicates, args.day_begins,
-        args.ignore_groups, args.ignore_tags, args.use_only_groups,
-        args.use_only_tags, not args.silent, args.keep_filename)
+               args.copy, args.test, not args.keep_duplicates, args.day_begins,
+               args.ignore_groups, args.ignore_tags, args.use_only_groups,
+               args.use_only_tags, not args.silent, args.keep_filename,
+               args.clean_src_dir)
 
 if __name__ == '__main__':
     main()
