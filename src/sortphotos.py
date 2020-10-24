@@ -23,6 +23,10 @@ from datetime import datetime, timedelta
 import re
 import locale
 
+# fixing / workarounding issue #120
+reload(sys)
+sys.setdefaultencoding("utf-8")
+
 # Setting locale to the 'local' value
 locale.setlocale(locale.LC_ALL, '')
 
