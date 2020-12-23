@@ -11,6 +11,12 @@ SortPhotos is a Python script that organizes photos into folders by date and/or 
     python setup.py install
  
  Note that in addition to python you must have perl installed as the underlying exif library depends on perl.
+ 
+ Note that if using a debian based OS the installing the exif library can be run with:
+ 
+ ```
+    sudo apt install exiftool
+ ```
 
 # Usage
 
