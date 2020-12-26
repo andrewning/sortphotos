@@ -3083,7 +3083,7 @@ my %noYes = ( 0 => 'No', 1 => 'Yes' );
             3 => 'D',
         },
     },
-    1.1 => { #CSa1
+    1.1 => { # CSa1
         Name => 'AF-CPrioritySelection',
         Mask => 0xc0,
         PrintConv => {
@@ -3093,7 +3093,15 @@ my %noYes = ( 0 => 'No', 1 => 'Yes' );
             3 => 'Focus + Release',
         },
     },
-    1.2 => { # CSa6
+    1.2 => { # CSa2
+        Name => 'AF-SPrioritySelection',
+        Mask => 0x20,
+        PrintConv => {
+            0 => 'Focus',
+            1 => 'Release',
+        },
+    },
+    1.3 => { # CSa6
         Name => 'NumberOfFocusPoints',
         Mask => 0x10,
         PrintConv => {
@@ -3101,20 +3109,12 @@ my %noYes = ( 0 => 'No', 1 => 'Yes' );
             1 => '15 Points',
         },
     },
-    1.3 => { # CSa4
+    1.4 => { # CSa4
         Name => 'Three-DTrackingFaceDetection',
         Mask => 0x08,
         PrintConv => {
             0 => 'Off',
             1 => 'On',
-        },
-    },
-    1.4 => { # CSa2
-        Name => 'AF-SPrioritySelection',
-        Mask => 0x20,
-        PrintConv => {
-            0 => 'Focus',
-            1 => 'Release',
         },
     },
     1.5 => { # CSa3-a
@@ -4150,7 +4150,7 @@ my %noYes = ( 0 => 'No', 1 => 'Yes' );
             3 => 'D',
         },
     },
-    1.1 => { #CSa1
+    1.1 => { # CSa1
         Name => 'AF-CPrioritySelection',
         Mask => 0xc0,
         PrintConv => {
@@ -4160,7 +4160,15 @@ my %noYes = ( 0 => 'No', 1 => 'Yes' );
             3 => 'Focus + Release',
         },
     },
-    1.2 => { # CSa6
+    1.2 => { # CSa2
+        Name => 'AF-SPrioritySelection',
+        Mask => 0x20,
+        PrintConv => {
+            0 => 'Focus',
+            1 => 'Release',
+        },
+    },
+    1.3 => { # CSa6
         Name => 'NumberOfFocusPoints',
         Mask => 0x10,
         PrintConv => {
@@ -4168,18 +4176,10 @@ my %noYes = ( 0 => 'No', 1 => 'Yes' );
             1 => '15 Points',
         },
     },
-    1.3 => { # CSa4
+    1.4 => { # CSa4
         Name => 'Three-DTrackingFaceDetection',
         Mask => 0x08,
         PrintConv => \%offOn,
-    },
-    1.4 => { # CSa2
-        Name => 'AF-SPrioritySelection',
-        Mask => 0x20,
-        PrintConv => {
-            0 => 'Focus',
-            1 => 'Release',
-        },
     },
     1.5 => { # CSa3-a
         Name => 'BlockShotAFResponse',
@@ -6950,8 +6950,8 @@ my %noYes = ( 0 => 'No', 1 => 'Yes' );
         },
     },
     49.1 => { # CSa9
-        Name => 'LimitAFAreaModeSelection',  #note that 'Dynamic area (9 points)' can be selected from the camera menu but the setting is not writen to the EXIF data.
-        Mask => 0x7e,                        #...This AF Mode was addded to the D5 firmware several months after the camera's initial release which may help explain the inconsistency.
+        Name => 'LimitAFAreaModeSelection',  #note that 'Dynamic area (9 points)' can be selected from the camera menu but the setting is not written to the EXIF data.
+        Mask => 0x7e,                        #...This AF Mode was added to the D5 firmware several months after the camera's initial release which may help explain the inconsistency.
         PrintConv => {
             0 => 'No Restrictions',
             BITMASK => {
@@ -9534,7 +9534,7 @@ this information.
 
 =head1 AUTHOR
 
-Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2020, Phil Harvey (philharvey66 at gmail.com)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

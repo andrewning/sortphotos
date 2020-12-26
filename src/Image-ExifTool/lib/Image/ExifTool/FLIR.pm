@@ -5,12 +5,12 @@
 #
 # Revisions:    2013/03/28 - P. Harvey Created
 #
-# References:   1) http://u88.n24.queensu.ca/exiftool/forum/index.php/topic,4898.0.html
+# References:   1) https://exiftool.org/forum/index.php/topic,4898.0.html
 #               2) http://www.nuage.ch/site/flir-i7-some-analysis/
 #               3) http://www.workswell.cz/manuals/flir/hardware/A3xx_and_A6xx_models/Streaming_format_ThermoVision.pdf
 #               4) http://support.flir.com/DocDownload/Assets/62/English/1557488%24A.pdf
 #               5) http://code.google.com/p/dvelib/source/browse/trunk/flirPublicFormat/fpfConverter/Fpfimg.h?spec=svn3&r=3
-#               6) http://u88.n24.queensu.ca/exiftool/forum/index.php/topic,5538.0.html
+#               6) https://exiftool.org/forum/index.php/topic,5538.0.html
 #               JD) Jens Duttke private communication
 #
 # Glossary:     FLIR = Forward Looking Infra Red
@@ -24,7 +24,7 @@ use Image::ExifTool qw(:DataAccess :Utils);
 use Image::ExifTool::Exif;
 use Image::ExifTool::GPS;
 
-$VERSION = '1.17';
+$VERSION = '1.18';
 
 sub ProcessFLIR($$;$);
 sub ProcessFLIRText($$$);
@@ -64,7 +64,7 @@ my %float8g = ( Format => 'float', PrintConv => 'sprintf("%.8g",$val)' );
         Name => 'ImageTemperatureMax',
         %temperatureInfo,
         Notes => q{
-            these temperatures may be in Celcius, Kelvin or Fahrenheit, but there is no
+            these temperatures may be in Celsius, Kelvin or Fahrenheit, but there is no
             way to tell which
         },
     },
@@ -378,7 +378,7 @@ my %float8g = ( Format => 'float', PrintConv => 'sprintf("%.8g",$val)' );
     NOTES => q{
         FLIR camera information.  The Planck tags are variables used in the
         temperature calculation.  See
-        L<http://u88.n24.queensu.ca/exiftool/forum/index.php?topic=4898.msg23972#msg23972>
+        L<https://exiftool.org/forum/index.php?topic=4898.msg23972#msg23972>
         for details.
     },
     0x00 => {
@@ -446,6 +446,8 @@ my %float8g = ( Format => 'float', PrintConv => 'sprintf("%.8g",$val)' );
     0x21c => { Name => 'FilterSerialNumber',Format => 'string[32]' },
     0x308 => { Name => 'PlanckO',           Format => 'int32s' }, #1
     0x30c => { Name => 'PlanckR2',          %float8g }, #1
+    0x310 => { Name => 'RawValueRangeMin',  Format => 'int16u', Groups => { 2 => 'Image' } }, #forum10060
+    0x312 => { Name => 'RawValueRangeMax',  Format => 'int16u', Groups => { 2 => 'Image' } }, #forum10060
     0x338 => { Name => 'RawValueMedian',    Format => 'int16u', Groups => { 2 => 'Image' } },
     0x33c => { Name => 'RawValueRange',     Format => 'int16u', Groups => { 2 => 'Image' } },
     0x384 => {
@@ -713,7 +715,7 @@ my %float8g = ( Format => 'float', PrintConv => 'sprintf("%.8g",$val)' );
 );
 
 # humidity meter information
-# (ref http://u88.n24.queensu.ca/exiftool/forum/index.php/topic,5325.0.html)
+# (ref https://exiftool.org/forum/index.php/topic,5325.0.html)
 # The %Image::ExifTool::UserDefined hash defines new tags to be added to existing tables.
 %Image::ExifTool::FLIR::MeterLink = (
     GROUPS => { 0 => 'APP1', 2 => 'Image' },
@@ -752,7 +754,7 @@ my %float8g = ( Format => 'float', PrintConv => 'sprintf("%.8g",$val)' );
     96 => {
         Name => 'Reading1Value',
         Format => 'double',
-        # convert Kelvin -> Celcius and kg/kg -> g/kg
+        # convert Kelvin -> Celsius and kg/kg -> g/kg
         ValueConv => q{
             return $val - 273.15 if $$self{Reading1Units} == 0x0d and $$self{Reading1Description} != 11;
             return $val *= 1000 if $$self{Reading1Units} == 0x24;
@@ -792,7 +794,7 @@ my %float8g = ( Format => 'float', PrintConv => 'sprintf("%.8g",$val)' );
     196 => {
         Name => 'Reading2Value',
         Format => 'double',
-        # convert Kelvin -> Celcius and kg/kg -> g/kg
+        # convert Kelvin -> Celsius and kg/kg -> g/kg
         ValueConv => q{
             return $val - 273.15 if $$self{Reading2Units} == 0x0d and $$self{Reading2Description} != 11;
             return $val *= 1000 if $$self{Reading2Units} == 0x24;
@@ -831,7 +833,7 @@ my %float8g = ( Format => 'float', PrintConv => 'sprintf("%.8g",$val)' );
     296 => {
         Name => 'Reading3Value',
         Format => 'double',
-        # convert Kelvin -> Celcius and kg/kg -> g/kg
+        # convert Kelvin -> Celsius and kg/kg -> g/kg
         ValueConv => q{
             return $val - 273.15 if $$self{Reading3Units} == 0x0d and $$self{Reading3Description} != 11;
             return $val *= 1000 if $$self{Reading3Units} == 0x24;
@@ -871,7 +873,7 @@ my %float8g = ( Format => 'float', PrintConv => 'sprintf("%.8g",$val)' );
     396 => {
         Name => 'Reading4Value',
         Format => 'double',
-        # convert Kelvin -> Celcius and kg/kg -> g/kg
+        # convert Kelvin -> Celsius and kg/kg -> g/kg
         ValueConv => q{
             return $val - 273.15 if $$self{Reading4Units} == 0x0d and $$self{Reading4Description} != 11;
             return $val *= 1000 if $$self{Reading4Units} == 0x24;
@@ -1339,7 +1341,7 @@ sub GetImageType($$$)
 sub UnescapeFLIR($)
 {
     my $char = shift;
-    return $char unless length $char eq 4; # escaped ASCII char (eg. '\\')
+    return $char unless length $char == 4; # escaped ASCII char (eg. '\\')
     my $val = hex $char;
     return chr($val) if $val < 0x80;   # simple ASCII
     return pack('C0U', $val) if $] >= 5.006001;
@@ -1398,7 +1400,6 @@ sub ProcessMeasInfo($$$)
     my $dirStart = $$dirInfo{DirStart} || 0;
     my $dataPos = $$dirInfo{DataPos};
     my $dirEnd = $dirStart + $$dirInfo{DirLen};
-    my $verbose = $et->Options('Verbose');
 
     my $pos = $dirStart + 12;
     return 0 if $pos > $dirEnd;
@@ -1593,7 +1594,7 @@ Systems Inc. thermal image files (FFF, FPF and JPEG format).
 
 =head1 AUTHOR
 
-Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2020, Phil Harvey (philharvey66 at gmail.com)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.
@@ -1602,7 +1603,7 @@ under the same terms as Perl itself.
 
 =over 4
 
-=item L<http://u88.n24.queensu.ca/exiftool/forum/index.php/topic,4898.0.html>
+=item L<https://exiftool.org/forum/index.php/topic,4898.0.html>
 
 =item L<http://www.nuage.ch/site/flir-i7-some-analysis/>
 
@@ -1612,7 +1613,7 @@ under the same terms as Perl itself.
 
 =item L<http://code.google.com/p/dvelib/source/browse/trunk/flirPublicFormat/fpfConverter/Fpfimg.h?spec=svn3&r=3>
 
-=item L<http://u88.n24.queensu.ca/exiftool/forum/index.php/topic,5538.0.html>
+=item L<https://exiftool.org/forum/index.php/topic,5538.0.html>
 
 =back
 

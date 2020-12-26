@@ -138,6 +138,10 @@ sub WritePhotoshop($$$)
                 unless ($tagInfo) {
                     # process subdirectory anyway if writable (except EXIF to avoid recursion)
                     # --> this allows IPTC to be processed if found here in TIFF images
+                    # (note that I have seen a case of XMP in PSD-EXIFInfo-IFD0, and the EXIF
+                    #  exclusion means that this won't be written unless an EXIF tag is
+                    #  specifically edited, see forum10768 -- maybe this should be changed
+                    #  if it happens again)
                     my $tmpInfo = $et->GetTagInfo($tagTablePtr, $tagID);
                     if ($tmpInfo and $$tmpInfo{SubDirectory} and
                         $tmpInfo->{SubDirectory}->{TagTable} ne 'Image::ExifTool::Exif::Main')
@@ -253,7 +257,7 @@ default resource name, and applied if no appended name is provided.
 
 =head1 AUTHOR
 
-Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2020, Phil Harvey (philharvey66 at gmail.com)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

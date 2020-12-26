@@ -16,7 +16,7 @@ use strict;
 use vars qw($VERSION);
 use Image::ExifTool qw(:DataAccess :Utils);
 
-$VERSION = '1.51';
+$VERSION = '1.53';
 
 sub ProcessID3v2($$$);
 sub ProcessPrivate($$$);
@@ -964,9 +964,18 @@ sub PrintGenre($)
         $genre{$1} or $genre{$1} = "Unknown ($1)";
     }
     $val =~ s/\((\d+)\)/\($genre{$1}\)/g;
-    $val =~ s/(^|\/)(\d+)(?=\/|$)/$1$genre{$2}$3/g;
+    $val =~ s/(^|\/)(\d+)(?=\/|$)/$1$genre{$2}/g;
     $val =~ s/^\(([^)]+)\)\1?$/$1/; # clean up by removing brackets and duplicates
     return $val;
+}
+
+#------------------------------------------------------------------------------
+# Get Genre ID
+# Inputs: 0) Genre name
+# Returns: genre ID number, or undef
+sub GetGenreID($)
+{
+    return Image::ExifTool::ReverseLookup(shift, \%genre);
 }
 
 #------------------------------------------------------------------------------
@@ -1554,7 +1563,7 @@ other types of audio files.
 
 =head1 AUTHOR
 
-Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2020, Phil Harvey (philharvey66 at gmail.com)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

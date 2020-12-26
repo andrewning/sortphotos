@@ -12,7 +12,7 @@ use strict;
 use vars qw($VERSION);
 use Image::ExifTool::Exif;
 
-$VERSION = '1.50';
+$VERSION = '1.51';
 
 my %coordConv = (
     ValueConv    => 'Image::ExifTool::GPS::ToDegrees($val)',
@@ -96,13 +96,13 @@ my %coordConv = (
         Name => 'GPSAltitudeRef',
         Writable => 'int8u',
         Notes => q{
-            ExifTool will also accept a signed number when writing this tag, beginning
-            with "+" for above sea level, or "-" for below
+            ExifTool will also accept number when writing this tag, with negative
+            numbers indicating below sea level
         },
         PrintConv => {
             OTHER => sub {
                 my ($val, $inv) = @_;
-                return undef unless $inv and $val =~ /^([-+])/;
+                return undef unless $inv and $val =~ /^([-+0-9])/;
                 return($1 eq '-' ? 1 : 0);
             },
             0 => 'Above Sea Level',
@@ -383,11 +383,11 @@ my %coordConv = (
             my $alt = $val[0];
             $alt = $val[2] unless defined $alt;
             return undef unless defined $alt and IsFloat($alt);
-            return ($val[1] || $val[3]) ? -$alt : $alt;
+            return(($val[1] || $val[3]) ? -$alt : $alt);
         },
         PrintConv => q{
             $val = int($val * 10) / 10;
-            return ($val =~ s/^-// ? "$val m Below" : "$val m Above") . " Sea Level";
+            return(($val =~ s/^-// ? "$val m Below" : "$val m Above") . " Sea Level");
         },
     },
     GPSDestLatitude => {
@@ -459,7 +459,7 @@ sub ToDMS($$;$$)
 
     unless (length $val) {
         # don't convert an empty value
-        return $val if $doPrintConv and $doPrintConv eq 1;  # avoid hiding existing tag when extracting
+        return $val if $doPrintConv and $doPrintConv eq '1';  # avoid hiding existing tag when extracting
         return undef; # avoid writing empty value
     }
     if ($ref) {
@@ -534,6 +534,7 @@ sub ToDMS($$;$$)
 sub ToDegrees($;$)
 {
     my ($val, $doSign) = @_;
+    return '' if $val =~ /\b(inf|undef)\b/; # ignore invalid values
     # extract decimal or floating point values out of any other garbage
     my ($d, $m, $s) = ($val =~ /((?:[+-]?)(?=\d|\.\d)\d*(?:\.\d*)?(?:[Ee][+-]\d+)?)/g);
     return '' unless defined $d;
@@ -563,7 +564,7 @@ GPS (Global Positioning System) meta information in EXIF data.
 
 =head1 AUTHOR
 
-Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2020, Phil Harvey (philharvey66 at gmail.com)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.
