@@ -20,7 +20,7 @@ use strict;
 use vars qw($VERSION %uid);
 use Image::ExifTool qw(:DataAccess :Utils);
 
-$VERSION = '1.19';
+$VERSION = '1.22';
 
 # DICOM VR (Value Representation) format conversions
 my %dicomFormat = (
@@ -3759,6 +3759,8 @@ sub ProcessDICOM($$)
         }
         my $val;
         my $format = $dicomFormat{$vr};
+        # remove trailing space used to pad to an even number of characters
+        $buff =~ s/ $// unless $format or length($buff) & 0x01;
         if ($len > 1024) {
             # treat large data elements as binary data
             my $binData;
@@ -3778,13 +3780,13 @@ sub ProcessDICOM($$)
             $format = 'string';
             if ($vr eq 'DA') {
                 # format date values
-                $val =~ s/^(\d{4})(\d{2})(\d{2})/$1:$2:$3/;
+                $val =~ s/^ *(\d{4})(\d{2})(\d{2})/$1:$2:$3/;
             } elsif ($vr eq 'TM') {
                 # format time values
-                $val =~ s/^(\d{2})(\d{2})(\d{2}.*)/$1:$2:$3/;
+                $val =~ s/^ *(\d{2})(\d{2})(\d{2}[^ ]*)/$1:$2:$3/;
             } elsif ($vr eq 'DT') {
                 # format date/time values
-                $val =~ s/^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2}.*)/$1:$2:$3 $4:$5:$6/;
+                $val =~ s/^ *(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2}[^ ]*)/$1:$2:$3 $4:$5:$6/;
             } elsif ($vr eq 'AT' and $len == 4) {
                 # convert attribute tag ID to hex format
                 my ($g, $e) = (Get16u(\$buff,0), Get16u(\$buff,2));
@@ -3793,6 +3795,11 @@ sub ProcessDICOM($$)
                 # add PrintConv to translate registered UID's
                 $val =~ s/\0.*//s; # truncate at null
                 $$tagInfo{PrintConv} = \%uid if $uid{$val} and $tagInfo;
+            } elsif ($vr =~ /^(AE|CS|DS|IS|LO|PN|SH)$/) {
+                $val =~ s/ +$//;    # leading/trailing spaces not significant
+                $val =~ s/^ +//;
+            } elsif ($vr =~ /^(LT|ST|UT)$/) {
+                $val =~ s/ +$//;    # trailing spaces not significant
             }
         }
         # save the group 2 end position and transfer syntax
@@ -3846,7 +3853,7 @@ No translation of special characters sets is done.
 
 =head1 AUTHOR
 
-Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2020, Phil Harvey (philharvey66 at gmail.com)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

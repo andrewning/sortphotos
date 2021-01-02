@@ -61,7 +61,7 @@ my %manuSig = ( #6
     'AAMA' => 'Aamazing Technologies, Inc.',
     'ACER' => 'Acer Peripherals',
     'ACLT' => 'Acolyte Color Research',
-    'ACTI' => 'Actix Sytems, Inc.',
+    'ACTI' => 'Actix Systems, Inc.',
     'ADAR' => 'Adara Technology, Inc.',
     'ADBE' => 'Adobe Systems Inc.',
     'ADI ' => 'ADI Systems, Inc.',
@@ -1264,7 +1264,7 @@ data created on one device into another device's native color space.
 
 =head1 AUTHOR
 
-Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2020, Phil Harvey (philharvey66 at gmail.com)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.
