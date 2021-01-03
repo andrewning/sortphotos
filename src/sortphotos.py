@@ -398,8 +398,8 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False, u
 
         while True:
 
-            if (not test and os.path.isfile(dest_file)) or (test and dest_file in test_file_dict.keys()):  # check for existing name
-                if test:
+            if os.path.isfile(dest_file) or (test and dest_file in test_file_dict.keys()):  # check for existing name
+                if dest_file in test_file_dict:
                     dest_compare = test_file_dict[dest_file]
                 else:
                     dest_compare = dest_file
