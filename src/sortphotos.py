@@ -225,7 +225,7 @@ class ExifTool(object):
 
 
 
-def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
+def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False, use_modified_time=False,
         copy_files=False, test=False, remove_duplicates=True, day_begins=0,
         additional_groups_to_ignore=['File'], additional_tags_to_ignore=[],
         use_only_groups=None, use_only_tags=None, verbose=True, keep_filename=False):
@@ -247,6 +247,8 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
         None to not rename file
     recursive : bool
         True if you want src_dir to be searched recursively for files (False to search only in top-level of src_dir)
+    use_modified_time : bool
+        True if use file modifed time, which is significantly faster without scanning exif data.
     copy_files : bool
         True if you want files to be copied over from src_dir to dest_dir rather than moved
     test : bool
@@ -296,6 +298,9 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
 
     if recursive:
         args += ['-r']
+
+    if use_modified_time:
+        args += ['-fast3']
 
     args += [src_dir]
 
@@ -393,8 +398,8 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
 
         while True:
 
-            if (not test and os.path.isfile(dest_file)) or (test and dest_file in test_file_dict.keys()):  # check for existing name
-                if test:
+            if os.path.isfile(dest_file) or (test and dest_file in test_file_dict.keys()):  # check for existing name
+                if dest_file in test_file_dict:
                     dest_compare = test_file_dict[dest_file]
                 else:
                     dest_compare = dest_file
@@ -490,12 +495,16 @@ def main():
                     default=None,
                     help='specify a restricted set of tags to search for date information\n\
     e.g., EXIF:CreateDate')
+    parser.add_argument('--use-modified-time', action='store_true',
+                    help='Use file modifed time instead of exif date\n\
+    This is significantly faster without scanning exif data, \n\
+    and usualy good enough when directly importing from camera SDCard')
 
     # parse command line arguments
     args = parser.parse_args()
 
     sortPhotos(args.src_dir, args.dest_dir, args.sort, args.rename, args.recursive,
-        args.copy, args.test, not args.keep_duplicates, args.day_begins,
+        args.use_modified_time, args.copy, args.test, not args.keep_duplicates, args.day_begins,
         args.ignore_groups, args.ignore_tags, args.use_only_groups,
         args.use_only_tags, not args.silent, args.keep_filename)
 
