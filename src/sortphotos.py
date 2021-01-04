@@ -22,6 +22,8 @@ import filecmp
 from datetime import datetime, timedelta
 import re
 import locale
+import exifread
+import reverse_geocode
 
 
 # Setting locale to the 'local' value
@@ -178,51 +180,93 @@ def check_for_early_morning_photos(date, day_begins):
 
     return date
 
+# read tags using exifread
+### helper functions, for geocoordinates
 
-#  this class is based on code from Sven Marnach (http://stackoverflow.com/questions/10075115/call-exiftool-from-a-python-script)
-class ExifTool(object):
-    """used to run ExifTool from Python and keep it open"""
+def _convert_to_degress(value):
+    """
+    Helper function to convert the GPS coordinates stored in the EXIF to degress in float format
+    :param value:
+    :type value: exifread.utils.Ratio
+    :rtype: float
+    """
+    d = float(value.values[0].num) / float(value.values[0].den)
+    m = float(value.values[1].num) / float(value.values[1].den)
+    s = float(value.values[2].num) / float(value.values[2].den)
 
-    sentinel = "{ready}"
+    return d + (m / 60.0) + (s / 3600.0)
+    
+def get_exif_location(exif_data):
+    """
+    Returns the latitude and longitude, if available, from the provided exif_data (obtained through get_exif_data above)
+    """
+    lat = None
+    lon = None
 
-    def __init__(self, executable=exiftool_location, verbose=False):
-        self.executable = executable
-        self.verbose = verbose
+    gps_latitude = _get_if_exist(exif_data, 'GPS GPSLatitude')
+    gps_latitude_ref = _get_if_exist(exif_data, 'GPS GPSLatitudeRef')
+    gps_longitude = _get_if_exist(exif_data, 'GPS GPSLongitude')
+    gps_longitude_ref = _get_if_exist(exif_data, 'GPS GPSLongitudeRef')
 
-    def __enter__(self):
-        self.process = subprocess.Popen(
-            ['perl', self.executable, "-stay_open", "True",  "-@", "-"],
-            stdin=subprocess.PIPE, stdout=subprocess.PIPE)
-        return self
+    if gps_latitude and gps_latitude_ref and gps_longitude and gps_longitude_ref:
+        lat = _convert_to_degress(gps_latitude)
+        if gps_latitude_ref.values[0] != 'N':
+            lat = 0 - lat
 
-    def __exit__(self, exc_type, exc_value, traceback):
-        self.process.stdin.write(b'-stay_open\nFalse\n')
-        self.process.stdin.flush()
+        lon = _convert_to_degress(gps_longitude)
+        if gps_longitude_ref.values[0] != 'E':
+            lon = 0 - lon
 
-    def execute(self, *args):
-        args = args + ("-execute\n",)
-        self.process.stdin.write(str.join("\n", args).encode('utf-8'))
-        self.process.stdin.flush()
-        output = ""
-        fd = self.process.stdout.fileno()
-        while not output.rstrip(' \t\n\r').endswith(self.sentinel):
-            increment = os.read(fd, 4096)
-            if self.verbose:
-                sys.stdout.write(increment.decode('utf-8'))
-            output += increment.decode('utf-8')
-        return output.rstrip(' \t\n\r')[:-len(self.sentinel)]
+    return lat, lon
 
-    def get_metadata(self, *args):
+def _get_if_exist(data, key):
+    if key in data:
+        return data[key]
 
-        try:
-            return json.loads(self.execute(*args))
-        except ValueError:
-            sys.stdout.write('No files to parse or invalid data\n')
-            exit()
+    return None
 
+###
+
+# Open image file for reading (binary mode)
+
+def get_exif(file_name):
+
+    f = open(file_name, 'rb')
+
+    tagjson = {'SourceFile': file_name}
+
+    tags = exifread.process_file(f, details=True)
+    f.close()
+
+    lat, lon = get_exif_location(tags)
+    for dt_tag in tags:
+        dt_value = '%s' % tags[dt_tag]
+        tagjson[dt_tag.replace(" ",":")] = dt_value # tag group separator
+
+    tagjson['EXIF:GpsLat'] = lat
+    tagjson['EXIF:GpsLon'] = lon
+
+    if lat and lon:
+        location = reverse_geocode.get([lat,lon])
+        tagjson['Location:country_code'] = location["country_code"]
+        tagjson['Location:city'] = location["city"]
+        tagjson['Location:country'] = location["country"]
+
+    return tagjson
+
+def get_exif_folder(folder_name):
+
+    # scan through all folders and subfolders
+    tagjson = []
+
+    for root, subdirs, files in os.walk(folder_name):
+        for filename in files:
+            file_path = os.path.join(root, filename)
+            tagjson += [get_exif(file_path)]
+
+    return tagjson
 
 # ---------------------------------------
-
 
 
 def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
@@ -239,10 +283,10 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
     dest_dir : str
         directory where you want to move/copy the files to
     sort_format : str
-        date format code for how you want your photos sorted
+        format code for how you want your photos sorted
         (https://docs.python.org/2/library/datetime.html#strftime-and-strptime-behavior)
     rename_format : str
-        date format code for how you want your files renamed
+        format code for how you want your files renamed
         (https://docs.python.org/2/library/datetime.html#strftime-and-strptime-behavior)
         None to not rename file
     recursive : bool
@@ -275,36 +319,9 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
     if not os.path.exists(src_dir):
         raise Exception('Source directory does not exist')
 
-    # setup arguments to exiftool
-    args = ['-j', '-a', '-G']
+    args = [src_dir]
 
-    # setup tags to ignore
-    if use_only_tags is not None:
-        additional_groups_to_ignore = []
-        additional_tags_to_ignore = []
-        for t in use_only_tags:
-            args += ['-' + t]
-
-    elif use_only_groups is not None:
-        additional_groups_to_ignore = []
-        for g in use_only_groups:
-            args += ['-' + g + ':Time:All']
-
-    else:
-        args += ['-time:all']
-
-
-    if recursive:
-        args += ['-r']
-
-    args += [src_dir]
-
-
-    # get all metadata
-    with ExifTool(verbose=verbose) as e:
-        print('Preprocessing with ExifTool.  May take a while for a large number of files.')
-        sys.stdout.flush()
-        metadata = e.get_metadata(*args)
+    metadata = get_exif_folder(args[0])
 
     # setup output to screen
     num_files = len(metadata)
@@ -359,7 +376,15 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
 
 
         # create folder structure
-        dir_structure = date.strftime(sort_format)
+
+        country =  data.get("Location:country","")
+        city = data.get("Location:city", '')
+        country_code = data.get("Location:country_code", '')
+
+        sort_format_geo = sort_format.replace('%country',country)
+        sort_format_geo = sort_format_geo.replace('%city',city)
+        sort_format_geo = sort_format_geo.replace('%country_code',country_code)
+        dir_structure = date.strftime(sort_format_geo)
         dirs = dir_structure.split('/')
         dest_file = dest_dir
         for thedir in dirs:
@@ -455,12 +480,13 @@ def main():
     parser.add_argument('-c', '--copy', action='store_true', help='copy files instead of move')
     parser.add_argument('-s', '--silent', action='store_true', help='don\'t display parsing details.')
     parser.add_argument('-t', '--test', action='store_true', help='run a test.  files will not be moved/copied\ninstead you will just a list of would happen')
-    parser.add_argument('--sort', type=str, default='%Y/%m-%b',
+    parser.add_argument('--sort', type=str, default='%Y/%m-%b-%country-%city',
                         help="choose destination folder structure using datetime format \n\
     https://docs.python.org/2/library/datetime.html#strftime-and-strptime-behavior. \n\
     Use forward slashes / to indicate subdirectory(ies) (independent of your OS convention). \n\
     The default is '%%Y/%%m-%%b', which separates by year then month \n\
-    with both the month number and name (e.g., 2012/02-Feb).")
+    with both the month number and name (e.g., 2012/02-Feb). \n\
+    Use %%city, %%country and %%country_code for location.")
     parser.add_argument('--rename', type=str, default=None,
                         help="rename file using format codes \n\
     https://docs.python.org/2/library/datetime.html#strftime-and-strptime-behavior. \n\
