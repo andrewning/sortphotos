@@ -521,7 +521,7 @@ sub WriteCRW($$)
 
     if ($$et{DEL_GROUP}{MakerNotes}) {
         if ($type eq 'CCDR') {
-            $et->Error("Can't delete MakerNotes group in CRW file");
+            $et->Error("Can't delete MakerNotes from CRW");
             return 0;
         } else {
             ++$$et{CHANGED};
@@ -617,13 +617,13 @@ files and metadata.
 =head1 NOTES
 
 The CRW format is a pleasure to work with.  All pointer offsets are relative
-to the start of the data for each directory.  If TIFF/EXIF had implemented
-pointers in this way, it would be MUCH easier to read and write TIFF/JPEG
-files, and would lead to far fewer problems with corrupted metadata.
+to the start of the data for each directory.  If EXIF/TIFF had implemented
+pointers in this way, it would be MUCH easier to read and write TIFF and
+JPEG files, and would lead to far fewer problems with corrupted metadata.
 
 =head1 AUTHOR
 
-Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2019, Phil Harvey (phil at owl.phy.queensu.ca)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.
@@ -632,6 +632,6 @@ under the same terms as Perl itself.
 
 L<Image::ExifTool::CanonRaw(3pm)|Image::ExifTool::CanonRaw>,
 L<Image::ExifTool(3pm)|Image::ExifTool>,
-L<http://owl.phy.queensu.ca/~phil/exiftool/canon_raw.html>
+L<https://exiftool.org/canon_raw.html>
 
 =cut

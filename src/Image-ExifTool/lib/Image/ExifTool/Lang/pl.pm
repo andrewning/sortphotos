@@ -11,7 +11,7 @@ package Image::ExifTool::Lang::pl;
 use strict;
 use vars qw($VERSION);
 
-$VERSION = '1.10';
+$VERSION = '1.12';
 
 %Image::ExifTool::Lang::pl::Translate = (
    'A100DataOffset' => 'Przesunięcie danych A100',
@@ -1258,7 +1258,7 @@ and values.
 
 =head1 AUTHOR
 
-Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2019, Phil Harvey (phil at owl.phy.queensu.ca)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.
