@@ -126,6 +126,9 @@ If you are taking photos for an event that goes past midnight, you might want th
 ``--day-begins 4``  
 The argument to the flag should be an integer between 0-23 corresponding to the hours of the day starting at midnight.
 
+## copy iOS .AAE sidecar files if found
+If you want to keep ``.AAE`` files sorted with their original targets you can use ``--keep-aae``.  Where a ``.AAE`` file exists in the same folder and with the same base name, it will be copied with the image that it describes.
+
 # Automation
 
 *Note while sortphotos.py was written in a cross-platform way, the following instructions for automation are specific to OS X.  For other operating systems there are of course ways to schedule tasks or submit cron jobs, but I will leave that as an exercise for the reader.*

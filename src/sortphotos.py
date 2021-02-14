@@ -179,6 +179,31 @@ def check_for_early_morning_photos(date, day_begins):
     return date
 
 
+
+def process_AAE_sidecar(src, dst, action):
+    """check for iOS AAE sidecar files"""
+
+    # check for a matching .AAE
+    src_dir, src_filename = os.path.split(src)
+    src_filename_base, src_filename_ext = os.path.splitext(src_filename)
+    src_aae_path = os.path.join(src_dir, (src_filename_base + ".AAE"))
+
+    # does it exist?
+    if os.path.exists(src_aae_path):
+        dst_dir, dst_filename = os.path.split(dst)
+        dst_filename_base, dst_filename_ext = os.path.splitext(dst_filename)
+        dst_aae_path = os.path.join(dst_dir, (dst_filename_base + ".AAE"))
+        print("AAE_path => " + src_aae_path + " To " + dst_aae_path)
+
+        # do something about it
+        if action == "copy":
+            shutil.copy2(src_aae_path, dst_aae_path)
+        elif action == "move":
+            shutil.move(src_aae_path, dst_aae_path)
+
+    return
+
+
 #  this class is based on code from Sven Marnach (http://stackoverflow.com/questions/10075115/call-exiftool-from-a-python-script)
 class ExifTool(object):
     """used to run ExifTool from Python and keep it open"""
@@ -228,7 +253,7 @@ class ExifTool(object):
 def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
         copy_files=False, test=False, remove_duplicates=True, day_begins=0,
         additional_groups_to_ignore=['File'], additional_tags_to_ignore=[],
-        use_only_groups=None, use_only_tags=None, verbose=True, keep_filename=False):
+        use_only_groups=None, use_only_tags=None, verbose=True, keep_filename=False, keep_AAE=False):
     """
     This function is a convenience wrapper around ExifTool based on common usage scenarios for sortphotos.py
 
@@ -268,7 +293,8 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
         a list of tags that will be exclusived searched across for date info
     verbose : bool
         True if you want to see details of file processing
-
+    keep_AAE : bool
+        True if you want to include iOS AAE sidecar files in the sort
     """
 
     # some error checking
@@ -429,8 +455,15 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
             else:
                 if copy_files:
                     shutil.copy2(src_file, dest_file)
+                    # aae sidecar?
+                    if keep_AAE:
+                        process_AAE_sidecar(src_file, dest_file, "copy")
+
                 else:
                     shutil.move(src_file, dest_file)
+                    # aae sidecar?
+                    if keep_AAE:
+                        process_AAE_sidecar(src_file, dest_file, "move")
 
 
 
@@ -490,6 +523,9 @@ def main():
                     default=None,
                     help='specify a restricted set of tags to search for date information\n\
     e.g., EXIF:CreateDate')
+    parser.add_argument('--keep-aae', action='store_true',
+                        help='Include iOS .AAE sidecar files in sorted results',
+                        default=False)
 
     # parse command line arguments
     args = parser.parse_args()
@@ -497,7 +533,7 @@ def main():
     sortPhotos(args.src_dir, args.dest_dir, args.sort, args.rename, args.recursive,
         args.copy, args.test, not args.keep_duplicates, args.day_begins,
         args.ignore_groups, args.ignore_tags, args.use_only_groups,
-        args.use_only_tags, not args.silent, args.keep_filename)
+        args.use_only_tags, not args.silent, args.keep_filename, args.keep_aae)
 
 if __name__ == '__main__':
     main()
