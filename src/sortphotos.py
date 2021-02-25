@@ -32,7 +32,7 @@ exiftool_location = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'I
 
 # -------- convenience methods -------------
 
-def parse_date_exif(date_string):
+def parse_date_exif(date_string, localtime):
     """
     extract date info from EXIF data
     YYYY:MM:DD HH:MM:SS
@@ -77,19 +77,20 @@ def parse_date_exif(date_string):
             minute = int(time[1])
 
         # adjust for time-zone if needed
-        if len(time_entries) > 2:
-            time_zone = time_entries[2].split(':')  # ['HH', 'MM']
+        if not localtime:
+            if len(time_entries) > 2:
+                time_zone = time_entries[2].split(':')  # ['HH', 'MM']
 
-            if len(time_zone) == 2:
-                time_zone_hour = int(time_zone[0])
-                time_zone_min = int(time_zone[1])
+                if len(time_zone) == 2:
+                    time_zone_hour = int(time_zone[0])
+                    time_zone_min = int(time_zone[1])
 
-                # check if + or -
-                if time_entries[1] == '+':
-                    time_zone_hour *= -1
+                    # check if + or -
+                    if time_entries[1] == '+':
+                        time_zone_hour *= -1
 
-                dateadd = timedelta(hours=time_zone_hour, minutes=time_zone_min)
-                time_zone_adjust = True
+                    dateadd = timedelta(hours=time_zone_hour, minutes=time_zone_min)
+                    time_zone_adjust = True
 
 
     # form date object
@@ -112,7 +113,7 @@ def parse_date_exif(date_string):
 
 
 
-def get_oldest_timestamp(data, additional_groups_to_ignore, additional_tags_to_ignore, print_all_tags=False):
+def get_oldest_timestamp(data, additional_groups_to_ignore, additional_tags_to_ignore, localtime, print_all_tags=False):
     """data as dictionary from json.  Should contain only time stamps except SourceFile"""
 
     # save only the oldest date
@@ -147,7 +148,7 @@ def get_oldest_timestamp(data, additional_groups_to_ignore, additional_tags_to_i
                 date = date[0]
 
             try:
-                exifdate = parse_date_exif(date)  # check for poor-formed exif data, but allow continuation
+                exifdate = parse_date_exif(date, localtime)  # check for poor-formed exif data, but allow continuation
             except Exception as e:
                 exifdate = None
 
@@ -228,7 +229,8 @@ class ExifTool(object):
 def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
         copy_files=False, test=False, remove_duplicates=True, day_begins=0,
         additional_groups_to_ignore=['File'], additional_tags_to_ignore=[],
-        use_only_groups=None, use_only_tags=None, verbose=True, keep_filename=False):
+        use_only_groups=None, use_only_tags=None, verbose=True, keep_filename=False,
+        localtime=False):
     """
     This function is a convenience wrapper around ExifTool based on common usage scenarios for sortphotos.py
 
@@ -251,6 +253,8 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
         True if you want files to be copied over from src_dir to dest_dir rather than moved
     test : bool
         True if you just want to simulate how the files will be moved without actually doing any moving/copying
+    localtime : bool
+        True if you want to keep current local file time
     remove_duplicates : bool
         True to remove files that are exactly the same in name and a file hash
     keep_filename : bool
@@ -317,7 +321,7 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
     for idx, data in enumerate(metadata):
 
         # extract timestamp date for photo
-        src_file, date, keys = get_oldest_timestamp(data, additional_groups_to_ignore, additional_tags_to_ignore)
+        src_file, date, keys = get_oldest_timestamp(data, additional_groups_to_ignore, additional_tags_to_ignore, localtime)
 
         # fixes further errors when using unicode characters like "\u20AC"
         src_file.encode('utf-8')
@@ -455,6 +459,7 @@ def main():
     parser.add_argument('-c', '--copy', action='store_true', help='copy files instead of move')
     parser.add_argument('-s', '--silent', action='store_true', help='don\'t display parsing details.')
     parser.add_argument('-t', '--test', action='store_true', help='run a test.  files will not be moved/copied\ninstead you will just a list of would happen')
+    parser.add_argument('-l', '--localtime', action='store_true', help='Keep local file time instead of using UTC')
     parser.add_argument('--sort', type=str, default='%Y/%m-%b',
                         help="choose destination folder structure using datetime format \n\
     https://docs.python.org/2/library/datetime.html#strftime-and-strptime-behavior. \n\
@@ -497,7 +502,7 @@ def main():
     sortPhotos(args.src_dir, args.dest_dir, args.sort, args.rename, args.recursive,
         args.copy, args.test, not args.keep_duplicates, args.day_begins,
         args.ignore_groups, args.ignore_tags, args.use_only_groups,
-        args.use_only_tags, not args.silent, args.keep_filename)
+        args.use_only_tags, not args.silent, args.keep_filename, args.localtime)
 
 if __name__ == '__main__':
     main()
