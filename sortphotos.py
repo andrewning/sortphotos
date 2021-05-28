@@ -309,7 +309,7 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
         raise Exception('Source directory does not exist')
 
     # setup arguments to exiftool
-    args = ['-j', '-a', '-G']
+    args = ['-a', '-G']
 
     # setup tags to ignore
     if use_only_tags is not None:
@@ -347,14 +347,13 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
             args += [ '-if']
             args += ['$filename=~/' + src_file_regex + '/' ]
 
-    args += [src_dir]
     args = [arg.encode('utf-8') for arg in args]
 
     # get all metadata
     with exiftool.ExifTool(exiftool_location) as et:
         print('Preprocessing with ExifTool.  May take a while for a large number of files.')
         sys.stdout.flush()
-        metadata = et.get_metadata_batch(args)
+        metadata = et.get_metadata_batch([src_dir.encode('utf-8')], args)
 
     # setup output to screen
     num_files = len(metadata)
