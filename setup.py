@@ -13,7 +13,7 @@ setup(
     license='MIT License',
     entry_points={
         'console_scripts': [
-          'sortphotos = src.sortphotos:main',
+          'sortphotos = sortphotos.sortphotos:main',
         ]
       }
 )
