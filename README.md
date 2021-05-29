@@ -1,10 +1,20 @@
 # SortPhotos
 
+This project is a fork of Andrew Ning's [sortphotos project](https://github.com/andrewning/sortphotos), based on the version of [Sillium007](https://github.com/Sillium007/Sort-Photos).
+It does not require Perl as it relies on ExifTool being installed on your system.
+Additionally, it relies on [PyExifTool](https://pypi.org/project/PyExifTool/).
+
 # Description
 
 SortPhotos is a Python script that organizes photos into folders by date and/or time (year, year/month, year/month/day, or other custom formats).  If you're like me then your growing collection of files are contained in a bunch of folders, some with a date like "Sep 2010", and others with names like "Camping Trip".  SortPhotos takes this collection of folders and files and reorganizes them into a hierarchy of folders by almost any custom date/time format (by default it is by year then month).  It will work with any file, but works best with image and video files that contain EXIF or other metadata formats because that stays with the file even if the files are modified.  The script is also useful for transferring files from your camera into your collection of nicely organized photos.
 
 ![Example](example.png)
+
+# Install
+
+    pip install .
+
+Note that in addition to Python, you must have Phil Harvey's [ExifTool](https://exiftool.org/) installed (and it must be placed in your PATH).
 
 # Usage
 
@@ -141,7 +151,7 @@ The argument to the flag should be an integer between 0-23 corresponding to the 
 # Acknowledgments
 
 SortPhotos grabs EXIF data from the photos/videos using the very excellent [ExifTool](http://www.sno.phy.queensu.ca/~phil/exiftool/) written by Phil Harvey.
-SortPhotos uses PyExifTool by Sven Marnach (https://github.com/smarnach/pyexiftool/)
+SortPhotos uses a fork of PyExifTool by Kevin M. (https://github.com/sylikc/pyexiftool.git). The original version is by Sven Marnach.
 
 # ChangeLog (of major changes)
 
