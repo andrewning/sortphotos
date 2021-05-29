@@ -14,10 +14,6 @@ import os
 import shutil
 import sys
 
-try:
-    import json
-except:
-    import simplejson as json
 import filecmp
 import datetime as dt
 import re
