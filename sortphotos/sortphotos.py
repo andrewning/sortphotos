@@ -3,7 +3,7 @@
 """
 sortphotos.py
 
-Version 1.3 Alpha
+Version 1.4 Alpha
 
 """
 
@@ -22,7 +22,6 @@ import filecmp
 import datetime as dt
 import re
 import locale
-sys.path.insert(0, './exiftool')
 import exiftool
 
 

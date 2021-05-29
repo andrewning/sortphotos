@@ -1,3 +1,0 @@
-[submodule "exiftool"]
-	path = exiftool
-	url = https://github.com/sylikc/pyexiftool
