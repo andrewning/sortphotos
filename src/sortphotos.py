@@ -228,7 +228,7 @@ class ExifTool(object):
 def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
         copy_files=False, test=False, remove_duplicates=True, day_begins=0,
         additional_groups_to_ignore=['File'], additional_tags_to_ignore=[],
-        use_only_groups=None, use_only_tags=None, verbose=True, keep_filename=False):
+        use_only_groups=None, use_only_tags=None, verbose=True, keep_filename=False, hard_link_files=False):
     """
     This function is a convenience wrapper around ExifTool based on common usage scenarios for sortphotos.py
 
@@ -249,6 +249,8 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
         True if you want src_dir to be searched recursively for files (False to search only in top-level of src_dir)
     copy_files : bool
         True if you want files to be copied over from src_dir to dest_dir rather than moved
+    hard_link_files : bool
+        True if you want files to be hard symlinked over from src_dir to dest_dir rather than moved or copied
     test : bool
         True if you just want to simulate how the files will be moved without actually doing any moving/copying
     remove_duplicates : bool
@@ -429,6 +431,8 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
             else:
                 if copy_files:
                     shutil.copy2(src_file, dest_file)
+                elif hard_link_files:
+                    os.link(src_file, dest_file)
                 else:
                     shutil.move(src_file, dest_file)
 
@@ -453,6 +457,7 @@ def main():
     parser.add_argument('dest_dir', type=str, help='destination directory')
     parser.add_argument('-r', '--recursive', action='store_true', help='search src_dir recursively')
     parser.add_argument('-c', '--copy', action='store_true', help='copy files instead of move')
+    parser.add_argument('-l', '--link', action='store_true', help='hard link files instead of copy or move')
     parser.add_argument('-s', '--silent', action='store_true', help='don\'t display parsing details.')
     parser.add_argument('-t', '--test', action='store_true', help='run a test.  files will not be moved/copied\ninstead you will just a list of would happen')
     parser.add_argument('--sort', type=str, default='%Y/%m-%b',
@@ -497,7 +502,7 @@ def main():
     sortPhotos(args.src_dir, args.dest_dir, args.sort, args.rename, args.recursive,
         args.copy, args.test, not args.keep_duplicates, args.day_begins,
         args.ignore_groups, args.ignore_tags, args.use_only_groups,
-        args.use_only_tags, not args.silent, args.keep_filename)
+        args.use_only_tags, not args.silent, args.keep_filename, args.link)
 
 if __name__ == '__main__':
     main()
