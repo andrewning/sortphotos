@@ -98,24 +98,22 @@ SortPhotos will *always* check to make sure something with the same file name do
 
     python sortphotos.py --keep-duplicates /source /destination
 
-<!-- ## choose which file types to search for
-You can restrict what types of files SortPhotos looks for in your source directory.  By default it only looks for the most common photo and video containers ('jpg', 'jpeg', 'tiff', 'arw', 'avi', 'mov', 'mp4', 'mts').  You can change this behavior through the ``extensions`` argument.  Note that it is not case sensitive so if you specify 'jpg' as an extension it will search for both jpg and JPG files or even jPg files.  For example say you want to copy and sort only the *.gif and *.avi files you would call
+ ## choose which file types to search for
+You can restrict what types of files SortPhotos looks for in your source directory.  By default it only looks for the most common photo and video containers ('jpg', 'jpeg', 'tiff', 'arw', 'avi', 'mov', 'mp4', 'mts').  You can change this behavior through the ``extensions`` argument.  Note that it is not case sensitive so if you specify 'jpg' as an extension it will search for both jpg and JPG files or even jPg files.  
+
+To copy and sort only the *.gif and *.avi files you would call
 
     python sortphotos.py /source /destination --extensions gif avi
 
-If you only want to sort the files that (potentially) have EXIF data then
+If you only want to sort the photos like JPG and TIFF then
 
     python sortphotos.py /source /destination --extensions jpg tiff
-
-You may want to use this for files that aren't photos or videos at all
-
-    python sortphotos.py /source /destination --extensions docx xlsx pptx
 
 To sort every possible file type
 
     python sortphotos.py /source /destination --extensions *
 
-However, this option will copy even hidden files like .DS_Store. -->
+However, this option will copy even hidden files like .DS_Store.
 
 <!-- ## ignore EXIF
 If you don't want to use EXIF data at all (even if it exists) and just use time stamps you can add the ``--ignore-exif`` flag.
