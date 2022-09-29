@@ -21,7 +21,7 @@ use strict;
 use vars qw($VERSION);
 use Image::ExifTool qw(:DataAccess :Utils);
 
-$VERSION = '1.15';
+$VERSION = '1.18';
 
 sub ProcessPEResources($$);
 sub ProcessPEVersion($$);
@@ -52,6 +52,10 @@ my %resourceType = (
 );
 
 my %languageCode = (
+    Notes => q{
+        See L<https://docs.microsoft.com/en-us/openspecs/windows_protocols/ms-lcid>
+        for the full list of Microsoft language codes.
+    },
     '0000' => 'Neutral',
     '007F' => 'Invariant',
     '0400' => 'Process default',
@@ -397,7 +401,7 @@ my %languageCode = (
         existing StringFileInfo tags even if not listed in this table.
     },
     LanguageCode => {
-        Notes => 'extracted from the StringFileInfo value',
+        Notes => 'Windows code page; extracted from the StringFileInfo value',
         # ref http://techsupt.winbatch.com/TS/T000001050F49.html
         # (also see http://support.bigfix.com/fixlet/documents/WinInspectors-2006-08-10.pdf)
         # (also see ftp://ftp.dyu.edu.tw/pub/cpatch/faq/tech/tech_nlsnt.txt)
@@ -1005,7 +1009,7 @@ sub ProcessPEDict($$)
     my $raf = $$dirInfo{RAF};
     my $dataPt = $$dirInfo{DataPt};
     my $dirLen = length($$dataPt);
-    my ($pos, @sections, %dirInfo);
+    my ($pos, @sections, %dirInfo, $rsrcFound);
 
     # loop through all sections
     for ($pos=0; $pos+40<=$dirLen; $pos+=40) {
@@ -1015,14 +1019,16 @@ sub ProcessPEDict($$)
         my $offset = Get32u($dataPt, $pos + 20);
         # remember the section offsets for the VirtualAddress lookup later
         push @sections, { Base => $offset, Size => $size, VirtualAddress => $va };
-        # save details of the first resource section
+        # save details of the first resource section (or .text if .rsrc not found, ref forum11465)
+        next unless ($name eq ".rsrc\0\0\0" and not $rsrcFound and defined($rsrcFound = 1)) or
+                    ($name eq ".text\0\0\0" and not %dirInfo);
         %dirInfo = (
             RAF      => $raf,
             Base     => $offset,
             DirStart => 0,   # (relative to Base)
             DirLen   => $size,
             Sections => \@sections,
-        ) if $name eq ".rsrc\0\0\0" and not %dirInfo;
+        );
     }
     # process the first resource section
     ProcessPEResources($et, \%dirInfo) or return 0 if %dirInfo;
@@ -1140,7 +1146,8 @@ sub ProcessEXE($$)
         my $fileSize = ($cp - ($cblp ? 1 : 0)) * 512 + $cblp;
         #(patch to accommodate observed 64-bit files)
         #return 0 if $fileSize < 0x40 or $fileSize < $lfarlc;
-        return 0 if $fileSize < 0x40;
+        #return 0 if $fileSize < 0x40; (changed to warning in ExifTool 12.08)
+        $et->Warn('Invalid file size in DOS header') if $fileSize < 0x40;
         # read the Windows NE, PE or LE (virtual device driver) header
         #if ($lfarlc == 0x40 and $fileSize > $lfanew + 2 and ...
         if ($raf->Seek($lfanew, 0) and $raf->Read($buff, 0x40) and $buff =~ /^(NE|PE|LE)/) {
@@ -1226,6 +1233,14 @@ sub ProcessEXE($$)
         $tagTablePtr = GetTagTable('Image::ExifTool::EXE::MachO');
         if ($1 eq "\xca\xfe\xba\xbe") {
             SetByteOrder('MM');
+            my $ver = Get32u(\$buff, 4);
+            # Java bytecode .class files have the same magic number, so we need to look deeper
+            # (ref https://github.com/file/file/blob/master/magic/Magdir/cafebabe#L6-L15)
+            if ($ver > 30) {
+                # this is Java bytecode
+                $et->SetFileType('Java bytecode', 'application/java-byte-code', 'class');
+                return 1;
+            }
             $et->SetFileType('Mach-O fat binary executable', undef, '');
             return 1 if $fast3;
             my $count = Get32u(\$buff, 4);  # get architecture count
@@ -1362,7 +1377,7 @@ sub ProcessEXE($$)
             python => 'py',
             ruby   => 'rb',
             php    => 'php',
-        }->{$1};
+        }->{$prog};
         # use '.sh' for extension of all shell scripts
         $ext = $prog =~ /sh$/ ? 'sh' : '' unless defined $ext;
     }
@@ -1391,7 +1406,7 @@ library files.
 
 =head1 AUTHOR
 
-Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2022, Phil Harvey (philharvey66 at gmail.com)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

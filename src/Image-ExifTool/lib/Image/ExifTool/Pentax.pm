@@ -37,11 +37,11 @@
 #              22) Bozi (K10D, http://www.cpanforum.com/posts/8480)
 #              23) Akos Szalkai (https://rt.cpan.org/Ticket/Display.html?id=43743)
 #              24) Albert Bogner private communication
-#              26) http://u88.n24.queensu.ca/exiftool/forum/index.php/topic,3444.0.html
-#              27) http://u88.n24.queensu.ca/exiftool/forum/index.php/topic,3833.0.html
-#              28) Klaus Homeister http://u88.n24.queensu.ca/exiftool/forum/index.php/topic,4803.0.html
+#              26) https://exiftool.org/forum/index.php/topic,3444.0.html
+#              27) https://exiftool.org/forum/index.php/topic,3833.0.html
+#              28) Klaus Homeister https://exiftool.org/forum/index.php/topic,4803.0.html
 #              29) Louis Granboulan private communication (K-5II)
-#              30) http://u88.n24.queensu.ca/exiftool/forum/index.php?topic=5433
+#              30) https://exiftool.org/forum/index.php?topic=5433
 #              31) Andras Salamon private communication (K-70)
 #              IB) Iliah Borg private communication (LibRaw)
 #              JD) Jens Duttke private communication
@@ -58,7 +58,7 @@ use Image::ExifTool::Exif;
 use Image::ExifTool::GPS;
 use Image::ExifTool::HP;
 
-$VERSION = '3.24';
+$VERSION = '3.40';
 
 sub CryptShutterCount($$);
 sub PrintFilter($$$);
@@ -146,7 +146,7 @@ sub DecodeAFPoints($$$$;$);
     '3 44.3' => 'Sigma 17-70mm F2.8-4.5 DC Macro', #(Bart Hickman)
     '3 44.4' => 'Sigma 18-50mm F3.5-5.6 DC', #4
     '3 44.5' => 'Sigma 17-35mm F2.8-4 EX DG', #29
-    '3 44.6' => 'Tamron 35-90mm F4 AF', #12
+    '3 44.6' => 'Tamron 35-90mm F4-5.6 AF', #12 (added "-5.6", ref IB)
     '3 44.7' => 'Sigma AF 18-35mm F3.5-4.5 Aspherical', #29
     '3 46' => 'Sigma or Samsung Lens (3 46)',
     '3 46.1' => 'Sigma APO 70-200mm F2.8 EX',
@@ -171,13 +171,14 @@ sub DecodeAFPoints($$$$;$);
     '3 255.4' => 'Sigma DF EX Aspherical 28-70mm F2.8', #12
     '3 255.5' => 'Sigma AF Tele 400mm F5.6 Multi-coated', #JD
     '3 255.6' => 'Sigma 24-60mm F2.8 EX DG', #PH
-    '3 255.7' => 'Sigma 70-300mm F4-5.6 Macro', #JD
+    '3 255.7' => 'Sigma 70-300mm F4-5.6 Macro', #JD (also DG Macro, ref 27)
     '3 255.8' => 'Sigma 55-200mm F4-5.6 DC', #JD
     '3 255.9' => 'Sigma 18-50mm F2.8 EX DC', #JD (also Macro version - PH)
     '4 1' => 'smc PENTAX-FA SOFT 28mm F2.8',
     '4 2' => 'smc PENTAX-FA 80-320mm F4.5-5.6',
     '4 3' => 'smc PENTAX-FA 43mm F1.9 Limited',
     '4 6' => 'smc PENTAX-FA 35-80mm F4-5.6',
+    '4 8' => 'Irix 150mm F2.8 Macro', #exiv2 issue 1084
     '4 9' => 'Irix 11mm F4 Firefly', #27
     '4 10' => 'Irix 15mm F2.4', #27
     '4 12' => 'smc PENTAX-FA 50mm F1.4', #17
@@ -304,8 +305,9 @@ sub DecodeAFPoints($$$$;$);
     '7 243' => 'smc PENTAX-DA 70mm F2.4 Limited', #PH
     '7 244' => 'smc PENTAX-DA 21mm F3.2 AL Limited', #16
     '8 0' => 'Sigma 50-150mm F2.8 II APO EX DC HSM', #forum2997
-    '8 3' => 'Sigma AF 18-125mm F3.5-5.6 DC', #29
+    '8 3' => 'Sigma 18-125mm F3.8-5.6 DC HSM', #forum10167
     '8 4' => 'Sigma 50mm F1.4 EX DG HSM', #Artur private communication
+    '8 6' => 'Sigma 4.5mm F2.8 EX DC Fisheye', #IB
     '8 7' => 'Sigma 24-70mm F2.8 IF EX DG HSM', #Exiv2
     '8 8' => 'Sigma 18-250mm F3.5-6.3 DC OS HSM', #27
     '8 11' => 'Sigma 10-20mm F3.5 EX DC HSM', #27
@@ -316,9 +318,11 @@ sub DecodeAFPoints($$$$;$);
     '8 16' => 'Sigma 70-200mm F2.8 EX DG Macro HSM II', #26
     '8 17' => 'Sigma 50-500mm F4.5-6.3 DG OS HSM', #(Heike Herrmann) (also APO, ref 26)
     '8 18' => 'Sigma 8-16mm F4.5-5.6 DC HSM', #forum2998
+    '8 20' => 'Sigma 18-50mm F2.8-4.5 DC HSM', #IB
     '8 21' => 'Sigma 17-50mm F2.8 EX DC OS HSM', #26
     '8 22' => 'Sigma 85mm F1.4 EX DG HSM', #26
     '8 23' => 'Sigma 70-200mm F2.8 APO EX DG OS HSM', #27
+    '8 24' => 'Sigma 17-70mm F2.8-4 DC Macro OS HSM', #27
     '8 25' => 'Sigma 17-50mm F2.8 EX DC HSM', #Exiv2
     '8 27' => 'Sigma 18-200mm F3.5-6.3 II DC HSM', #27
     '8 28' => 'Sigma 18-250mm F3.5-6.3 DC Macro HSM', #27
@@ -334,6 +338,11 @@ sub DecodeAFPoints($$$$;$);
     '8 62' => 'HD PENTAX-D FA 24-70mm F2.8 ED SDM WR', #PH
     '8 63' => 'HD PENTAX-D FA 15-30mm F2.8 ED SDM WR', #PH
     '8 64' => 'HD PENTAX-D FA* 50mm F1.4 SDM AW', #27
+    '8 65' => 'HD PENTAX-D FA 70-210mm F4 ED SDM WR', #PH
+    '8 66' => 'HD PENTAX-D FA 85mm F1.4 ED SDM AW', #James O'Neill
+    '8 67' => 'HD PENTAX-D FA 21mm F2.4 ED Limited DC WR', #ChristianShulz
+    '8 195' => 'HD PENTAX DA* 16-50mm F2.8 ED PLM AW', #27
+    '8 196' => 'HD PENTAX-DA* 11-18mm F2.8 ED DC AW', #29
     '8 197' => 'HD PENTAX-DA 55-300mm F4.5-6.3 ED PLM WR RE', #29
     '8 198' => 'smc PENTAX-DA L 18-50mm F4-5.6 DC WR RE', #29
     '8 199' => 'HD PENTAX-DA 18-50mm F4-5.6 DC WR RE', #29
@@ -394,6 +403,10 @@ sub DecodeAFPoints($$$$;$);
     '21 7' => '07 Mount Shield 11.5mm F9', #PH (NC)
     '21 8' => '08 Wide Zoom 3.8-5.9mm F3.7-4', #PH (NC)
     '21 233' => 'Adapter Q for K-mount Lens', #29
+#
+# Ricoh lenses
+#
+    '31 1' => 'GR Lens', #PH (GR III 28mm F2.8)
 );
 
 # Pentax model ID codes - PH
@@ -533,9 +546,12 @@ my %pentaxModelID = (
     0x13092 => 'K-1', #IB (Ricoh)
     0x1309c => 'K-3 II', #29 (Ricoh)
     0x131f0 => 'WG-M2', # (Ricoh)
+    0x1320e => 'GR III', # (Ricoh)
     0x13222 => 'K-70', #29 (Ricoh)
     0x1322c => 'KP', #29 (Ricoh)
     0x13240 => 'K-1 Mark II', # (Ricoh)
+    0x13254 => 'K-3 Mark III', #IB (Ricoh)
+    0x13290 => 'WG-70', # (Ricoh)
 );
 
 # Pentax city codes - (PH, Optio WP)
@@ -1118,6 +1134,8 @@ my %binaryDataAttrs = (
                 3 => 'Manual',
                 4 => 'Super Macro', #JD
                 5 => 'Pan Focus',
+                # 8 - seen for Ricoh GR III
+                # 9 - seen for Ricoh GR III
                 16 => 'AF-S (Focus-priority)', #17
                 17 => 'AF-C (Focus-priority)', #17
                 18 => 'AF-A (Focus-priority)', #PH (educated guess)
@@ -1128,6 +1146,8 @@ my %binaryDataAttrs = (
                 273 => 'AF-C (Release-priority)', #PH (K-5,K-3)
                 274 => 'AF-A (Release-priority)', #PH (K-3)
                 288 => 'Contrast-detect (Release-priority)', #PH (K-01)
+                # 32777 (0x8009) - seen for Ricoh GR III
+                # 32779 (0x800b) - seen for Ricoh GR III
             },
         },{
             Name => 'FocusMode',
@@ -1552,12 +1572,27 @@ my %binaryDataAttrs = (
             'Saturation', 'Sharpness', 'Contrast', 'Hue' or 'HighLowKey' followed by
             '+1', '+2' or '+3' for step size
         },
-        # 1=.3ev, 2=.7, 3=1.0, ... 10=.5ev, 11=1.5, ...
-        ValueConv => [ '$val<10 ? $val/3 : $val-9.5' ],
-        ValueConvInv => [ 'abs($val-int($val)-.5)>0.05 ? int($val*3+0.5) : int($val+10)' ],
+        # 1=.3ev, 2=.7, 3=1.0 ... 10=.5, 11=1.5, ... 4096=0, 4097=0.5 ... 8192=0, 8193=0.3
+        # (models like K-1 and K-5 use 0x1000 and 0x2000 to indicate 1/2 and 1/3 EV step
+        # size -- convert this as a fraction so we can recognize this format when writing)
+        ValueConv => [ q{
+            return $val / 3 if $val < 10;
+            return $val - 9.5 if $val < 20;
+            return ($val - 0x1000) . '/2' if $val & 0x1000;
+            return ($val - 0x2000) . '/3' if $val & 0x2000;
+            return $val; # (shouldn't happen)
+        }],
+        ValueConvInv => [ q{
+            if ($val =~ s{/(\d+)$}{}) {
+                return $val + 0x1000 if $1 == 2;
+                return $val + 0x2000 if $1 == 3;
+                return undef;
+            }
+            return abs($val-int($val)-.5)>0.05 ? int($val*3+0.5) : int($val+10);
+        }],
         PrintConv => sub {
             my @v = split(' ', shift);
-            $v[0] = sprintf('%.1f', $v[0]) if $v[0];
+            $v[0] = sprintf('%.1f', $v[0]) if $v[0] and $v[0]!~m{/};
             if ($v[1]) {
                 my %s = (1=>'WB-BA',2=>'WB-GM',3=>'Saturation',4=>'Sharpness',
                          5=>'Contrast',6=>'Hue',7=>'HighLowKey');
@@ -2103,6 +2138,8 @@ my %binaryDataAttrs = (
             9 => 'Radiant', # (Q)
             10 => 'Cross Processing', #31 (K-70)
             11 => 'Flat', #31 (K-70)
+            # 256 - seen for GR III
+            # 262 - seen for GR III
         },
     },
     0x0050 => { #PH
@@ -2187,6 +2224,8 @@ my %binaryDataAttrs = (
             16 => '16 (K-1)', #PH
             17 => '17 (K-70)', #29
             18 => '18 (KP)', #PH
+            19 => '19 (GR III)', #PH
+            20 => '20 (K-3III)', #PH
         },
     },
     0x0067 => { #PH (K-5)
@@ -2418,6 +2457,8 @@ my %binaryDataAttrs = (
             '1 0' => 'Slow',
             '2 0' => 'Standard',
             '3 0' => 'Fast',
+            # '1 108' - seen for GR III
+            # '3 84' - seen for K-3III
         },
     },
     0x007b => { #PH (K-5)
@@ -2519,10 +2560,24 @@ my %binaryDataAttrs = (
     },
     # 0x0086 - int8u: 0, 111[Sport,Pet] (Q) - related to Tracking FocusMode?
     # 0x0087 - int8u: 0 (Q)
+    0x0087 => { #PH
+        Name => 'ShutterType',
+        Writable => 'int8u',
+        PrintConv => {
+            0 => 'Normal', # ('Mechanical' if the camera has a mechanical shutter)
+            1 => 'Electronic', # (KP)
+        },
+    },
     0x0088 => { #PH
         Name => 'NeutralDensityFilter',
         Writable => 'int8u',
-        PrintConv => { 0 => 'Off', 1 => 'On' },
+        Count => -1,
+        PrintConv => {
+            0 => 'Off',
+            1 => 'On',
+            '0 2' => 'Off (0 2)', #PH (NC, GR III)
+            '1 2' => 'On (1 2)', #PH (NC, GR III)
+        },
     },
     0x008b => { #PH (LS465)
         Name => 'ISO',
@@ -2547,8 +2602,9 @@ my %binaryDataAttrs = (
             },
         },
     },
-    0x0095 => { #31
+    0x0095 => [{ #31
         Name => 'SkinToneCorrection',
+        Condition => '$count == 2',
         Writable => 'int8s',
         Count => 2,
         PrintConv => {
@@ -2556,7 +2612,15 @@ my %binaryDataAttrs = (
             '1 1' => 'On (type 1)',
             '1 2' => 'On (type 2)',
         },
-    },
+    },{
+        Name => 'SkinToneCorrection',
+        Condition => '$count == 3',
+        Writable => 'int8s',
+        Count => 3,
+        PrintConv => {
+            '0 0 0' => 'Off',
+        },
+    }],
     0x0096 => { #31
         Name => 'ClarityControl',
         Writable => 'int8s',
@@ -2660,7 +2724,7 @@ my %binaryDataAttrs = (
             SubDirectory => { TagTable => 'Image::ExifTool::Pentax::LensInfo' },
         },{
             Name => 'LensInfo',
-            Condition => '$count != 90 and $count != 91 and $count != 80 and $count != 128',
+            Condition => '$count != 90 and $count != 91 and $count != 80 and $count != 128 and $count != 168',
             SubDirectory => { TagTable => 'Image::ExifTool::Pentax::LensInfo2' },
         },{
             Name => 'LensInfo', # 645D
@@ -2675,6 +2739,7 @@ my %binaryDataAttrs = (
             Condition => '$count == 80 or $count == 128',
             SubDirectory => { TagTable => 'Image::ExifTool::Pentax::LensInfo5' },
         }
+        # ($count == 168 - Ricoh GR III)
     ],
     0x0208 => [ #PH
         {
@@ -2791,8 +2856,18 @@ my %binaryDataAttrs = (
         # High:     0000000238c0e960fde0f9203140f5a0fce0f1e031403f00e600fb00f7803760f120fc60ef403460
         # Very High:000000023d20e520fdc0f7203420f4c0fb60ee6036404400e120fae0f5403aa0f020fac0eb403a00
     },
-    # 0x021c - undef[18] (K-5)
-    # 0x021d - undef[18] (K-5)
+    0x021c => { #IB
+        Name => 'ColorMatrixA2',
+        Format => 'int16s',
+        Writable => 'undef',
+        Count => 9,
+    },
+    0x021d => { #IB
+        Name => 'ColorMatrixB2',
+        Format => 'int16s',
+        Writable => 'undef',
+        Count => 9,
+    },
     # 0x021e - undef[8] (K-5, Q)
     0x021f => { #JD
         Name => 'AFInfo',
@@ -2809,7 +2884,7 @@ my %binaryDataAttrs = (
         Name => 'HuffmanTable',
         Flags => [ 'Unknown', 'Binary' ],
         Writable => 0,
-        Notes => 'found in K10D, K20D and K2000D PEF images',
+        Notes => 'found in K10D, K20D and K2000 PEF images',
     },
     0x0221 => { #28
         Name => 'KelvinWB',
@@ -2844,13 +2919,20 @@ my %binaryDataAttrs = (
         Writable => 'string',
         Notes => 'left blank by some cameras',
     },
-    0x022a => { #PH (K-5)
+    0x022a => [{ #PH (RICOH models (GR III))
+        Name => 'FilterInfo',
+        Condition => '$$self{Make} =~ /^RICOH/',
+        SubDirectory => {
+            TagTable => 'Image::ExifTool::Pentax::FilterInfo',
+            ByteOrder => 'LittleEndian',
+        },
+    },{ #PH (K-5)
         Name => 'FilterInfo',
         SubDirectory => {
             TagTable => 'Image::ExifTool::Pentax::FilterInfo',
             ByteOrder => 'BigEndian',
         },
-    },
+    }],
     0x022b => { #PH (K-5)
         Name => 'LevelInfo',
         SubDirectory => { TagTable => 'Image::ExifTool::Pentax::LevelInfo' },
@@ -3313,7 +3395,7 @@ my %binaryDataAttrs = (
     8 => {
         Name => 'ExposureBracketStepSize',
         # This is set even when Exposure Bracket is Off (and the K10D
-        # displays Ò---Ó as the step size when you press the EB button) - DaveN
+        # displays "---" as the step size when you press the EB button) - DaveN
         # because the last value is remembered and if you turn Exposure Bracket
         # on the step size goes back to what it was before.
         PrintConv => {
@@ -4269,15 +4351,15 @@ my %binaryDataAttrs = (
         Name => 'LC3',
         %lensCode,
     },
-    5 => { # LC4 = abberation correction, near distance data
+    5 => { # LC4 = aberration correction, near distance data
         Name => 'LC4',
         %lensCode,
     },
-    6 => { # LC5 = light color abberation correction data
+    6 => { # LC5 = light color aberration correction data
         Name => 'LC5',
         %lensCode,
     },
-    7 => { # LC6 = open abberation data
+    7 => { # LC6 = open aberration data
         Name => 'LC6',
         %lensCode,
     },
@@ -4556,6 +4638,7 @@ my %binaryDataAttrs = (
         # *istDS and K100D, but I'm not sure what this means - PH
         # I've also seen: 0x42 (K2000), 0xf2 (K-7,K-r,K-5), 0x12,0x22 (K-x) - PH
         PrintConv => {
+            1 => 'Camera Battery', #PH (NC, GR III)
             2 => 'Body Battery',
             3 => 'Grip Battery',
             4 => 'External Power Supply', #PH
@@ -5251,7 +5334,7 @@ my %binaryDataAttrs = (
     NOTES => q{
         The parameters associated with each type of digital filter are unique, and
         these settings are also extracted with the DigitalFilter tag.  Information
-        is not extracted for filters that are "Off" unless the Unknown option is
+        is not extracted for filters that are "Off" unless the L<Unknown|../ExifTool.html#Unknown> option is
         used.
     },
     0 => {
@@ -5298,6 +5381,7 @@ my %binaryDataAttrs = (
         Mask => 0x0f,
         PrintHex => 0,
         PrintConv => {
+            0 => 'n/a', #PH (NC, GR III)
             1 => 'Horizontal (normal)',
             2 => 'Rotate 180',
             3 => 'Rotate 90 CW',
@@ -6231,7 +6315,7 @@ tags, and everyone who helped contribute to the LensType values.
 
 =head1 AUTHOR
 
-Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2022, Phil Harvey (philharvey66 at gmail.com)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

@@ -14,7 +14,7 @@ use strict;
 use vars qw($VERSION);
 use Image::ExifTool qw(:DataAccess :Utils);
 
-$VERSION = '1.09';
+$VERSION = '1.12';
 
 my %noYes = ( 0 => 'No', 1 => 'Yes' );
 
@@ -27,8 +27,10 @@ my %noYes = ( 0 => 'No', 1 => 'Yes' );
     NOTES => q{
         The following tags are extracted from Matroska multimedia container files. 
         This container format is used by file types such as MKA, MKV, MKS and WEBM. 
-        For speed, ExifTool extracts tags only up to the first Cluster unless the
-        Verbose (-v) or Unknown = 2 (-U) option is used.  See
+        For speed, by default ExifTool extracts tags only up to the first Cluster.
+        However, the L<Verbose|../ExifTool.html#Verbose> (-v) and L<Unknown|../ExifTool.html#Unknown> = 2 (-U) options force processing of
+        Cluster data, and the L<ExtractEmbedded|../ExifTool.html#ExtractEmbedded> (-ee) option skips over Clusters to
+        read subsequent tags.  See
         L<http://www.matroska.org/technical/specs/index.html> for the official
         Matroska specification.
     },
@@ -221,6 +223,8 @@ my %noYes = ( 0 => 'No', 1 => 'Yes' );
     },
     0x2e => {
         Name => 'TrackEntry',
+        # reset TrackType member at the start of each track
+        Condition => 'delete $$self{TrackType}; 1',
         SubDirectory => { TagTable => 'Image::ExifTool::Matroska::Main' },
     },
     0x57   => { Name => 'TrackNumber',      Format => 'unsigned' },
@@ -267,10 +271,11 @@ my %noYes = ( 0 => 'No', 1 => 'Yes' );
         }
     ],
     0x3314f => { Name => 'TrackTimecodeScale',Format => 'float' },
-    0x137f  => { Name => 'TrackOffset',     Format => 'signed', Unknown => 1 },
+    0x137f  => { Name => 'TrackOffset',       Format => 'signed', Unknown => 1 },
     0x15ee  => { Name => 'MaxBlockAdditionID',Format => 'unsigned', Unknown => 1 },
-    0x136e  => { Name => 'TrackName',       Format => 'utf8' },
-    0x2b59c => { Name => 'TrackLanguage',   Format => 'string' },
+    0x136e  => { Name => 'TrackName',         Format => 'utf8' },
+    0x2b59c => { Name => 'TrackLanguage',     Format => 'string' },
+    0x2b59d => { Name => 'TrackLanguageIETF', Format => 'string' },
     0x06 => [
         {
             Name => 'VideoCodecID',
@@ -662,6 +667,7 @@ my %noYes = ( 0 => 'No', 1 => 'Yes' );
             3 => 'Mesh',
         },
     },
+    # ProjectionPrivate in the spec
     0x7672 => [{
         Name => 'EquirectangularProj',
         Condition => '$$self{ProjectionType} == 1',
@@ -670,10 +676,13 @@ my %noYes = ( 0 => 'No', 1 => 'Yes' );
         Name => 'CubemapProj',
         Condition => '$$self{ProjectionType} == 2',
         SubDirectory => { TagTable => 'Image::ExifTool::QuickTime::cbmp' },
+    },{ # (don't decode 3 because it is a PITA)
+        Name => 'ProjectionPrivate',
+        Binary => 1,
     }],
-    0x7673 => { Name => 'ProjectionPosYaw',   Format => 'float' },
-    0x7674 => { Name => 'ProjectionPosPitch', Format => 'float' },
-    0x7675 => { Name => 'ProjectionPosRoll',  Format => 'float' },
+    0x7673 => { Name => 'ProjectionPoseYaw',   Format => 'float' },
+    0x7674 => { Name => 'ProjectionPosePitch', Format => 'float' },
+    0x7675 => { Name => 'ProjectionPoseRoll',  Format => 'float' },
 );
 
 #------------------------------------------------------------------------------
@@ -737,7 +746,8 @@ sub ProcessMKV($$)
 
     # set flag to process entire file (otherwise we stop at the first Cluster)
     my $verbose = $et->Options('Verbose');
-    my $processAll = ($verbose or $et->Options('Unknown') > 1);
+    my $processAll = ($verbose or $et->Options('Unknown') > 1) ? 2 : 0;
+    ++$processAll if $et->Options('ExtractEmbedded');
     $$et{TrackTypes} = \%trackTypes;  # store Track types reference
     my $oldIndent = $$et{INDENT};
     my $chapterNum = 0;
@@ -780,16 +790,20 @@ sub ProcessMKV($$)
         my $tagInfo = $et->GetTagInfo($tagTablePtr, $tag);
         # just fall through into the contained EBML elements
         if ($tagInfo and $$tagInfo{SubDirectory}) {
-            # stop processing at first cluster unless we are in verbose mode
-            last if $$tagInfo{Name} eq 'Cluster' and not $processAll;
-            $$et{INDENT} .= '| ';
-            $et->VerboseDir($$tagTablePtr{$tag}{Name}, undef, $size);
-            push @dirEnd, [ $pos + $dataPos + $size, $$tagInfo{Name} ];
-            if ($$tagInfo{Name} eq 'ChapterAtom') {
-                $$et{SET_GROUP1} = 'Chapter' . (++$chapterNum);
-                $trackIndent = $$et{INDENT};
+            # stop processing at first cluster unless we are using -v -U or -ee
+            if ($$tagInfo{Name} eq 'Cluster' and $processAll < 2) {
+                last unless $processAll;
+                undef $tagInfo; # just skip the Cluster when -ee is used
+            } else {
+                $$et{INDENT} .= '| ';
+                $et->VerboseDir($$tagTablePtr{$tag}{Name}, undef, $size);
+                push @dirEnd, [ $pos + $dataPos + $size, $$tagInfo{Name} ];
+                if ($$tagInfo{Name} eq 'ChapterAtom') {
+                    $$et{SET_GROUP1} = 'Chapter' . (++$chapterNum);
+                    $trackIndent = $$et{INDENT};
+                }
+                next;
             }
-            next;
         }
         last if $unknownSize;
         if ($pos + $size > $dataLen) {
@@ -798,7 +812,7 @@ sub ProcessMKV($$)
             # just skip unknown and large data blocks
             if (not $tagInfo or $more > 10000000) {
                 # don't try to skip very large blocks unless LargeFileSupport is enabled
-                last if $more > 0x80000000 and not $et->Options('LargeFileSupport');
+                last if $more >= 0x80000000 and not $et->Options('LargeFileSupport');
                 $raf->Seek($more, 1) or last;
                 $buff = '';
                 $dataPos += $dataLen + $more;
@@ -912,7 +926,7 @@ information from Matroska multimedia files (MKA, MKV, MKS and WEBM).
 
 =head1 AUTHOR
 
-Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2022, Phil Harvey (philharvey66 at gmail.com)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

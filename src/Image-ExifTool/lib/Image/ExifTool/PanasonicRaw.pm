@@ -6,7 +6,7 @@
 # Revisions:    2009/03/24 - P. Harvey Created
 #               2009/05/12 - PH Added RWL file type (same format as RW2)
 #
-# References:   1) http://u88.n24.queensu.ca/exiftool/forum/index.php/topic,1542.0.html
+# References:   1) https://exiftool.org/forum/index.php/topic,1542.0.html
 #               2) http://www.cybercom.net/~dcoffin/dcraw/
 #               3) http://syscall.eu/#pana
 #               4) Klaus Homeister private communication
@@ -21,7 +21,7 @@ use vars qw($VERSION);
 use Image::ExifTool qw(:DataAccess :Utils);
 use Image::ExifTool::Exif;
 
-$VERSION = '1.23';
+$VERSION = '1.26';
 
 sub ProcessJpgFromRaw($$$);
 sub WriteJpgFromRaw($$$);
@@ -187,10 +187,13 @@ my %panasonicWhiteBalance = ( #forum9396
         Protected => 1,
         # 2 - RAW DMC-FZ8/FZ18
         # 3 - RAW DMC-L10
-        # 4 - RW2 for most other models, including G9 normal resolution and YUNEEC CGO4
+        # 4 - RW2 for most other models, including G9 in "pixel shift off" mode and YUNEEC CGO4
         #     (must add 15 to black levels for RawFormat == 4)
-        # 5 - RW2 DC-GH5s and G9 HiRes
-        # missing - DMC-LX1/FZ30/FZ50/L1/LX1/LX2
+        # 5 - RW2 DC-GH5s; G9 in "pixel shift on" mode
+        # 6 - RW2 DC-S1, DC-S1r in "pixel shift off" mode
+        # 7 - RW2 DC-S1r (and probably DC-S1, have no raw samples) in "pixel shift on" mode
+        # not used - DMC-LX1/FZ30/FZ50/L1/LX1/LX2
+        # (modes 5 and 7 are lossless)
     },
     0x2e => { #JD
         Name => 'JpgFromRaw', # (writable directory!)
@@ -215,6 +218,7 @@ my %panasonicWhiteBalance = ( #forum9396
     0x30 => { Name => 'CropLeft',   Writable => 'int16u' },
     0x31 => { Name => 'CropBottom', Writable => 'int16u' },
     0x32 => { Name => 'CropRight',  Writable => 'int16u' },
+    # 0x44 - may contain another pointer to the raw data starting at byte 2 in this data (DC-GH6)
     0x10f => {
         Name => 'Make',
         Groups => { 2 => 'Camera' },
@@ -271,6 +275,7 @@ my %panasonicWhiteBalance = ( #forum9396
     0x11c => { #forum9373
         Name => 'Gamma',
         Writable => 'int16u',
+        # unfortunately it seems that the scaling factor varies with model...
         ValueConv => '$val / ($val >= 1024 ? 1024 : ($val >= 256 ? 256 : 100))',
         ValueConvInv => 'int($val * 256 + 0.5)',
     },
@@ -496,12 +501,62 @@ my %panasonicWhiteBalance = ( #forum9396
         Writable => 'int32u',
         PrintConv => { 0 => 'No', 1 => 'Yes' },
     },
-    # 1201 - LensStyle? ref forum9394
+    # Note: LensTypeMake and LensTypeModel are combined into a Composite LensType tag
+    # defined in Olympus.pm which has the same values as Olympus:LensType
+    0x1201 => { #IB
+        Name => 'LensTypeMake',
+        Condition => '$format eq "int16u"',
+        Writable => 'int16u',
+        # when format is int16u, these values have been observed:
+        #  0 - Olympus or unknown lens
+        #  2 - Leica or Lumix lens
+        # when format is int32u (S models), these values have been observed (ref IB):
+        #  256 - Leica lens
+        #  257 - Lumix lens
+        #  258 - ? (seen once)
+    },
+    0x1202 => { #IB
+        Name => 'LensTypeModel',
+        Condition => '$format eq "int16u"',
+        Writable => 'int16u',
+        RawConv => q{
+            return undef unless $val;
+            require Image::ExifTool::Olympus; # (to load Composite LensID)
+            return $val;
+        },
+        ValueConv => '$_=sprintf("%.4x",$val); s/(..)(..)/$2 $1/; $_',
+        ValueConvInv => '$val =~ s/(..) (..)/$2$1/; hex($val)',
+    },
     0x1203 => { #4
         Name => 'FocalLengthIn35mmFormat',
         Writable => 'int16u',
         PrintConv => '"$val mm"',
         PrintConvInv => '$val=~s/\s*mm$//;$val',
+    },
+    # 0x1300 - incident light value? (ref forum11395)
+    0x1301 => { #forum11395
+        Name => 'ApertureValue',
+        Writable => 'int16s',
+        Priority => 0,
+        ValueConv => '2 ** ($val / 512)',
+        ValueConvInv => '$val>0 ? 512*log($val)/log(2) : 0',
+        PrintConv => 'sprintf("%.1f",$val)',
+        PrintConvInv => '$val',
+    },
+    0x1302 => { #forum11395
+        Name => 'ShutterSpeedValue',
+        Writable => 'int16s',
+        Priority => 0,
+        ValueConv => 'abs($val/256)<100 ? 2**(-$val/256) : 0',
+        ValueConvInv => '$val>0 ? -256*log($val)/log(2) : -25600',
+        PrintConv => 'Image::ExifTool::Exif::PrintExposureTime($val)',
+        PrintConvInv => 'Image::ExifTool::Exif::ConvertFraction($val)',
+    },
+    0x1303 => { #forum11395
+        Name => 'SensitivityValue',
+        Writable => 'int16s',
+        ValueConv => '$val / 256',
+        ValueConvInv => 'int($val * 256)',
     },
     0x1305 => { #forum9384
         Name => 'HighISOMode',
@@ -509,8 +564,14 @@ my %panasonicWhiteBalance = ( #forum9396
         RawConv => '$val || undef',
         PrintConv => { 1 => 'On', 2 => 'Off' },
     },
+    # 0x1306 EV for some models like the GX8 (forum11395)
     # 0x140b - scaled overall black level? (ref forum9281)
     # 0x1411 - scaled black level per channel difference (ref forum9281)
+    0x1412 => { #forum11397
+        Name => 'FacesDetected',
+        Writable => 'int8u',
+        PrintConv => { 0 => 'No', 1 => 'Yes' },
+    },
     # 0x2000 - WB tungsten=3, daylight=4 (ref forum9467)
     # 0x2009 - scaled black level per channel (ref forum9281)
     # 0x3000-0x310b - red/blue balances * 1024 (ref forum9467)
@@ -572,6 +633,8 @@ my %panasonicWhiteBalance = ( #forum9396
         Writable => 'int8u',
         PrintConv => \%Image::ExifTool::Exif::orientation,
     },
+    # 0x3504 = Tag 0x1301+0x1302-0x1303 (Bv = Av+Tv-Sv) (forum11395)
+    # 0x3505 - same as 0x1300 (forum11395)
     0x3600 => { #forum9396
         Name => 'WhiteBalanceDetected',
         Writable => 'int8u',
@@ -675,6 +738,7 @@ sub WriteDistortionInfo($$$)
 #  2 - value count
 #  3 - reference to list of original offset values
 #  4 - IFD format number
+#  5 - (pointer to StripOffsets value added by this PatchRawDataOffset routine)
 sub PatchRawDataOffset($$$)
 {
     my ($offsetInfo, $raf, $ifd) = @_;
@@ -683,15 +747,26 @@ sub PatchRawDataOffset($$$)
     my $rawDataOffset = $$offsetInfo{0x118};
     my $err;
     $err = 1 unless $ifd == 0;
-    $err = 1 unless $stripOffsets and $stripByteCounts and $$stripOffsets[2] == 1;
-    if ($rawDataOffset) {
+    if ($stripOffsets or $stripByteCounts) {
+        $err = 1 unless $stripOffsets and $stripByteCounts and $$stripOffsets[2] == 1;
+    } else {
+        # the DC-GH6 and DC-GH5M2 write RawDataOffset with no Strip tags, so we need
+        # to create fake StripByteCounts information for copying the data
+      # (disable this until SilkyPix and Adobe utilities can deal with a variable
+      #  RawDataOffset, see https://exiftool.org/forum/index.php?topic=13861.0 --
+      #  so these files will continue to give a "No size tag" error when writing)
+      #  $stripByteCounts = $$offsetInfo{0x117} = [ $PanasonicRaw::Main{0x117}, 0, 1, [ 0 ], 4 ];
+    }
+    if ($rawDataOffset and not $err) {
         $err = 1 unless $$rawDataOffset[2] == 1;
-        $err = 1 unless $$stripOffsets[3][0] == 0xffffffff or $$stripByteCounts[3][0] == 0;
+        if ($stripOffsets) {
+            $err = 1 unless $$stripOffsets[3][0] == 0xffffffff or $$stripByteCounts[3][0] == 0;
+        }
     }
     $err and return 'Unsupported Panasonic/Leica RAW variant';
     if ($rawDataOffset) {
         # update StripOffsets along with this tag if it contains a reasonable value
-        unless ($$stripOffsets[3][0] == 0xffffffff) {
+        if ($stripOffsets and $$stripOffsets[3][0] != 0xffffffff) {
             # save pointer to StripOffsets value for updating later
             push @$rawDataOffset, $$stripOffsets[1];
         }
@@ -790,7 +865,10 @@ sub ProcessJpgFromRaw($$$)
         $out = $et->Options('TextOut');
         print $out '--- DOC1:JpgFromRaw ',('-'x56),"\n";
     }
+    # fudge HtmlDump base offsets to show as a stand-alone JPEG
+    $$et{BASE_FUDGE} = $$et{BASE};
     my $rtnVal = $et->ProcessJPEG(\%dirInfo);
+    $$et{BASE_FUDGE} = 0;
     # restore necessary variables for continued RW2/RWL processing
     $$et{BASE} = 0;
     $$et{FILE_TYPE} = 'TIFF';
@@ -823,7 +901,7 @@ write meta information in Panasonic/Leica RAW, RW2 and RWL images.
 
 =head1 AUTHOR
 
-Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2022, Phil Harvey (philharvey66 at gmail.com)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.
