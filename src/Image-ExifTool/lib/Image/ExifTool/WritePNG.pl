@@ -13,7 +13,7 @@ use strict;
 
 #------------------------------------------------------------------------------
 # Calculate CRC or update running CRC (ref 1)
-# Inputs: 0) data reference, 1) running crc to update (undef intially)
+# Inputs: 0) data reference, 1) running crc to update (undef initially)
 #         2) data position (undef for 0), 3) data length (undef for all data),
 # Returns: updated CRC
 my @crcTable;
@@ -61,7 +61,7 @@ sub HexEncode($)
 
 #------------------------------------------------------------------------------
 # Write profile chunk (possibly compressed if Zlib is available)
-# Inputs: 0) outfile, 1) Raw profile type, 2) data ref
+# Inputs: 0) outfile, 1) Raw profile type (SCALAR ref for iCCP name), 2) data ref
 #         3) profile header type (undef if not a text profile)
 # Returns: 1 on success
 sub WriteProfile($$$;$)
@@ -73,16 +73,16 @@ sub WriteProfile($$$;$)
     }
     if (not defined $profile) {
         # write ICC profile as compressed iCCP chunk if possible
-        if ($rawType eq 'icm') {
+        if (ref $rawType) {
             return 0 unless $deflate;
             $chunk = 'iCCP';
-            $prefix = "$rawType\0\0";
+            $prefix = "$$rawType\0\0";
         } else {
             $chunk = $rawType;
             if ($rawType eq $stdCase{zxif}) {
-                $prefix = "\0" . pack('N', length $$dataPt);
+                $prefix = "\0" . pack('N', length $$dataPt); # (proposed compressed EXIF)
             } else {
-                $prefix = '';
+                $prefix = '';   # standard EXIF
             }
         }
         if ($deflate) {
@@ -116,7 +116,7 @@ sub WriteProfile($$$;$)
 }
 
 #------------------------------------------------------------------------------
-# Add iCCP to the PNG image if necessary (must come before PLTE and IDAT)
+# Add iCCP-related chunks to the PNG image if necessary (must come before PLTE and IDAT)
 # Inputs: 0) ExifTool object ref, 1) output file or scalar ref
 # Returns: true on success
 sub Add_iCCP($$)
@@ -127,10 +127,28 @@ sub Add_iCCP($$)
         my $tagTablePtr = Image::ExifTool::GetTagTable('Image::ExifTool::ICC_Profile::Main');
         my %dirInfo = ( Parent => 'PNG', DirName => 'ICC_Profile' );
         my $buff = $et->WriteDirectory(\%dirInfo, $tagTablePtr);
-        if (defined $buff and length $buff and WriteProfile($outfile, 'icm', \$buff)) {
-            $et->VPrint(0, "Created ICC profile\n");
-            delete $$et{ADD_DIRS}{ICC_Profile}; # don't add it again
-            $$et{PNGDoneDir}{ICC_Profile} = 2;
+        if (defined $buff and length $buff) {
+            my $profileName = $et->GetNewValue($Image::ExifTool::PNG::Main{'iCCP-name'});
+            $profileName = 'icm' unless defined $profileName;
+            if (WriteProfile($outfile, \$profileName, \$buff)) {
+                $et->VPrint(0, "Created ICC profile with name '${profileName}'\n");
+                delete $$et{ADD_DIRS}{ICC_Profile}; # don't add it again
+            }
+        }
+    }
+    # must also add sRGB and gAMA before PLTE and IDAT
+    if ($$et{ADD_PNG}) {
+        my ($tag, %addBeforePLTE);
+        foreach $tag (qw(sRGB gAMA)) {
+            next unless $$et{ADD_PNG}{$tag};
+            $addBeforePLTE{$tag} = $$et{ADD_PNG}{$tag};
+            delete $$et{ADD_PNG}{$tag};
+        }
+        if (%addBeforePLTE) {
+            my $save = $$et{ADD_PNG};
+            $$et{ADD_PNG} = \%addBeforePLTE;
+            AddChunks($et, $outfile);
+            $$et{ADD_PNG} = $save;
         }
     }
     return 1;
@@ -144,28 +162,14 @@ sub Add_iCCP($$)
 sub DoneDir($$$;$)
 {
     my ($et, $dir, $outBuff, $nonStandard) = @_;
-    $dir = 'IFD0' if $dir eq 'EXIF';
+    my $saveDir = $dir;
+    $dir = 'EXIF' if $dir eq 'IFD0';
     # don't add this directory again unless this is in a non-standard location
-    delete $$et{ADD_DIRS}{$dir} unless $nonStandard;
-    # handle problem with duplicate XMP when using PNGEarlyXMP option
-    return unless $dir eq 'XMP' and defined $$outBuff and length $$outBuff;
-    if ($nonStandard and $$et{DEL_GROUP}{$dir}) {
+    if (not $nonStandard) {
+        delete $$et{ADD_DIRS}{$dir};
+        delete $$et{ADD_DIRS}{IFD0} if $dir eq 'EXIF';
+    } elsif ($$et{DEL_GROUP}{$dir} or $$et{DEL_GROUP}{$saveDir}) {
         $et->VPrint(0,"  Deleting non-standard $dir\n");
-        $$outBuff = '';
-    } elsif (not $$et{PNGDoneDir}{$dir}) {
-        $$et{PNGDoneDir}{$dir} = 1;   # set flag indicating the directory exists
-    } elsif ($$et{OPTIONS}{PNGEarlyXMP}) {
-        if ($$et{PNGDoneDir}{$dir} == 2) {
-            if ($$et{OPTIONS}{IgnoreMinorErrors}) {
-                $et->Warn("Deleted existing $dir");
-            } else {
-                $et->Error("Duplicate $dir created. Ignore to delete existing $dir", 1);
-                return;
-            }
-        } elsif ($et->Warn("Duplicate $dir. Ignore to delete", 2)) {
-            return; # warning not ignored: don't delete the duplicate
-        }
-        $et->VPrint(0,"  Deleting duplicate $dir\n");
         $$outBuff = '';
     }
 }
@@ -194,6 +198,8 @@ sub BuildTextChunk($$$$$)
             $tag =~ s/-$lang$//;    # remove language code from tagID
         } elsif ($$et{OPTIONS}{Charset} ne 'Latin' and $val =~  /[\x80-\xff]/) {
             $iTXt = 1;      # write as iTXt if it contains non-Latin special characters
+        } elsif ($$tagInfo{iTXt}) {
+            $iTXt = 1;      # write as iTXt if specified in user-defined tag
         }
     }
     if ($comp) {
@@ -238,15 +244,16 @@ sub BuildTextChunk($$$$$)
 #------------------------------------------------------------------------------
 # Add any outstanding new chunks to the PNG image
 # Inputs: 0) ExifTool object ref, 1) output file or scalar ref
-#         2-N) dirs to add (empty to add all, including PNG tags)
+#         2-N) dirs to add (empty to add all except EXIF 'IFD0', including PNG tags)
 # Returns: true on success
 sub AddChunks($$;@)
 {
     my ($et, $outfile, @add) = @_;
-    my ($addTags, $tag, $dir, $err, $tagTablePtr);
+    my ($addTags, $tag, $dir, $err, $tagTablePtr, $specified);
 
     if (@add) {
         $addTags = { }; # don't add any PNG tags
+        $specified = 1;
     } else {
         $addTags = $$et{ADD_PNG};    # add all PNG tags...
         delete $$et{ADD_PNG};        # ...once
@@ -256,9 +263,10 @@ sub AddChunks($$;@)
     # write any outstanding PNG tags
     foreach $tag (sort keys %$addTags) {
         my $tagInfo = $$addTags{$tag};
+        next if $$tagInfo{FakeTag}; # (iCCP-name)
         my $nvHash = $et->GetNewValueHash($tagInfo);
-        # (native PNG information is always preferred, so don't check IsCreating)
-        next unless $et->IsOverwriting($nvHash);
+        # (native PNG information is always preferred, so don't rely on just IsCreating)
+        next unless $$nvHash{IsCreating} or $et->IsOverwriting($nvHash) > 0;
         my $val = $et->GetNewValue($nvHash);
         if (defined $val) {
             next if $$nvHash{EditOnly};
@@ -274,7 +282,6 @@ sub AddChunks($$;@)
             my $cbuf = pack('N', CalculateCRC(\$data, undef));
             Write($outfile, $hdr, $data, $cbuf) or $err = 1;
             $et->VerboseValue("+ PNG:$$tagInfo{Name}", $val);
-            $$et{PNGDoneTag}{$tag} = 1;   # set flag indicating this tag was added
             ++$$et{CHANGED};
         }
     }
@@ -287,6 +294,7 @@ sub AddChunks($$;@)
             DirName => $dir,
         );
         if ($dir eq 'IFD0') {
+            next unless $specified;     # wait until specifically asked to write EXIF 'IFD0'
             my $chunk = $stdCase{exif};
             # (zxIf was not adopted)
             #if ($et->Options('Compress')) {
@@ -322,7 +330,7 @@ sub AddChunks($$;@)
                 Write($outfile, $hdr, $buff, $cbuf) or $err = 1;
             }
         } elsif ($dir eq 'IPTC') {
-            $et->Warn('Creating non-standard EXIF in PNG', 1);
+            $et->Warn('Creating non-standard IPTC in PNG', 1);
             $et->VPrint(0, "Creating IPTC profile:\n");
             # write new IPTC data (stored in a Photoshop directory)
             $dirInfo{DirName} = 'Photoshop';
@@ -341,7 +349,7 @@ sub AddChunks($$;@)
                 $et->Warn('Wrote ICC as a raw profile (no Compress::Zlib)');
             }
         } elsif ($dir eq 'PNG-pHYs') {
-            $et->VPrint(0, "Creating pHYs chunk:\n");
+            $et->VPrint(0, "Creating pHYs chunk (default 2834 pixels per meter):\n");
             $tagTablePtr = Image::ExifTool::GetTagTable('Image::ExifTool::PNG::PhysicalPixel');
             my $blank = "\0\0\x0b\x12\0\0\x0b\x12\x01"; # 2834 pixels per meter (72 dpi)
             $dirInfo{DataPt} = \$blank;
@@ -356,8 +364,6 @@ sub AddChunks($$;@)
             next;
         }
         delete $$et{ADD_DIRS}{$dir};  # don't add again
-        # keep track of the directories that we added
-        $$et{PNGDoneDir}{$dir} = 2 if defined $buff and length $buff;
     }
     return not $err;
 }
@@ -395,7 +401,7 @@ strings).
 
 =head1 AUTHOR
 
-Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2022, Phil Harvey (philharvey66 at gmail.com)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

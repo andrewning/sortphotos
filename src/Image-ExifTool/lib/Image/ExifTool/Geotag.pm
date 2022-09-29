@@ -11,6 +11,10 @@
 #               2012/05/08 - PH Read Winplus Beacon .TXT files
 #               2015/05/30 - PH Read Bramor gEO log files
 #               2016/07/13 - PH Added ability to geotag date/time only
+#               2019/07/02 - PH Added ability to read IMU CSV files
+#               2019/11/10 - PH Also write pitch to CameraElevationAngle
+#               2020/12/01 - PH Added ability to read DJI CSV log files
+#               2022/06/21 - PH Added ability to read Google Takeout JSON files
 #
 # References:   1) http://www.topografix.com/GPX/1/1/
 #               2) http://www.gpsinformation.org/dale/nmea.htm#GSA
@@ -23,8 +27,9 @@ package Image::ExifTool::Geotag;
 use strict;
 use vars qw($VERSION);
 use Image::ExifTool qw(:Public);
+use Image::ExifTool::GPS;
 
-$VERSION = '1.56';
+$VERSION = '1.68';
 
 sub JITTER() { return 2 }       # maximum time jitter
 
@@ -52,6 +57,7 @@ my %xmlTag = (
     vdop        => 'vdop',      # GPX
     pdop        => 'pdop',      # GPX
     sat         => 'nsats',     # GPX
+    atemp       => 'atemp',     # GPX (Garmin 550t)
     when        => 'time',      # KML
     coordinates => 'coords',    # KML
     coord       => 'coords',    # KML, as written by Google Location History
@@ -77,6 +83,7 @@ my %fixInfoKeys = (
     track  => [ 'track', 'speed' ],
     alt    => [ 'alt' ],
     orient => [ 'dir', 'pitch', 'roll' ],
+    atemp  => [ 'atemp' ],
 );
 
 my %isOrient = ( dir => 1, pitch => 1, roll => 1 ); # test for orientation key
@@ -127,8 +134,8 @@ sub LoadTrackLog($$;$)
     local ($_, $/, *EXIFTOOL_TRKFILE);
     my ($et, $val) = @_;
     my ($raf, $from, $time, $isDate, $noDate, $noDateChanged, $lastDate, $dateFlarm);
-    my ($nmeaStart, $fixSecs, @fixTimes, $lastFix, %nmea);
-    my ($canCut, $cutPDOP, $cutHDOP, $cutSats, $e0, $e1, @tmp);
+    my ($nmeaStart, $fixSecs, @fixTimes, $lastFix, %nmea, @csvHeadings, $sortFixes);
+    my ($canCut, $cutPDOP, $cutHDOP, $cutSats, $e0, $e1, @tmp, $trackFile, $trackTime);
 
     unless (eval { require Time::Local }) {
         return 'Geotag feature requires Time::Local installed';
@@ -154,6 +161,7 @@ sub LoadTrackLog($$;$)
     } else {
         # $val is track file name
         if ($et->Open(\*EXIFTOOL_TRKFILE, $val)) {
+            $trackFile = $val;
             $raf = new File::RandomAccess(\*EXIFTOOL_TRKFILE);
             unless ($raf->Read($_, 256)) {
                 close EXIFTOOL_TRKFILE;
@@ -196,25 +204,28 @@ sub LoadTrackLog($$;$)
     my $skipped = 0;
     my $lastSecs = 0;
     my $fix = { };
+    my $csvDelim = $et->Options('CSVDelim');
+    $csvDelim = ',' unless defined $csvDelim;
     my (@saveFix, $timeSpan);
     for (;;) {
         $raf->ReadLine($_) or last;
         # determine file format
         if (not $format) {
+            s/^\xef\xbb\xbf//;          # remove leading BOM if it exists
             if (/^<(\?xml|gpx)[\s>]/) { # look for XML or GPX header
                 $format = 'XML';
             # check for NMEA sentence
             # (must ONLY start with ones that have timestamps! eg. not GSA or PTNTHPR!)
-            } elsif (/^\$([A-Z]{2}(RMC|GGA|GLL|ZDA)|PMGNTRK),/) {
+            } elsif (/^.*\$([A-Z]{2}(RMC|GGA|GLL|ZDA)|PMGNTRK),/) {
                 $format = 'NMEA';
-                $nmeaStart = $2 || $1;    # save type of first sentence
+                $nmeaStart = $2 || $1;  # save type of first sentence
             } elsif (/^A(FLA|XSY|FIL)/) {
                 # (don't set format yet because we want to read HFDTE first)
                 $nmeaStart = 'B' ;
                 next;
-            } elsif (/^HFDTE(\d{2})(\d{2})(\d{2})/) {
+            } elsif (/^HFDTE(?:DATE:)?(\d{2})(\d{2})(\d{2})/) {
                 my $year = $3 + ($3 >= 70 ? 1900 : 2000);
-                $dateFlarm = Time::Local::timegm(0,0,0,$1,$2-1,$year-1900);
+                $dateFlarm = Time::Local::timegm(0,0,0,$1,$2-1,$year);
                 $nmeaStart = 'B' ;
                 $format = 'IGC';
                 next;
@@ -225,6 +236,60 @@ sub LoadTrackLog($$;$)
                 $format = 'Winplus';
             } elsif (/^\s*\d+\s+.*\sypr\s*$/ and (@tmp=split) == 12) {
                 $format = 'Bramor';
+            } elsif (((/\b(GPS)?Date/i and /\b(GPS)?(Date)?Time/i) or /\bTime\(seconds\)/i) and /\Q$csvDelim/) {
+                chomp;
+                @csvHeadings = split /\Q$csvDelim/;
+                $format = 'CSV';
+                # convert recognized headings to our parameter names
+                foreach (@csvHeadings) {
+                    my $param;
+                    s/^GPS ?//; # remove leading "GPS" to simplify regex patterns
+                    if (/^Time ?\(seconds\)$/i) { # DJI
+                        # DJI CSV log files have a column "Time(seconds)" which is seconds since
+                        # the start of the flight.  The date/time is obtained from the file name.
+                        $param = 'runtime';
+                        if ($trackFile and $trackFile =~ /(\d{4})-(\d{2})-(\d{2})[^\/]+(\d{2})-(\d{2})-(\d{2})[^\/]*$/) {
+                            $trackTime = Image::ExifTool::TimeLocal($6,$5,$4,$3,$2-1,$1);
+                            my $utc = PrintFixTime($trackTime);
+                            my $tzs = Image::ExifTool::TimeZoneString([$6,$5,$4,$3,$2-1,$1-1900],$trackTime);
+                            $et->VPrint(2, "  DJI start time:  $utc (local timezone is $tzs)\n");
+                        } else {
+                            return 'Error getting start time from file name for DJI CSV track file';
+                        }
+                    } elsif (/^Date ?Time/i) {  # ExifTool addition
+                        $param = 'datetime';
+                    } elsif (/^Date/i) {
+                        $param = 'date';
+                    } elsif (/^Time(?! ?\(text\))/i) { # (ignore DJI "Time(text)" column)
+                        $param = 'time';
+                    } elsif (/^(Pos)?Lat/i) {
+                        $param = 'lat';
+                        /ref$/i and $param .= 'ref';
+                    } elsif (/^(Pos)?Lon/i) {
+                        $param = 'lon';
+                        /ref$/i and $param .= 'ref';
+                    } elsif (/^(Pos)?Alt/i) {
+                        $param = 'alt';
+                    } elsif (/^(Angle)?(Heading|Track)/i) {
+                        $param = 'track';
+                    } elsif (/^(Angle)?Pitch/i or /^Camera ?Elevation ?Angle/i) {
+                        $param = 'pitch';
+                    } elsif (/^(Angle)?Roll/i) {
+                        $param = 'roll';
+                    }
+                    if ($param) {
+                        $et->VPrint(2, "CSV column '${_}' is $param\n");
+                        $_ = $param;
+                    } else {
+                        $et->VPrint(2, "CSV column '${_}' ignored\n");
+                        $_ = '';    # ignore this column
+                    }
+                }
+                next;
+            } elsif (/"(timelineObjects|placeVisit|activitySegment|latitudeE7)":/) {
+                # Google Takeout JSON format
+                $format = 'JSON';
+                $sortFixes = 1; # (fixes are not all in order for this format)
             } else {
                 # search only first 50 lines of file for a valid fix
                 last if ++$skipped > 50;
@@ -253,6 +318,8 @@ sub LoadTrackLog($$;$)
                             # validate altitude
                             undef $$fix{alt} if defined $$fix{alt} and $$fix{alt} !~ /^[+-]?\d+\.?\d*/;
                             $$has{alt} = 1 if $$fix{alt};   # set "has altitude" flag if appropriate
+                        } elsif ($tag eq 'atemp') {
+                            $$has{atemp} = 1;
                         }
                     }
                 }
@@ -292,6 +359,8 @@ sub LoadTrackLog($$;$)
                                     # validate altitude
                                     undef $$fix{alt} if defined $$fix{alt} and $$fix{alt} !~ /^[+-]?\d+\.?\d*/;
                                     $$has{alt} = 1 if $$fix{alt};   # set "has altitude" flag if appropriate
+                                } elsif ($tag eq 'atemp') {
+                                    $$has{atemp} = 1;
                                 }
                             }
                         }
@@ -352,7 +421,7 @@ sub LoadTrackLog($$;$)
             /^TP,D,\s*([-+]?\d+\.\d*),\s*([-+]?\d+\.\d*),\s*(\d+)\/(\d+)\/(\d{4}),\s*(\d+):(\d+):(\d+)/ or next;
             $$fix{lat} = $1;
             $$fix{lon} = $2;
-            $time = Time::Local::timegm($8,$7,$6,$4,$3-1,$5-1900);
+            $time = Time::Local::timegm($8,$7,$6,$4,$3-1,$5);
 DoneFix:    $isDate = 1;
             $$points{$time} = $fix;
             push @fixTimes, $time;
@@ -372,17 +441,97 @@ DoneFix:    $isDate = 1;
             next unless @d == 3 and @t == 3;
             @$fix{qw(lat lon alt track dir pitch roll)} = @parts[2,3,4,5,8,9,10];
             # (add the seconds afterwards in case some models have decimal seconds)
-            $time = Time::Local::timegm(0,$t[1],$t[0],$d[0],$d[1]-1,$d[2]-1900) + $t[2];
+            $time = Time::Local::timegm(0,$t[1],$t[0],$d[0],$d[1]-1,$d[2]) + $t[2];
             # set necessary flags for extra available information
             @$has{qw(alt track orient)} = (1,1,1);
             goto DoneFix;   # save this fix
+        } elsif ($format eq 'CSV') {
+            chomp;
+            my @vals = split /\Q$csvDelim/;
+#
+# CSV format output of GPS/IMU POS system
+#   Date*           - date in DD/MM/YYYY format
+#   Time*           - time in HH:MM:SS.SSS format
+#   [Pos]Lat*       - latitude in decimal degrees
+#   [Pos]Lon*       - longitude in decimal degrees
+#   [Pos]Alt*       - altitude in m relative to sea level
+#   [Angle]Heading* - GPSTrack in degrees true
+#   [Angle]Pitch*   - pitch angle in degrees
+#   [Angle]Roll*    - roll angle in degrees
+# (ExifTool enhancements allow for standard tag names or descriptions as the column headings,
+#  add support for time zones and flexible coordinates, and allow new DateTime and Shift columns)
+#
+            my ($param, $date, $secs, %neg);
+            foreach $param (@csvHeadings) {
+                my $val = shift @vals;
+                last unless defined $val;
+                next unless $param;
+                if ($param eq 'datetime') {
+                    local $SIG{'__WARN__'} = sub { };
+                    my $dateTime = $et->InverseDateTime($val);
+                    if ($dateTime) {
+                        $date = Image::ExifTool::GetUnixTime($val, 2);
+                        $secs = 0;
+                    }
+                } elsif ($param eq 'date') {
+                    if ($val =~ m{^(\d{2})/(\d{2})/(\d{4})$}) {
+                        $date = Time::Local::timegm(0,0,0,$1,$2-1,$3);
+                    } elsif ($val =~ /(\d{4}).*?(\d{2}).*?(\d{2})/) {
+                        $date = Time::Local::timegm(0,0,0,$3,$2-1,$1);
+                    }
+                } elsif ($param eq 'time') {
+                    if ($val =~ /^(\d{1,2}):(\d{2}):(\d{2}(\.\d+)?).*?(([-+])(\d{1,2}):?(\d{2}))?/) {
+                        $secs = (($1 * 60) + $2) * 60 + $3;
+                        # adjust for time zone if specified
+                        $secs += ($7 * 60 + $8) * ($6 eq '-' ? 60 : -60) if $5;
+                    }
+                } elsif ($param eq 'lat' or $param eq 'lon') {
+                    $$fix{$param} = Image::ExifTool::GPS::ToDegrees($val, 1);
+                } elsif ($param eq 'latref') {
+                    $neg{lat} = 1 if $val =~ /^S/i;
+                } elsif ($param eq 'lonref') {
+                    $neg{lon} = 1 if $val =~ /^W/i;
+                } elsif ($param eq 'runtime') {
+                    $date = $trackTime;
+                    $secs = $val;
+                } else {
+                    $$fix{$param} = $val;
+                }
+            }
+            # make coordinate negative according to reference direction if necessary
+            foreach $param (keys %neg) {
+                next unless defined $$fix{$param};
+                $$fix{$param} = -abs($$fix{$param});
+            }
+            if ($date and defined $secs and defined $$fix{lat} and defined $$fix{lon}) {
+                $time = $date + $secs;
+                $$has{alt} = 1 if defined $$fix{alt};
+                $$has{track} = 1 if defined $$fix{track};
+                $$has{orient} = 1 if defined $$fix{pitch};
+                goto DoneFix;
+            }
+            next;
+        } elsif ($format eq 'JSON') {
+            # Google Takeout JSON format
+            if (/"(latitudeE7|longitudeE7|latE7|lngE7|timestamp)":\s*"?(.*?)"?,?\s*[\x0d\x0a]/) {
+                if ($1 eq 'timestamp') {
+                    $time = GetTime($2);
+                    goto DoneFix if $time and $$fix{lat} and $$fix{lon};
+                } elsif ($1 eq 'latitudeE7' or $1 eq 'latE7') {
+                    $$fix{lat} = $2 * 1e-7;
+                } else {
+                    $$fix{lon} = $2 * 1e-7;
+                }
+            }
+            next;
         }
         my (%fix, $secs, $date, $nmea);
         if ($format eq 'NMEA') {
             # ignore unrecognized NMEA sentences
             # (first 2 characters: GP=GPS, GL=GLONASS, GA=Gallileo, GN=combined, BD=Beidou)
-            next unless /^\$([A-Z]{2}(RMC|GGA|GLL|GSA|ZDA)|PMGNTRK|PTNTHPR),/;
-            $nmea = $2 || $1;
+            next unless /^(.*)\$([A-Z]{2}(RMC|GGA|GLL|GSA|ZDA)|PMGNTRK|PTNTHPR),/;
+            $nmea = $3 || $2;
+            $_ = substr($_, length($1)) if length($1);
         }
 #
 # IGC (flarm) (ref 4)
@@ -418,7 +567,7 @@ DoneFix:    $isDate = 1;
             $fix{track} = $12 if length $12;
             my $year = $15 + ($15 >= 70 ? 1900 : 2000);
             $secs = (($1 * 60) + $2) * 60 + $3;
-            $date = Time::Local::timegm(0,0,0,$13,$14-1,$year-1900);
+            $date = Time::Local::timegm(0,0,0,$13,$14-1,$year);
 #
 # NMEA GGA sentence (no date)
 #
@@ -461,7 +610,7 @@ DoneFix:    $isDate = 1;
             #  $GPZDA,hhmmss.ss,DD,MM,YYYY,tzh,tzm (hhmmss in UTC)
             /^\$[A-Z]{2}ZDA,(\d{2})(\d{2})(\d{2}(\.\d*)?),(\d+),(\d+),(\d+)/ or next;
             $secs = (($1 * 60) + $2) * 60 + $3;
-            $date = Time::Local::timegm(0,0,0,$5,$6-1,$7-1900);
+            $date = Time::Local::timegm(0,0,0,$5,$6-1,$7);
 #
 # Magellan eXplorist PMGNTRK (Proprietary MaGellaN TRacK) sentence (optional date)
 #
@@ -477,7 +626,7 @@ DoneFix:    $isDate = 1;
                 next if $13 > 31 or $14 > 12 or $15 > 99;   # validate day/month/year
                 # optional date is available in PMGNTRK sentence
                 my $year = $15 + ($15 >= 70 ? 1900 : 2000);
-                $date = Time::Local::timegm(0,0,0,$13,$14-1,$year-1900);
+                $date = Time::Local::timegm(0,0,0,$13,$14-1,$year);
             }
 #
 # Honeywell HMR3000 PTNTHPR (Heading Pitch Roll) sentence (no date)
@@ -620,6 +769,8 @@ DoneFix:    $isDate = 1;
         $numPoints -= $cutHDOP;
         $numPoints -= $cutSats;
     }
+    # sort fixes if necessary
+    @fixTimes = sort { $a <=> $b } @fixTimes if $sortFixes;
     # mark first fix of the track
     while (@fixTimes) {
         $fix = $$points{$fixTimes[0]} or shift(@fixTimes), next;
@@ -666,7 +817,7 @@ sub GetTime($)
 {
     my $timeStr = shift;
     $timeStr =~ /^(\d{4})-(\d+)-(\d+)T(\d+):(\d+):(\d+)(\.\d+)?(.*)/ or return undef;
-    my $time = Time::Local::timegm($6,$5,$4,$3,$2-1,$1-1900);
+    my $time = Time::Local::timegm($6,$5,$4,$3,$2-1,$1);
     $time += $7 if $7;  # add fractional seconds
     my $tz = $8;
     # adjust for time zone (otherwise assume UTC)
@@ -831,7 +982,7 @@ sub SetGeoValues($$;$)
             last;
         }
         if ($tz) {
-            $time = Time::Local::timegm($sec,$min,$hr,$day,$mon-1,$year-1900);
+            $time = Time::Local::timegm($sec,$min,$hr,$day,$mon-1,$year);
             # use timezone from date/time value
             if ($tz ne 'Z') {
                 my $tzmin = $t1 * 60 + $t2;
@@ -839,7 +990,7 @@ sub SetGeoValues($$;$)
             }
         } else {
             # assume local timezone
-            $time = Image::ExifTool::TimeLocal($sec,$min,$hr,$day,$mon-1,$year-1900);
+            $time = Image::ExifTool::TimeLocal($sec,$min,$hr,$day,$mon-1,$year);
         }
         # add fractional seconds
         $time += $fs if $fs and $fs ne '.';
@@ -934,7 +1085,7 @@ sub SetGeoValues($$;$)
                 # loop through available fix information categories
                 # (pos, track, alt, orient)
                 my ($category, $key);
-Category:       foreach $category (qw{pos track alt orient}) {
+Category:       foreach $category (qw{pos track alt orient atemp}) {
                     next unless $$has{$category};
                     my ($f, $p0b, $p1b, $f0b);
                     # loop through specific fix information keys
@@ -1055,9 +1206,19 @@ Category:       foreach $category (qw{pos track alt orient}) {
             }
             @r = $et->SetNewValue(GPSImgDirection => $$tFix{dir}, %opts);
             @r = $et->SetNewValue(GPSImgDirectionRef => (defined $$tFix{dir} ? 'T' : undef), %opts);
+            @r = $et->SetNewValue(CameraElevationAngle => $$tFix{pitch}, %opts);
             # Note: GPSPitch and GPSRoll are non-standard, and must be user-defined
             @r = $et->SetNewValue(GPSPitch => $$tFix{pitch}, %opts);
             @r = $et->SetNewValue(GPSRoll => $$tFix{roll}, %opts);
+        }
+        if ($$has{atemp}) {
+            my $tFix = $fix;
+            if (not defined $$fix{atemp} and defined $iExt) {
+                # (not all fixes have atemp, so try interpolating specifically for this)
+                my $p = FindFix($et,'atemp',$times,$points,$iExt,$iDir,$geoMaxExtSecs);
+                $tFix = $p if $p;
+            }
+            @r = $et->SetNewValue(AmbientTemperature => $$tFix{atemp}, %opts);
         }
         unless ($xmp) {
             my ($latRef, $lonRef);
@@ -1075,15 +1236,16 @@ Category:       foreach $category (qw{pos track alt orient}) {
             @r = $et->SetNewValue(GPSDateTime => "$gpsDate $gpsTime", %opts);
         }
     } else {
-        my %opts;
+        my %opts = ( IgnorePermanent => 1 );
         $opts{Replace} = 2 if defined $val; # remove existing new values
         $opts{Group} = $writeGroup if $writeGroup;
 
         # reset any GPS values we might have already set
         foreach (qw(GPSLatitude GPSLatitudeRef GPSLongitude GPSLongitudeRef
                     GPSAltitude GPSAltitudeRef GPSDateStamp GPSTimeStamp GPSDateTime
-                    GPSTrack GPSTrackRef GPSSpeed GPSSpeedRef
-                    GPSImgDirection GPSImgDirectionRef GPSPitch GPSRoll))
+                    GPSTrack GPSTrackRef GPSSpeed GPSSpeedRef GPSImgDirection
+                    GPSImgDirectionRef GPSPitch GPSRoll CameraElevationAngle
+                    AmbientTemperature))
         {
             my @r = $et->SetNewValue($_, undef, %opts);
         }
@@ -1267,7 +1429,8 @@ This module is used by Image::ExifTool
 This module loads GPS track logs, interpolates to determine position based
 on time, and sets new GPS values for geotagging images.  Currently supported
 formats are GPX, NMEA RMC/GGA/GLL, KML, IGC, Garmin XML and TCX, Magellan
-PMGNTRK, Honeywell PTNTHPR, Winplus Beacon text, and Bramor gEO log files.
+PMGNTRK, Honeywell PTNTHPR, Bramor gEO, Winplus Beacon text, Google Takeout
+JSON, GPS/IMU CSV, DJI CSV, ExifTool CSV log files.
 
 Methods in this module should not be called directly.  Instead, the Geotag
 feature is accessed by writing the values of the ExifTool Geotag, Geosync
@@ -1276,12 +1439,12 @@ in the tag name documentation).
 
 =head1 NOTES
 
-To take advantage of attitude information in the PTNTHPR NMEA sentence, two
-user-defined tags, GPSPitch and GPSRoll, must be active.
+To take advantage of attitude information in the PTNTHPR NMEA sentence, the
+user-defined tag GPSRoll, must be active.
 
 =head1 AUTHOR
 
-Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2022, Phil Harvey (philharvey66 at gmail.com)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.
