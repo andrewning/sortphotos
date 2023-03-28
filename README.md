@@ -92,6 +92,27 @@ The first five are different EXIF data tags, and the last two are file stamp dat
 
 These five are commonly used tags, but there are a wide range of EXIF and other tags available (listed [here](http://www.sno.phy.queensu.ca/~phil/exiftool/TagNames/index.html)).  For the specific file types you use, you should rearrange or add the corresponding EXIF tags you need.   -->
 
+## restrict what file extensions to process by exiftool
+
+Pass a list of extensions to the Exiftool command, filtering out which files are processed. This is passed on to the `-ext` option in Exiftool
+
+For example only process jpgs and HEIC files in a directory structure
+
+    python sortphotos.py source destination --extensions jpg HEIC
+
+## move sidecar files
+
+Many programs create sidecar files for the image files. These sidecars need to have the same file name as the main file with a different extension.
+By using the `--sidecar-extensions` options, you can tell sortphotos to look for sidecars with the list of extensions and rename all sidecar files to match the main file.
+
+For example if you have  `Image_001.jpg` and `Image_001.json` both of these files would move together. Assume `Image_001.jpg` gets moved to `2000_01_01-22_22_22.jpg` then `Image_001.json` would get moved to `2000_01_01-22_22_22.json`
+
+The `--sidecar-extensions` is typically coupled with `--extensions`. Where `--extensions` lists the file type for the main files.
+
+A strong use case for this is managing Apple Live photos. Live photos have a `heic` and a `mov` file that must have the same name so need to move together. An example of that is
+
+    python sortphotos.py source destination --extensions HEIC --sidecar-extensions mov
+
 
 ## duplicate removal
 SortPhotos will *always* check to make sure something with the same file name doesn't already exist where it's trying to write, so that you don't unintentionally overwrite a file. It this occurs it will append a number on the end of the file.  So for example if photo.jpg was taken on June 1, 2010 but 2010 > June > photo.jpg already exists then the new file will be moved as photo_1.jpg and so on.  SortPhotos will go one step further and if it finds a file of the same name, it will then run a file compare to see if the files are actually the same.  If they are *exactly* the same, it will just skip the copy (or move) operation.  This will prevent you from having duplicate files.  However you have the option of turning this off (not the name comparison, that will always happen, just the weeding out of duplicates).  This option would be useful, for example, if you are copying over a bunch of new photos that you are sure don't already exist in your organized collection of photos.  Invoke the option ``--keep-duplicates`` in order to skip duplicate detection.
