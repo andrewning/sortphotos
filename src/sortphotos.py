@@ -228,7 +228,7 @@ class ExifTool(object):
 def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
         copy_files=False, test=False, remove_duplicates=True, day_begins=0,
         additional_groups_to_ignore=['File'], additional_tags_to_ignore=[],
-        use_only_groups=None, use_only_tags=None, verbose=True, keep_filename=False):
+        use_only_groups=None, use_only_tags=None, verbose=True, keep_filename=False, extensions=None):
     """
     This function is a convenience wrapper around ExifTool based on common usage scenarios for sortphotos.py
 
@@ -268,6 +268,8 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
         a list of tags that will be exclusived searched across for date info
     verbose : bool
         True if you want to see details of file processing
+    extension: list(str)
+        a list of file extensions to process
 
     """
 
@@ -293,6 +295,9 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
     else:
         args += ['-time:all']
 
+    if extensions:
+        for ext in extensions:
+            args += ['-ext',ext]
 
     if recursive:
         args += ['-r']
@@ -490,6 +495,8 @@ def main():
                     default=None,
                     help='specify a restricted set of tags to search for date information\n\
     e.g., EXIF:CreateDate')
+    parser.add_argument('--extensions', type=str, nargs='+', default=None,
+                    help='List of explict extensions to process')
 
     # parse command line arguments
     args = parser.parse_args()
@@ -497,7 +504,7 @@ def main():
     sortPhotos(args.src_dir, args.dest_dir, args.sort, args.rename, args.recursive,
         args.copy, args.test, not args.keep_duplicates, args.day_begins,
         args.ignore_groups, args.ignore_tags, args.use_only_groups,
-        args.use_only_tags, not args.silent, args.keep_filename)
+        args.use_only_tags, not args.silent, args.keep_filename, args.extensions)
 
 if __name__ == '__main__':
     main()
