@@ -223,12 +223,17 @@ class ExifTool(object):
 
 # ---------------------------------------
 
+def get_file_action(copy_files):
+    if copy_files:
+        return '(copy): '
+    else:
+        return '(move): '
 
 
 def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
         copy_files=False, test=False, remove_duplicates=True, day_begins=0,
         additional_groups_to_ignore=['File'], additional_tags_to_ignore=[],
-        use_only_groups=None, use_only_tags=None, verbose=True, keep_filename=False):
+        use_only_groups=None, use_only_tags=None, verbose=True, keep_filename=False, extensions=None, sidecar_extensions=[]):
     """
     This function is a convenience wrapper around ExifTool based on common usage scenarios for sortphotos.py
 
@@ -268,6 +273,10 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
         a list of tags that will be exclusived searched across for date info
     verbose : bool
         True if you want to see details of file processing
+    extension: list(str)
+        a list of file extensions to process
+    sidecar_extension: list(str)
+        a list of extensions that are sidecar files to be moved with main file
 
     """
 
@@ -293,6 +302,9 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
     else:
         args += ['-time:all']
 
+    if extensions:
+        for ext in extensions:
+            args += ['-ext',ext]
 
     if recursive:
         args += ['-r']
@@ -380,10 +392,7 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
 
         if verbose:
             name = 'Destination '
-            if copy_files:
-                name += '(copy): '
-            else:
-                name += '(move): '
+            name += get_file_action(copy_files)
             print(name + dest_file)
 
 
@@ -418,19 +427,45 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
                 break
 
 
-        # finally move or copy the file
-        if test:
-            test_file_dict[dest_file] = src_file
+        files_to_move = {}
+        files_to_move[src_file]=dest_file
 
-        else:
+        ## look for sidecars
+        dest_root,dest_ext = os.path.splitext(dest_file)
+        src_root, src_ext = os.path.splitext(src_file)
+        
+        for ext in sidecar_extensions:
+            if not ext.startswith("."):
+                ext="." + ext
+            src_to_move = src_root + ext
+            dest_to_move = dest_root + ext
 
-            if fileIsIdentical:
-                continue  # ignore identical files
+            if os.path.isfile(src_to_move):
+                if verbose:
+                    verbose_str="Sidecar "
+                    verbose_str += get_file_action(copy_files)
+                    verbose_str += src_to_move
+                    verbose_str += " --> "
+                    verbose_str += dest_to_move
+                    print(verbose_str)
+                files_to_move[src_to_move]=dest_to_move
+
+
+        for src,dest in files_to_move.items():
+
+            # finally move or copy the file
+            if test:
+                test_file_dict[dest] = src
+
             else:
-                if copy_files:
-                    shutil.copy2(src_file, dest_file)
+
+                if fileIsIdentical:
+                    continue  # ignore identical files
                 else:
-                    shutil.move(src_file, dest_file)
+                    if copy_files:
+                        shutil.copy2(src, dest)
+                    else:
+                        shutil.move(src, dest)
 
 
 
@@ -490,6 +525,10 @@ def main():
                     default=None,
                     help='specify a restricted set of tags to search for date information\n\
     e.g., EXIF:CreateDate')
+    parser.add_argument('--extensions', type=str, nargs='+', default=None,
+                    help='List of explict extensions to process')
+    parser.add_argument('--sidecar-extensions', type=str, nargs='+', default=[],
+                    help='List of extensions that are sidecar files to the main file.')
 
     # parse command line arguments
     args = parser.parse_args()
@@ -497,7 +536,7 @@ def main():
     sortPhotos(args.src_dir, args.dest_dir, args.sort, args.rename, args.recursive,
         args.copy, args.test, not args.keep_duplicates, args.day_begins,
         args.ignore_groups, args.ignore_tags, args.use_only_groups,
-        args.use_only_tags, not args.silent, args.keep_filename)
+        args.use_only_tags, not args.silent, args.keep_filename, args.extensions, args.sidecar_extensions)
 
 if __name__ == '__main__':
     main()
