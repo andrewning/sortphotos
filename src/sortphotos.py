@@ -1,5 +1,4 @@
-#!/usr/bin/env python
-# encoding: utf-8
+#!/usr/bin/env python3
 """
 sortphotos.py
 
@@ -8,31 +7,35 @@ Copyright (c) S. Andrew Ning. All rights reserved.
 
 """
 
-from __future__ import print_function
-from __future__ import with_statement
-import subprocess
-import os
-import sys
-import shutil
-try:
-    import json
-except:
-    import simplejson as json
-import filecmp
-from datetime import datetime, timedelta
-import re
-import locale
+from __future__ import annotations
 
+import argparse
+import concurrent.futures
+import filecmp
+import json
+import locale
+import logging
+import os
+import re
+import shutil
+import subprocess
+import sys
+from datetime import datetime, timedelta
+from fnmatch import fnmatch
+from pathlib import Path
+from typing import Any
 
 # Setting locale to the 'local' value
 locale.setlocale(locale.LC_ALL, '')
 
-exiftool_location = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'Image-ExifTool', 'exiftool')
+logger = logging.getLogger('sortphotos')
+
+exiftool_location: str = str(Path(__file__).resolve().parent / 'Image-ExifTool' / 'exiftool')
 
 
 # -------- convenience methods -------------
 
-def parse_date_exif(date_string):
+def parse_date_exif(date_string: str) -> datetime | None:
     """
     extract date info from EXIF data
     YYYY:MM:DD HH:MM:SS
@@ -65,7 +68,7 @@ def parse_date_exif(date_string):
     second = 0
 
     if len(elements) > 1:
-        time_entries = re.split('(\+|-|Z)', elements[1])  # ['HH:MM:SS', '+', 'HH:MM']
+        time_entries = re.split(r'(\+|-|Z)', elements[1])  # ['HH:MM:SS', '+', 'HH:MM']
         time = time_entries[0].split(':')  # ['HH', 'MM', 'SS']
 
         if len(time) == 3:
@@ -112,24 +115,26 @@ def parse_date_exif(date_string):
 
 
 
-def get_oldest_timestamp(data, additional_groups_to_ignore, additional_tags_to_ignore, print_all_tags=False):
+def get_oldest_timestamp(
+    data: dict[str, Any],
+    additional_groups_to_ignore: list[str],
+    additional_tags_to_ignore: list[str],
+) -> tuple[str, datetime | None, list[str]]:
     """data as dictionary from json.  Should contain only time stamps except SourceFile"""
 
     # save only the oldest date
     date_available = False
     oldest_date = datetime.now()
-    oldest_keys = []
+    oldest_keys: list[str] = []
 
     # save src file
     src_file = data['SourceFile']
 
-    # ssetup tags to ignore
+    # setup tags to ignore
     ignore_groups = ['ICC_Profile'] + additional_groups_to_ignore
     ignore_tags = ['SourceFile', 'XMP:HistoryWhen'] + additional_tags_to_ignore
 
-
-    if print_all_tags:
-        print('All relevant tags:')
+    logger.debug('All relevant tags:')
 
     # run through all keys
     for key in data.keys():
@@ -139,8 +144,7 @@ def get_oldest_timestamp(data, additional_groups_to_ignore, additional_tags_to_i
 
             date = data[key]
 
-            if print_all_tags:
-                print(str(key) + ', ' + str(date))
+            logger.debug(f'{key}, {date}')
 
             # (rare) check if multiple dates returned in a list, take the first one which is the oldest
             if isinstance(date, list):
@@ -148,7 +152,7 @@ def get_oldest_timestamp(data, additional_groups_to_ignore, additional_tags_to_i
 
             try:
                 exifdate = parse_date_exif(date)  # check for poor-formed exif data, but allow continuation
-            except Exception as e:
+            except Exception:
                 exifdate = None
 
             if exifdate and exifdate < oldest_date:
@@ -162,44 +166,63 @@ def get_oldest_timestamp(data, additional_groups_to_ignore, additional_tags_to_i
     if not date_available:
         oldest_date = None
 
-    if print_all_tags:
-        print()
-
     return src_file, oldest_date, oldest_keys
 
 
 
-def check_for_early_morning_photos(date, day_begins):
+def check_for_early_morning_photos(date: datetime, day_begins: int) -> datetime:
     """check for early hour photos to be grouped with previous day"""
 
     if date.hour < day_begins:
-        print('moving this photo to the previous day for classification purposes (day_begins=' + str(day_begins) + ')')
-        date = date - timedelta(hours=date.hour+1)  # push it to the day before for classificiation purposes
+        logger.debug(f'moving this photo to the previous day for classification purposes (day_begins={day_begins})')
+        date = date - timedelta(hours=date.hour+1)  # push it to the day before for classification purposes
 
     return date
 
 
+def _transfer_file(
+    src: str,
+    dest: str,
+    copy: bool,
+) -> tuple[str, str, str | None]:
+    """Move or copy a single file. Returns (src, dest, error_message_or_None)."""
+    try:
+        if copy:
+            shutil.copy2(src, dest)
+        else:
+            shutil.move(src, dest)
+        return (src, dest, None)
+    except (PermissionError, OSError) as e:
+        return (src, dest, str(e))
+
+
 #  this class is based on code from Sven Marnach (http://stackoverflow.com/questions/10075115/call-exiftool-from-a-python-script)
-class ExifTool(object):
+class ExifTool:
     """used to run ExifTool from Python and keep it open"""
 
-    sentinel = "{ready}"
+    sentinel: str = "{ready}"
 
-    def __init__(self, executable=exiftool_location, verbose=False):
+    def __init__(self, executable: str = exiftool_location) -> None:
         self.executable = executable
-        self.verbose = verbose
 
-    def __enter__(self):
+    def __enter__(self) -> ExifTool:
         self.process = subprocess.Popen(
             ['perl', self.executable, "-stay_open", "True",  "-@", "-"],
             stdin=subprocess.PIPE, stdout=subprocess.PIPE)
         return self
 
-    def __exit__(self, exc_type, exc_value, traceback):
-        self.process.stdin.write(b'-stay_open\nFalse\n')
-        self.process.stdin.flush()
+    def __exit__(self, exc_type: type | None, exc_value: BaseException | None, traceback: Any) -> None:
+        try:
+            self.process.stdin.write(b'-stay_open\nFalse\n')
+            self.process.stdin.flush()
+            self.process.stdin.close()
+            self.process.stdout.close()
+            self.process.wait(timeout=30)
+        except Exception:
+            self.process.kill()
+            self.process.wait()
 
-    def execute(self, *args):
+    def execute(self, *args: str) -> str:
         args = args + ("-execute\n",)
         self.process.stdin.write(str.join("\n", args).encode('utf-8'))
         self.process.stdin.flush()
@@ -207,28 +230,39 @@ class ExifTool(object):
         fd = self.process.stdout.fileno()
         while not output.rstrip(' \t\n\r').endswith(self.sentinel):
             increment = os.read(fd, 4096)
-            if self.verbose:
-                sys.stdout.write(increment.decode('utf-8'))
+            logger.debug(increment.decode('utf-8'))
             output += increment.decode('utf-8')
         return output.rstrip(' \t\n\r')[:-len(self.sentinel)]
 
-    def get_metadata(self, *args):
-
+    def get_metadata(self, *args: str) -> list[dict[str, Any]]:
         try:
             return json.loads(self.execute(*args))
-        except ValueError:
-            sys.stdout.write('No files to parse or invalid data\n')
-            exit()
+        except ValueError as e:
+            raise RuntimeError('No files to parse or invalid data') from e
 
 
 # ---------------------------------------
 
 
 
-def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
-        copy_files=False, test=False, remove_duplicates=True, day_begins=0,
-        additional_groups_to_ignore=['File'], additional_tags_to_ignore=[],
-        use_only_groups=None, use_only_tags=None, verbose=True, keep_filename=False):
+def sortPhotos(
+    src_dir: str,
+    dest_dir: str,
+    sort_format: str,
+    rename_format: str | None,
+    recursive: bool = False,
+    copy_files: bool = False,
+    test: bool = False,
+    remove_duplicates: bool = True,
+    day_begins: int = 0,
+    additional_groups_to_ignore: list[str] | None = None,
+    additional_tags_to_ignore: list[str] | None = None,
+    use_only_groups: list[str] | None = None,
+    use_only_tags: list[str] | None = None,
+    keep_filename: bool = False,
+    exclude_patterns: list[str] | None = None,
+    jobs: int = 1,
+) -> dict[str, int]:
     """
     This function is a convenience wrapper around ExifTool based on common usage scenarios for sortphotos.py
 
@@ -240,10 +274,10 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
         directory where you want to move/copy the files to
     sort_format : str
         date format code for how you want your photos sorted
-        (https://docs.python.org/2/library/datetime.html#strftime-and-strptime-behavior)
+        (https://docs.python.org/3/library/datetime.html#strftime-and-strptime-behavior)
     rename_format : str
         date format code for how you want your files renamed
-        (https://docs.python.org/2/library/datetime.html#strftime-and-strptime-behavior)
+        (https://docs.python.org/3/library/datetime.html#strftime-and-strptime-behavior)
         None to not rename file
     recursive : bool
         True if you want src_dir to be searched recursively for files (False to search only in top-level of src_dir)
@@ -258,21 +292,32 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
     day_begins : int
         what hour of the day you want the day to begin (only for classification purposes).  Defaults at 0 as midnight.
         Can be used to group early morning photos with the previous day.  must be a number between 0-23
-    additional_groups_to_ignore : list(str)
+    additional_groups_to_ignore : list[str]
         tag groups that will be ignored when searching for file data.  By default File is ignored
-    additional_tags_to_ignore : list(str)
+    additional_tags_to_ignore : list[str]
         specific tags that will be ignored when searching for file data.
-    use_only_groups : list(str)
-        a list of groups that will be exclusived searched across for date info
-    use_only_tags : list(str)
-        a list of tags that will be exclusived searched across for date info
-    verbose : bool
-        True if you want to see details of file processing
+    use_only_groups : list[str]
+        a list of groups that will be exclusively searched across for date info
+    use_only_tags : list[str]
+        a list of tags that will be exclusively searched across for date info
+    exclude_patterns : list[str]
+        glob patterns for files to exclude (e.g., ['*.raw', 'backup/*'])
+    jobs : int
+        number of parallel workers for file operations (default: 1 for serial)
 
+    Returns
+    -------
+    dict[str, int]
+        Statistics about the operation (files processed, skipped, errors, etc.)
     """
 
+    if additional_groups_to_ignore is None:
+        additional_groups_to_ignore = ['File']
+    if additional_tags_to_ignore is None:
+        additional_tags_to_ignore = []
+
     # some error checking
-    if not os.path.exists(src_dir):
+    if not Path(src_dir).exists():
         raise Exception('Source directory does not exist')
 
     # setup arguments to exiftool
@@ -283,12 +328,12 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
         additional_groups_to_ignore = []
         additional_tags_to_ignore = []
         for t in use_only_tags:
-            args += ['-' + t]
+            args += [f'-{t}']
 
     elif use_only_groups is not None:
         additional_groups_to_ignore = []
         for g in use_only_groups:
-            args += ['-' + g + ':Time:All']
+            args += [f'-{g}:Time:All']
 
     else:
         args += ['-time:all']
@@ -299,19 +344,39 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
 
     args += [src_dir]
 
+    # statistics tracking
+    stats: dict[str, int] = {
+        'processed': 0,
+        'skipped_no_date': 0,
+        'skipped_hidden': 0,
+        'skipped_duplicate': 0,
+        'skipped_excluded': 0,
+        'renamed_collision': 0,
+        'errors': 0,
+    }
 
     # get all metadata
-    with ExifTool(verbose=verbose) as e:
-        print('Preprocessing with ExifTool.  May take a while for a large number of files.')
+    with ExifTool() as e:
+        logger.info('Preprocessing with ExifTool.  May take a while for a large number of files.')
         sys.stdout.flush()
         metadata = e.get_metadata(*args)
 
     # setup output to screen
     num_files = len(metadata)
-    print()
 
     if test:
-        test_file_dict = {}
+        test_file_dict: dict[str, str] = {}
+
+    # collect pending file transfers for parallel execution
+    pending_transfers: list[tuple[str, str]] = []
+
+    # determine if we should show progress bar
+    show_progress = logger.getEffectiveLevel() >= logging.INFO and num_files > 0
+    try:
+        from tqdm import tqdm
+        progress = tqdm(total=num_files, disable=not show_progress, unit='file')
+    except ImportError:
+        progress = None
 
     # parse output extracting oldest relevant date
     for idx, data in enumerate(metadata):
@@ -319,40 +384,39 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
         # extract timestamp date for photo
         src_file, date, keys = get_oldest_timestamp(data, additional_groups_to_ignore, additional_tags_to_ignore)
 
-        # fixes further errors when using unicode characters like "\u20AC"
-        src_file.encode('utf-8')
-
-        if verbose:
-        # write out which photo we are at
+        if logger.getEffectiveLevel() <= logging.DEBUG:
             ending = ']'
             if test:
                 ending = '] (TEST - no files are being moved/copied)'
-            print('[' + str(idx+1) + '/' + str(num_files) + ending)
-            print('Source: ' + src_file)
-        else:
-            # progress bar
-            numdots = int(20.0*(idx+1)/num_files)
-            sys.stdout.write('\r')
-            sys.stdout.write('[%-20s] %d of %d ' % ('='*numdots, idx+1, num_files))
-            sys.stdout.flush()
+            logger.debug(f'[{idx+1}/{num_files}{ending}')
+            logger.debug(f'Source: {src_file}')
+
+        # update progress bar
+        if progress is not None:
+            progress.update(1)
+
+        # check for excluded patterns
+        if exclude_patterns:
+            src_path = Path(src_file)
+            if any(fnmatch(src_path.name, pat) or fnmatch(str(src_path), pat) for pat in exclude_patterns):
+                logger.debug(f'Excluded by pattern: {src_file}')
+                stats['skipped_excluded'] += 1
+                continue
 
         # check if no valid date found
         if not date:
-            if verbose:
-                print('No valid dates were found using the specified tags.  File will remain where it is.')
-                print()
-                # sys.stdout.flush()
+            logger.debug('No valid dates were found using the specified tags.  File will remain where it is.')
+            stats['skipped_no_date'] += 1
             continue
 
         # ignore hidden files
-        if os.path.basename(src_file).startswith('.'):
-            print('hidden file.  will be skipped')
-            print()
+        if Path(src_file).name.startswith('.'):
+            logger.debug('hidden file.  will be skipped')
+            stats['skipped_hidden'] += 1
             continue
 
-        if verbose:
-            print('Date/Time: ' + str(date))
-            print('Corresponding Tags: ' + ', '.join(keys))
+        logger.debug(f'Date/Time: {date}')
+        logger.debug(f'Corresponding Tags: {", ".join(keys)}')
 
         # early morning photos can be grouped with previous day (depending on user setting)
         date = check_for_early_morning_photos(date, day_begins)
@@ -360,31 +424,34 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
 
         # create folder structure
         dir_structure = date.strftime(sort_format)
-        dirs = dir_structure.split('/')
-        dest_file = dest_dir
-        for thedir in dirs:
-            dest_file = os.path.join(dest_file, thedir)
-            if not test and not os.path.exists(dest_file):
-                os.makedirs(dest_file)
+        dest_path = Path(dest_dir) / dir_structure
+        if not test:
+            try:
+                dest_path.mkdir(parents=True, exist_ok=True)
+            except PermissionError:
+                logger.error(f'Permission denied creating directory: {dest_path}')
+                stats['errors'] += 1
+                continue
+            except OSError as e:
+                logger.error(f'Error creating directory {dest_path}: {e}')
+                stats['errors'] += 1
+                continue
 
         # rename file if necessary
-        filename = os.path.basename(src_file)
+        filename = Path(src_file).name
 
         if rename_format is not None and date is not None:
-            _, ext = os.path.splitext(filename)
+            ext = Path(filename).suffix
             filename = date.strftime(rename_format) + ext.lower()
 
         # setup destination file
-        dest_file = os.path.join(dest_file, filename)
+        dest_file = str(dest_path / filename)
         root, ext = os.path.splitext(dest_file)
 
-        if verbose:
-            name = 'Destination '
-            if copy_files:
-                name += '(copy): '
-            else:
-                name += '(move): '
-            print(name + dest_file)
+        if copy_files:
+            logger.debug(f'Destination (copy): {dest_file}')
+        else:
+            logger.debug(f'Destination (move): {dest_file}')
 
 
         # check for collisions
@@ -393,26 +460,26 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
 
         while True:
 
-            if (not test and os.path.isfile(dest_file)) or (test and dest_file in test_file_dict.keys()):  # check for existing name
+            if (not test and Path(dest_file).is_file()) or (test and dest_file in test_file_dict):  # check for existing name
                 if test:
                     dest_compare = test_file_dict[dest_file]
                 else:
                     dest_compare = dest_file
                 if remove_duplicates and filecmp.cmp(src_file, dest_compare):  # check for identical files
                     fileIsIdentical = True
-                    if verbose:
-                        print('Identical file already exists.  Duplicate will be ignored.\n')
+                    logger.debug('Identical file already exists.  Duplicate will be ignored.')
+                    stats['skipped_duplicate'] += 1
                     break
 
                 else:  # name is same, but file is different
                     if keep_filename:
-                        orig_filename = os.path.splitext(os.path.basename(src_file))[0]
-                        dest_file = root + '_' + orig_filename + '_' + str(append) + ext
+                        orig_filename = Path(src_file).stem
+                        dest_file = f'{root}_{orig_filename}_{append}{ext}'
                     else:
-                        dest_file = root + '_' + str(append) + ext
+                        dest_file = f'{root}_{append}{ext}'
                     append += 1
-                    if verbose:
-                        print('Same name already exists...renaming to: ' + dest_file)
+                    stats['renamed_collision'] += 1
+                    logger.debug(f'Same name already exists...renaming to: {dest_file}')
 
             else:
                 break
@@ -421,30 +488,66 @@ def sortPhotos(src_dir, dest_dir, sort_format, rename_format, recursive=False,
         # finally move or copy the file
         if test:
             test_file_dict[dest_file] = src_file
+            if not fileIsIdentical:
+                stats['processed'] += 1
 
         else:
 
             if fileIsIdentical:
                 continue  # ignore identical files
             else:
-                if copy_files:
-                    shutil.copy2(src_file, dest_file)
-                else:
-                    shutil.move(src_file, dest_file)
+                pending_transfers.append((src_file, dest_file))
+                stats['processed'] += 1
+
+    if progress is not None:
+        progress.close()
+
+    # execute file transfers
+    if not test and pending_transfers:
+        if jobs > 1:
+            logger.info(f'Transferring {len(pending_transfers)} files with {jobs} workers...')
+            with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as pool:
+                futures = {
+                    pool.submit(_transfer_file, s, d, copy_files): (s, d)
+                    for s, d in pending_transfers
+                }
+                for future in concurrent.futures.as_completed(futures):
+                    src, dest, error = future.result()
+                    if error:
+                        logger.error(f'Error: {src} -> {dest}: {error}')
+                        stats['errors'] += 1
+                        stats['processed'] -= 1
+        else:
+            for src, dest in pending_transfers:
+                src, dest, error = _transfer_file(src, dest, copy_files)
+                if error:
+                    logger.error(f'Error: {src} -> {dest}: {error}')
+                    stats['errors'] += 1
+                    stats['processed'] -= 1
+
+    # print summary
+    action = 'copy' if copy_files else 'move'
+    prefix = 'Would ' if test else ''
+    logger.info('')
+    logger.info(f'--- {"Dry Run " if test else ""}Summary ---')
+    logger.info(f'{prefix}{action}: {stats["processed"]} files')
+    if stats['skipped_no_date']:
+        logger.info(f'Skipped (no date): {stats["skipped_no_date"]}')
+    if stats['skipped_hidden']:
+        logger.info(f'Skipped (hidden): {stats["skipped_hidden"]}')
+    if stats['skipped_duplicate']:
+        logger.info(f'Skipped (duplicate): {stats["skipped_duplicate"]}')
+    if stats['skipped_excluded']:
+        logger.info(f'Skipped (excluded): {stats["skipped_excluded"]}')
+    if stats['renamed_collision']:
+        logger.info(f'Renamed (collision): {stats["renamed_collision"]}')
+    if stats['errors']:
+        logger.info(f'Errors: {stats["errors"]}')
+
+    return stats
 
 
-
-        if verbose:
-            print()
-            # sys.stdout.flush()
-
-
-    if not verbose:
-        print()
-
-
-def main():
-    import argparse
+def main() -> None:
 
     # setup command line parsing
     parser = argparse.ArgumentParser(formatter_class=argparse.RawTextHelpFormatter,
@@ -453,17 +556,19 @@ def main():
     parser.add_argument('dest_dir', type=str, help='destination directory')
     parser.add_argument('-r', '--recursive', action='store_true', help='search src_dir recursively')
     parser.add_argument('-c', '--copy', action='store_true', help='copy files instead of move')
-    parser.add_argument('-s', '--silent', action='store_true', help='don\'t display parsing details.')
+    parser.add_argument('-s', '--silent', action='store_true', help='suppress all output except errors (alias for --quiet)')
     parser.add_argument('-t', '--test', action='store_true', help='run a test.  files will not be moved/copied\ninstead you will just a list of would happen')
+    parser.add_argument('-v', '--verbose', action='store_true', help='show detailed file processing information')
+    parser.add_argument('--quiet', action='store_true', help='suppress all output except errors')
     parser.add_argument('--sort', type=str, default='%Y/%m-%b',
                         help="choose destination folder structure using datetime format \n\
-    https://docs.python.org/2/library/datetime.html#strftime-and-strptime-behavior. \n\
+    https://docs.python.org/3/library/datetime.html#strftime-and-strptime-behavior. \n\
     Use forward slashes / to indicate subdirectory(ies) (independent of your OS convention). \n\
     The default is '%%Y/%%m-%%b', which separates by year then month \n\
     with both the month number and name (e.g., 2012/02-Feb).")
     parser.add_argument('--rename', type=str, default=None,
                         help="rename file using format codes \n\
-    https://docs.python.org/2/library/datetime.html#strftime-and-strptime-behavior. \n\
+    https://docs.python.org/3/library/datetime.html#strftime-and-strptime-behavior. \n\
     default is None which just uses original filename")
     parser.add_argument('--keep-filename', action='store_true',
                         help='In case of duplicated output filenames an increasing number and the original file name will be appended',
@@ -490,14 +595,28 @@ def main():
                     default=None,
                     help='specify a restricted set of tags to search for date information\n\
     e.g., EXIF:CreateDate')
+    parser.add_argument('--exclude', type=str, nargs='+',
+                    default=None,
+                    help='glob patterns for files to exclude\n\
+    e.g., --exclude "*.raw" "backup/*"')
+    parser.add_argument('-j', '--jobs', type=int, default=1,
+                    help='number of parallel workers for file operations (default: 1)')
 
     # parse command line arguments
     args = parser.parse_args()
 
+    # configure logging
+    if args.verbose:
+        logging.basicConfig(level=logging.DEBUG, format='%(message)s')
+    elif args.silent or args.quiet:
+        logging.basicConfig(level=logging.WARNING, format='%(message)s')
+    else:
+        logging.basicConfig(level=logging.INFO, format='%(message)s')
+
     sortPhotos(args.src_dir, args.dest_dir, args.sort, args.rename, args.recursive,
         args.copy, args.test, not args.keep_duplicates, args.day_begins,
         args.ignore_groups, args.ignore_tags, args.use_only_groups,
-        args.use_only_tags, not args.silent, args.keep_filename)
+        args.use_only_tags, args.keep_filename, args.exclude, args.jobs)
 
 if __name__ == '__main__':
     main()
