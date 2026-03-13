@@ -11,7 +11,7 @@
 #               4) Jaroslav Stepanek via rt.cpan.org
 #               5) Nick Livchits private communication
 #               6) Sreerag Raghavan private communication (SM-C200)
-#               IB) Iliah Borg private communcation (LibRaw)
+#               IB) Iliah Borg private communication (LibRaw)
 #               NJ) Niels Kristian Bech Jensen private communication
 #------------------------------------------------------------------------------
 
@@ -22,10 +22,11 @@ use vars qw($VERSION %samsungLensTypes);
 use Image::ExifTool qw(:DataAccess :Utils);
 use Image::ExifTool::Exif;
 
-$VERSION = '1.43';
+$VERSION = '1.48';
 
 sub WriteSTMN($$$);
 sub ProcessINFO($$$);
+sub ProcessSamsungMeta($$$);
 sub ProcessSamsungIFD($$$);
 
 # Samsung LensType lookup
@@ -111,7 +112,7 @@ my %formatMinMax = (
         This is a standard-format IFD found in the maker notes of some Samsung
         models, except that the entry count is a 4-byte integer and the offsets are
         relative to the end of the IFD.  Currently, no tags in this IFD are known,
-        so the Unknown (-u) or Verbose (-v) option must be used to see this
+        so the L<Unknown|../ExifTool.html#Unknown> (-u) or L<Verbose|../ExifTool.html#Verbose> (-v) option must be used to see this
         information.
     },
     GROUPS => { 0 => 'MakerNotes', 2 => 'Image' },
@@ -234,6 +235,7 @@ my %formatMinMax = (
             0x500103c => 'WB600 / VLUU WB600 / WB610',
             0x500133e => 'WB150 / WB150F / WB152 / WB152F / WB151',
             0x5a0000f => 'WB5000 / HZ25W',
+            0x5a0001e => 'WB5500 / VLUU WB5500 / HZ50W',
             0x6001036 => 'EX1',
             0x700131c => 'VLUU SH100, SH100',
             0x27127002 => 'SMX-C20N',
@@ -924,10 +926,20 @@ my %formatMinMax = (
     4 => { Name => 'ThumbnailOffset', IsOffset => 1 },
 );
 
+# information extracted from "ssuniqueid\0" APP5 (ref PH)
+%Image::ExifTool::Samsung::APP5 = (
+    GROUPS => { 0 => 'MakerNotes', 2 => 'Camera' },
+    ssuniqueid => {
+        Name => 'UniqueID',
+        # 32 bytes - some sort of serial number?
+        ValueConv => 'unpack("H*",$val)',
+    },
+);
+
 # information extracted from Samsung trailer (ie. Samsung SM-T805 "Sound & Shot" JPEG) (ref PH)
 %Image::ExifTool::Samsung::Trailer = (
     GROUPS => { 0 => 'MakerNotes', 2 => 'Other' },
-    VARS => { NO_ID => 1 },
+    VARS => { NO_ID => 1, HEX_ID => 0 },
     NOTES => q{
         Tags extracted from the trailer of JPEG images written when using certain
         features (such as "Sound & Shot" or "Shot & More") from Samsung models such
@@ -948,6 +960,8 @@ my %formatMinMax = (
    # 0x08e0-name - seen 'Panorama_Shot_Info'
    # 0x08e0 - string, seen 'PanoramaShot'
    # 0x08e1-name - seen 'Motion_Panorama_Info'
+   # 0x0910-name - seen 'Front_Cam_Selfie_Info'
+   # 0x0910 - string, seen 'Front_Cam_Selfie_Info'
    # 0x09e0-name - seen 'Burst_Shot_Info'
    # 0x09e0 - string, seen '489489125'
    # 0x0a01-name - seen 'Image_UTC_Data'
@@ -963,27 +977,95 @@ my %formatMinMax = (
     '0x0a30' => { Name => 'EmbeddedVideoFile', Groups => { 2 => 'Video' }, Binary => 1 }, #forum7161
    # 0x0aa1-name - seen 'MCC_Data'
    # 0x0aa1 - seen '234','222'
+   # 0x0ab0-name - seen 'DualShot_Meta_Info'
     '0x0ab1-name' => 'DepthMapName', # seen 'DualShot_DepthMap_1' (SM-N950U)
     '0x0ab1' => { Name => 'DepthMapData', Binary => 1 },
    # 0x0ab3-name - seen 'DualShot_Extra_Info' (SM-N950U)
     '0x0ab3' => { # (SM-N950U)
-        Name => 'DualShotInfo',
-        SubDirectory => { TagTable => 'Image::ExifTool::Samsung::DualShotInfo' },
+        Name => 'DualShotExtra',
+        SubDirectory => { TagTable => 'Image::ExifTool::Samsung::DualShotExtra' },
      },
    # 0x0ac0-name - seen 'ZoomInOut_Info' (SM-N950U)
    # 0x0ac0 - 2048 bytes of interesting stuff including firmware version? (SM-N950U)
+    '0x0b40' => { # (SM-N975X front camera)
+        Name => 'SingleShotMeta',
+        SubDirectory => { TagTable => 'Image::ExifTool::Samsung::SingleShotMeta' },
+     },
+   # 0x0b41-name - seen 'SingeShot_DepthMap_1' (Yes, "Singe") (SM-N975X front camera)
+    '0x0b41' => { Name => 'SingleShotDepthMap', Binary => 1 },
    # 0xa050-name - seen 'Jpeg360_2D_Info' (Samsung Gear 360)
    # 0xa050 - seen 'Jpeg3602D' (Samsung Gear 360)
 );
 
 # DualShot Extra Info (ref PH)
-%Image::ExifTool::Samsung::DualShotInfo = (
+%Image::ExifTool::Samsung::DualShotExtra = (
     PROCESS_PROC => \&Image::ExifTool::ProcessBinaryData,
     GROUPS => { 0 => 'MakerNotes', 2 => 'Image' },
     FIRST_ENTRY => 0,
     FORMAT => 'int32u',
-    9 => 'DepthMapWidth',
-    10 => 'DepthMapHeight',
+    # This is a pain, but the DepthMapWidth/Height move around in this record.
+    # In all of my samples so far, the bytes "01 00 ff ff" precede these tags.
+    # I have seen this byte sequence at offsets 32, 60, 64 and 68, so look for
+    # it in bytes 32-95, and use its location to adjust the tag positions
+    8 => {
+        Name => 'DualShotDummy',
+        Format => 'undef[64]',
+        Hidden => 1,
+        Hook => q{
+            if ($size >= 96) {
+                my $tmp = substr($$dataPt, $pos, 64);
+                if ($tmp =~ /\x01\0\xff\xff/g and not pos($tmp) % 4) {
+                    $$self{DepthMapTagPos} = pos($tmp);
+                    $varSize += $$self{DepthMapTagPos} - 32;
+                }
+            }
+        },
+        RawConv => 'undef', # not a real tag
+    },
+    16 => {
+        Name => 'DepthMapWidth',
+        Condition => '$$self{DepthMapTagPos}',
+        Notes => 'index varies depending on model',
+    },
+    17 => {
+        Name => 'DepthMapHeight',
+        Condition => '$$self{DepthMapTagPos}',
+        Notes => 'index varies depending on model',
+    },
+);
+
+# SingleShot Meta Info (ref PH) (SM-N975X front camera)
+%Image::ExifTool::Samsung::SingleShotMeta = (
+    PROCESS_PROC => \&ProcessSamsungMeta,
+    GROUPS => { 0 => 'MakerNotes', 2 => 'Image' },
+    inputWidth          => { },
+    inputHeight         => { },
+    outputWidth         => { },
+    outputHeight        => { },
+    segWidth            => { },
+    segHeight           => { },
+    depthSWWidth        => { },
+    depthSWHeight       => { },
+    depthHWWidth        => { },
+    depthHWHeight       => { },
+    flipStatus          => { },
+    lensFacing          => { },
+    deviceOrientation   => { },
+    objectOrientation   => { },
+    isArtBokeh          => { },
+    beautyRetouchLevel  => { },
+    beautyColorLevel    => { },
+    effectType          => { },
+    effectStrength      => { },
+    blurStrength        => { },
+    spinStrength        => { },
+    zoomStrength        => { },
+    colorpopStrength    => { },
+    monoStrength        => { },
+    sidelightStrength   => { },
+    vintageStrength     => { },
+    bokehShape          => { },
+    perfMode            => { },
 );
 
 # Samsung composite tags
@@ -1012,7 +1094,19 @@ my %formatMinMax = (
             my $tiff = MakeTiffHeader($val[1],$val[2],1,8) . ${$val[0]};
             return \$tiff;
         },
-    }
+    },
+    SingleShotDepthMapTiff => {
+        Require => {
+            0 => 'SingleShotDepthMap',
+            1 => 'SegWidth',
+            2 => 'SegHeight',
+        },
+        ValueConv => q{
+            return undef unless length ${$val[0]} == $val[1] * $val[2];
+            my $tiff = MakeTiffHeader($val[1],$val[2],1,8) . ${$val[0]};
+            return \$tiff;
+        },
+    },
 );
 
 # add our composite tags
@@ -1077,6 +1171,54 @@ sub ProcessINFO($$$)
         }
         $et->HandleTag($tagTablePtr, $tag, $val);
         $pos += 8;
+    }
+    return 1;
+}
+
+#------------------------------------------------------------------------------
+# Read Samsung Meta Info from trailer
+# Inputs: 0) ExifTool object ref, 1) source dirInfo ref, 2) tag table ref
+# Returns: true on success
+sub ProcessSamsungMeta($$$)
+{
+    my ($et, $dirInfo, $tagTablePtr) = @_;
+    my $dirName = $$dirInfo{DirName};
+    my $dataPt = $$dirInfo{DataPt};
+    my $pos = $$dirInfo{DirStart};
+    my $end = $$dirInfo{DirLen} + $pos;
+    unless ($pos + 8 <= $end and substr($$dataPt, $pos, 4) eq 'DOFS') {
+        $et->Warn("Unrecognized $dirName data");
+        return 0;
+    }
+    my $ver = Get32u($dataPt, $pos + 4);
+    if ($ver == 3) {
+        unless ($pos + 18 <= $end and Get32u($dataPt, $pos + 12) == $$dirInfo{DirLen}) {
+            $et->Warn("Unrecognized $dirName version $ver data");
+            return 0;
+        }
+        my $num = Get16u($dataPt, $pos + 16);
+        $et->VerboseDir("$dirName version $ver", $num);
+        $pos += 18;
+        my ($i, $val);
+        for ($i=0; $i<$num; ++$i) {
+            last if $pos + 2 > $end;
+            my ($x, $n) = unpack("x${pos}CC", $$dataPt);
+            $pos += 2;
+            last if $pos + $n + 2 > $end;
+            my $tag = substr($$dataPt, $pos, $n);
+            my $len = Get16u($dataPt, $pos + $n);
+            $pos += $n + 2;
+            last if $pos + $len > $end;
+            if ($len == 4) {
+                $val = Get32u($dataPt, $pos);
+            } else {
+                my $tmp = substr($$dataPt, $pos, $len);
+                $val = \$pos;
+            }
+            $et->HandleTag($tagTablePtr, $tag, $val);
+            $pos += $len;
+        }
+        $et->Warn("Unexpected end of $dirName version $ver $i $num data") if $i < $num;
     }
     return 1;
 }
@@ -1305,7 +1447,7 @@ Samsung maker notes in EXIF information.
 
 =head1 AUTHOR
 
-Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2020, Phil Harvey (philharvey66 at gmail.com)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

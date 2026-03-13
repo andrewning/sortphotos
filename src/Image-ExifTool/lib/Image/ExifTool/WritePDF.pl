@@ -298,15 +298,13 @@ sub WritePDF($$)
     # not a valid PDF file unless we got a version number
     # (note: can't just check $$info{PDFVersion} due to possibility of XMP-pdf:PDFVersion)
     my $vers = $newTool->GetInfo('PDF:PDFVersion');
-    ($pdfVer) = values %$vers;
+    # take highest version number if multiple versions in an incremental save
+    ($pdfVer) = sort { $b <=> $a } values %$vers;
     $pdfVer or $et->Error('Missing PDF:PDFVersion'), return 0;
     # check version number
     if ($pdfVer > 1.7) {
-        if ($pdfVer >= 2.0) {
-            $et->Error("Can't yet write PDF version $pdfVer"); # (future major version changes)
-            return 1;
-        }
-        $et->Warn("ExifTool is untested with PDF version $pdfVer files", 1);
+        $et->Warn("The PDF $pdfVer specification is not freely available", 1);
+        # (so writing by ExifTool is based on trial and error)
     }
     # fail if we had any serious errors while extracting information
     if ($capture{Error} or $$info{Error}) {
@@ -751,7 +749,7 @@ C<PDF-update> pseudo group).
 
 =head1 AUTHOR
 
-Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2020, Phil Harvey (philharvey66 at gmail.com)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

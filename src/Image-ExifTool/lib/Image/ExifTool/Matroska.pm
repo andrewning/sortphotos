@@ -28,7 +28,7 @@ my %noYes = ( 0 => 'No', 1 => 'Yes' );
         The following tags are extracted from Matroska multimedia container files. 
         This container format is used by file types such as MKA, MKV, MKS and WEBM. 
         For speed, ExifTool extracts tags only up to the first Cluster unless the
-        Verbose (-v) or Unknown = 2 (-U) option is used.  See
+        L<Verbose|../ExifTool.html#Verbose> (-v) or L<Unknown|../ExifTool.html#Unknown> = 2 (-U) option is used.  See
         L<http://www.matroska.org/technical/specs/index.html> for the official
         Matroska specification.
     },
@@ -798,7 +798,7 @@ sub ProcessMKV($$)
             # just skip unknown and large data blocks
             if (not $tagInfo or $more > 10000000) {
                 # don't try to skip very large blocks unless LargeFileSupport is enabled
-                last if $more > 0x80000000 and not $et->Options('LargeFileSupport');
+                last if $more >= 0x80000000 and not $et->Options('LargeFileSupport');
                 $raf->Seek($more, 1) or last;
                 $buff = '';
                 $dataPos += $dataLen + $more;
@@ -912,7 +912,7 @@ information from Matroska multimedia files (MKA, MKV, MKS and WEBM).
 
 =head1 AUTHOR
 
-Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2020, Phil Harvey (philharvey66 at gmail.com)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

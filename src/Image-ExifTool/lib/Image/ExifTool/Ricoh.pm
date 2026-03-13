@@ -19,7 +19,7 @@ use vars qw($VERSION);
 use Image::ExifTool qw(:DataAccess :Utils);
 use Image::ExifTool::Exif;
 
-$VERSION = '1.33';
+$VERSION = '1.34';
 
 sub ProcessRicohText($$$);
 sub ProcessRicohRMETA($$$);
@@ -330,9 +330,13 @@ my %ricohLensIDs = (
         },
     },
     0x1018 => { #3
-        Name => 'CropMode35mm',
+        Name => 'CropMode',
         Writable => 'int16u',
-        PrintConv => { 0 => 'Off', 1 => 'On' },
+        PrintConv => {
+            0 => 'Off',
+            1 => 'On (35mm)',
+            2 => 'On (47mm)', #IB
+        },
     },
     0x1019 => { #3
         Name => 'NDFilter',
@@ -1121,7 +1125,7 @@ interpret Ricoh maker notes EXIF meta information.
 
 =head1 AUTHOR
 
-Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2020, Phil Harvey (philharvey66 at gmail.com)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

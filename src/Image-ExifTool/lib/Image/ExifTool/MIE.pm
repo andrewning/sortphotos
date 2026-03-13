@@ -14,7 +14,7 @@ use Image::ExifTool qw(:DataAccess :Utils);
 use Image::ExifTool::Exif;
 use Image::ExifTool::GPS;
 
-$VERSION = '1.47';
+$VERSION = '1.48';
 
 sub ProcessMIE($$);
 sub ProcessMIEGroup($$$);
@@ -152,11 +152,11 @@ my %offOn = ( 0 => 'Off', 1 => 'On' );
         (eg. C<55(mi/h)>).  If no units are specified, the default units are
         written.
 
-        4) ExifTool writes compressed metadata to MIE files if the Compress (-z)
+        4) ExifTool writes compressed metadata to MIE files if the L<Compress|../ExifTool.html#Compress> (-z)
         option is used and Compress::Zlib is available.
 
-        See L<http://owl.phy.queensu.ca/~phil/exiftool/MIE1.1-20070121.pdf> for the
-        official MIE specification.
+        See L<https://exiftool.org/MIE1.1-20070121.pdf> for the official MIE
+        specification.
     },
    '0Type' => {
         Name => 'SubfileType',
@@ -1001,10 +1001,10 @@ sub WriteMIEGroup($$$)
                 }
             }
             # don't rewrite free bytes or information in deleted groups
-            if ($format eq 0x80 or ($delGroup and $tagLen and ($format & 0xf0) != 0x10)) {
+            if ($format == 0x80 or ($delGroup and $tagLen and ($format & 0xf0) != 0x10)) {
                 $raf->Seek($valLen, 1) or $msg = 'Seek error', last;
                 if ($verbose > 1) {
-                    my $free = ($format eq 0x80) ? ' free' : '';
+                    my $free = ($format == 0x80) ? ' free' : '';
                     print $out "    - $grp1:$tag ($valLen$free bytes)\n";
                 }
                 ++$$et{CHANGED} if $delGroup;
@@ -1242,8 +1242,7 @@ sub WriteMIEGroup($$$)
                     # write new value if creating, or if List and list existed, or
                     # if tag was previously deleted
                     next unless $$nvHash{IsCreating} or
-                        (($newTag eq $lastTag and ($$newInfo{List} or $deletedTag eq $lastTag)
-                        and not $$nvHash{EditOnly}));
+                        ($newTag eq $lastTag and ($$newInfo{List} or $deletedTag eq $lastTag));
                 }
                 # get the new value to write (undef to delete)
                 push @newVals, $et->GetNewValue($nvHash);
@@ -1340,7 +1339,7 @@ sub WriteMIEGroup($$$)
                     $extLen = Set32u($len);
                     $len = 254;
                 } else {
-                    $et->Warn("Can't write $newTag (DataLength > 2GB not yet suppported)");
+                    $et->Warn("Can't write $newTag (DataLength > 2GB not yet supported)");
                     last; # don't write this tag
                 }
                 # write this element (with leading MIE group element if not done already)
@@ -2545,7 +2544,7 @@ tag name.  For example:
 
 =head1 AUTHOR
 
-Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2020, Phil Harvey (philharvey66 at gmail.com)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.  The MIE format itself is also
@@ -2555,7 +2554,7 @@ copyright Phil Harvey, and is covered by the same free-use license.
 
 =over 4
 
-=item L<http://owl.phy.queensu.ca/~phil/exiftool/MIE1.1-20070121.pdf>
+=item L<https://exiftool.org/MIE1.1-20070121.pdf>
 
 =back
 

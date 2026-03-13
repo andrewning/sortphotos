@@ -11,7 +11,7 @@ package Image::ExifTool::Lang::fr;
 use strict;
 use vars qw($VERSION);
 
-$VERSION = '1.32';
+$VERSION = '1.34';
 
 %Image::ExifTool::Lang::fr::Translate = (
    'AEAperture' => 'Ouverture AE',
@@ -372,6 +372,7 @@ $VERSION = '1.32';
    'ActionAdvised' => {
       Description => 'Action conseillée',
       PrintConv => {
+        'Object Append' => 'Ajout d\'objet',
         'Object Kill' => 'Destruction d\'objet',
         'Object Reference' => 'Référence d\'objet',
         'Object Replace' => 'Remplacement d\'objet',
@@ -903,6 +904,7 @@ $VERSION = '1.32';
         'On' => 'Activé',
       },
     },
+   'ColorBalanceVersion' => 'Version de la Balance des couleurs',
    'ColorBooster' => {
       PrintConv => {
         'Off' => 'Désactivé',
@@ -4749,7 +4751,7 @@ and values.
 
 =head1 AUTHOR
 
-Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2020, Phil Harvey (philharvey66 at gmail.com)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

@@ -4,13 +4,14 @@
 # Description:  ExifTool time shifting routines
 #
 # Revisions:    10/28/2005 - P. Harvey Created
+#               03/13/2019 - PH Added single-argument form of ShiftTime()
 #------------------------------------------------------------------------------
 
 package Image::ExifTool;
 
 use strict;
 
-sub ShiftTime($$;$$);
+sub ShiftTime($;$$$);
 
 #------------------------------------------------------------------------------
 # apply shift to value in new value hash
@@ -280,12 +281,19 @@ sub ShiftNumber($$$;$)
 # Inputs: 0) date/time string, 1) shift string, 2) shift direction (+1 or -1),
 #            or 0 or undef to take shift direction from sign of shift,
 #         3) reference to ShiftOffset hash (with Date, DateTime, Time, Timezone keys)
+#   or    0) shift string (and operates on $_)
 # Returns: error string or undef on success and date/time string is updated
-sub ShiftTime($$;$$)
+sub ShiftTime($;$$$)
 {
-    local $_;
-    my ($val, $shift, $dir, $shiftOffset) = @_;
+    my ($val, $shift, $dir, $shiftOffset);
     my (@time, @shift, @toTime, $mode, $needShiftOffset, $dec);
+
+    if (@_ == 1) {      # single argument form of ShiftTime()?
+        $val = $_;
+        $shift = $_[0];
+    } else {
+        ($val, $shift, $dir, $shiftOffset) = @_;
+    }
     $dir or $dir = ($shift =~ s/^(\+|-)// and $1 eq '-') ? -1 : 1;
 #
 # figure out what we are dealing with (time, date or date/time)
@@ -418,7 +426,7 @@ sub ShiftTime($$;$$)
 #
 # insert shifted time components back into original string
 #
-    my ($i, $err);
+    my $i;
     for ($i=0; $i<@toTime; ++$i) {
         next unless defined $time[$i] and defined $toTime[$i];
         my ($v, $d, $s);
@@ -447,13 +455,15 @@ sub ShiftTime($$;$$)
         my $sig = $len - length $s;
         my $dec = $d ? length($d) - 1 : 0;
         my $newNum = sprintf($dec ? "$s%0$sig.${dec}f" : "$s%0${sig}d", $nv);
-        length($newNum) != $len and $err = 1;
         substr($val, $pos - $len, $len) = $newNum;
-        pos($val) = $pos;
+        pos($val) = $pos + length($newNum) - $len;
     }
-    $err and return "Error packing shifted time ($val)";
-    $_[0] = $val;   # return shifted value
-    return undef;   # success!
+    if (@_ == 1) {
+        $_ = $val;      # set $_ to the returned value
+    } else {
+        $_[0] = $val;   # return shifted value
+    }
+    return undef;       # success!
 }
 
 
@@ -493,6 +503,10 @@ from the shift string.
 3) [optional] Reference to time-shift hash -- filled in by first call to
 B<ShiftTime>, and used in subsequent calls to shift date/time values by the
 same relative amount (see L</TRICKY> section below).
+
+or
+
+0) Shift string (and $_ contains the input date/time string).
 
 =item Return value:
 
@@ -615,7 +629,7 @@ limited to the range 1970 to 2038 on 32-bit systems.
 
 =head1 AUTHOR
 
-Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2020, Phil Harvey (philharvey66 at gmail.com)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

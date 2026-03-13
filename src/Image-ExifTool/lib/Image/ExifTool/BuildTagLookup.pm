@@ -31,14 +31,17 @@ use Image::ExifTool::IPTC;
 use Image::ExifTool::XMP;
 use Image::ExifTool::Canon;
 use Image::ExifTool::Nikon;
+use Image::ExifTool::Sony;
 use Image::ExifTool::Validate;
 use Image::ExifTool::MacOS;
 
-$VERSION = '3.18';
+$VERSION = '3.34';
 @ISA = qw(Exporter);
 
 sub NumbersFirst($$);
 sub SortedTagTablekeys($);
+
+my $createDate = 'Feb 15, 2005';
 
 # global variables to control sorting order of table entries
 my $numbersFirst = 1;   # set to -1 to sort numbers last, or 2 to put negative numbers last
@@ -55,7 +58,7 @@ my $docType = q{<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN"
         "http://www.w3.org/TR/html4/loose.dtd">
 };
 
-my $homePage = 'http://owl.phy.queensu.ca/~phil/exiftool';
+my $homePage = 'https://exiftool.org';
 
 # tweak the ordering of tables in the documentation
 my %tweakOrder = (
@@ -67,7 +70,8 @@ my %tweakOrder = (
     Composite => 'Extra',
     GeoTiff => 'GPS',
     CanonVRD=> 'CanonCustom',
-    FLIR    => 'Casio',
+    DJI     => 'Casio',
+    FLIR    => 'DJI',
     FujiFilm => 'FLIR',
     Kodak   => 'JVC',
     Leaf    => 'Kodak',
@@ -109,6 +113,7 @@ my %formatOK = (
     %Image::ExifTool::Exif::formatNumber,
     0 => 1,
     1 => 1,
+    2 => 1, # (writable for docs only)
     real    => 1,
     integer => 1,
     date    => 1,
@@ -158,6 +163,7 @@ meta information extracted from or written to a file.
 },
     ExifTool => q{
 The tables listed below give the names of all tags recognized by ExifTool.
+They contain a total of $$self{COUNT}{'total tags'} tags, with $$self{COUNT}{'unique tag names'} unique tag names.
 },
     ExifTool2 => q{
 B<Tag ID>, B<Index#> or B<Sequence> is given in the first column of each
@@ -166,8 +172,10 @@ is the identifier that is actually stored in the file.  B<Index#> refers to
 the offset of a value when found at a fixed position within a data block
 (B<#> is the multiplier for calculating a byte offset: B<1>, B<2>, B<4> or
 B<8>).  These offsets may have a decimal part which is used only to
-differentiate tags which have values stored at the same position.
-B<Sequence> gives the order of values for a serial data stream.
+differentiate tags with values stored at the same position.  (Note that
+writable tags within binary data blocks are not individually deletable,
+and the usual alternative is to set them to a value of zero.)  B<Sequence>
+gives the order of values for a serial data stream.
 
 A B<Tag Name> is the handle by which the information is accessed in
 ExifTool.  In some instances, more than one name may correspond to a single
@@ -175,7 +183,7 @@ tag ID.  In these cases, the actual name used depends on the context in
 which the information is found.  Case is not significant for tag names.  A
 question mark (C<?>) after a tag name indicates that the information is
 either not understood, not verified, or not very useful -- these tags are
-not extracted by ExifTool unless the Unknown (-u) option is enabled.  Be
+not extracted by ExifTool unless the L<Unknown|../ExifTool.html#Unknown> (-u) option is enabled.  Be
 aware that some tag names are different than the descriptions printed out by
 default when extracting information with exiftool.  To see the tag names
 instead of the descriptions, use C<exiftool -s>.
@@ -183,20 +191,20 @@ instead of the descriptions, use C<exiftool -s>.
 The B<Writable> column indicates whether the tag is writable by ExifTool.
 Anything but a C<no> in this column means the tag is writable.  A C<yes>
 indicates writable information that is either unformatted or written using
-the existing format.  Other expressions give details about the information
-format, and vary depending on the general type of information.  The format
-name may be followed by a number in square brackets to indicate the number
-of values written, or the number of characters in a fixed-length string
-(including a null terminator which is added if required).
+the existing format.  Other expressions give details about the format of the
+stored value, and vary depending on the general type of information.  The
+format name may be followed by a number in square brackets to indicate the
+number of values written, or the number of characters in a fixed-length
+string (including a null terminator which is added if required).
 
 A plus sign (C<+>) after an entry in the B<Writable> column indicates a
 I<List> tag which supports multiple values and allows individual values to
 be added and deleted.  A slash (C</>) indicates a tag that ExifTool will
-I<Avoid> when writing.  These tags are not created when writing if another
-same-named tag may be created instead.  To write these tags, the group
+I<Avoid> when writing.  These will be edited but not created if another
+same-named tag may be created instead.  To create these tags, the group
 should be specified.  A tilde (C<~>) indicates a tag this is writable only
-when the print conversion is disabled (by setting PrintConv to 0, using the
--n option, or suffixing the tag name with a C<#> character).  An exclamation
+when the print conversion is disabled (by setting L<PrintConv|../ExifTool.html#PrintConv> to 0, using the
+-n option, or suffixing the tag name with a C<#> character). An exclamation
 point (C<!>) indicates a tag that is considered I<Unsafe> to write under
 normal circumstances.  These tags are not written unless specified
 explicitly (ie. not when wildcards or "all" are used), and care should be
@@ -206,15 +214,16 @@ writable directly, but is written automatically by ExifTool (often when a
 corresponding L<Composite|Image::ExifTool::TagNames/Composite Tags> or
 L<Extra|Image::ExifTool::TagNames/Extra Tags> tag is written). A colon
 (C<:>) indicates a I<Mandatory> tag which may be added automatically when
-writing.
+writing.  Normally MakerNotes tags may not be deleted individually, but a
+caret (C<^>) indicates a I<Deletable> MakerNotes tag.
 
 The HTML version of these tables also lists possible B<Values> for
 discrete-valued tags, as well as B<Notes> for some tags.  The B<Values> are
-listed as the computer-readable and human-readable values on the left and
-right hand side of an equals sign (C<=>) respectively.  The human-readable
+listed with the computer-readable values on the left of the equals sign
+(C<=>), and the human-readable values on the right.  The human-readable
 values are used by default when reading and writing, but the
 computer-readable values may be accessed by disabling the value conversion
-with the -n option on the command line, by setting the ValueConv option to 0
+with the -n option on the command line, by setting the L<PrintConv|../ExifTool.html#PrintConv> option to 0
 in the API, or or on a per-tag basis by adding a hash (C<#>) after the tag
 name.
 
@@ -252,11 +261,11 @@ tags remain.
 
 The table below lists all EXIF tags.  Also listed are TIFF, DNG, HDP and
 other tags which are not part of the EXIF specification, but may co-exist
-with EXIF tags in some images.  Tags which are part of the EXIF 2.31
+with EXIF tags in some images.  Tags which are part of the EXIF 2.32
 specification have an underlined B<Tag Name> in the HTML version of this
 documentation.  See
-L<http://www.cipa.jp/std/documents/e/DC-008-Translation-2016-E.pdf> for the
-official EXIF 2.31 specification.
+L<https://web.archive.org/web/20190624045241if_/http://www.cipa.jp:80/std/documents/e/DC-008-Translation-2019-E.pdf>
+for the official EXIF 2.32 specification.
 },
     GPS => q{
 These GPS tags are part of the EXIF standard, and are stored in a separate
@@ -272,7 +281,7 @@ Some GPS tags have values which are fixed-length strings. For these, the
 indicated string lengths include a null terminator which is added
 automatically by ExifTool.  Remember that the descriptive values are used
 when writing (eg. 'Above Sea Level', not '0') unless the print conversion is
-disabled (with '-n' on the command line or the PrintConv option in the API,
+disabled (with '-n' on the command line or the L<PrintConv|../ExifTool.html#PrintConv> option in the API,
 or by suffixing the tag name with a C<#> character).
 
 When adding GPS information to an image, it is important to set all of the
@@ -305,17 +314,17 @@ HH:MM:SS[.ss][+/-HH:MM]", C<boolean> is either "True" or "False", C<struct>
 indicates a structured tag, and C<lang-alt> is a tag that supports alternate
 languages.
 
-When reading, C<struct> tags are extracted only if the Struct (-struct)
+When reading, C<struct> tags are extracted only if the L<Struct|../ExifTool.html#Struct> (-struct)
 option is used.  Otherwise the corresponding I<Flattened> tags, indicated by
 an underline (C<_>) after the B<Writable> type, are extracted.  When
 copying, by default both structured and flattened tags are available, but
-the flattened tags are considered "unsafe" so they they aren't copied unless
-specified explicitly.  The Struct option may be disabled by setting Struct
+the flattened tags are considered "unsafe" so they aren't copied unless
+specified explicitly.  The L<Struct|../ExifTool.html#Struct> option may be disabled by setting Struct
 to 0 via the API or with --struct on the command line to copy only flattened
 tags, or enabled by setting Struct to 1 via the API or with -struct on the
-command line to copy only as structures.  When writing, the Struct option
+command line to copy only as structures.  When writing, the L<Struct|../ExifTool.html#Struct> option
 has no effect, and both structured and flattened tags may be written.  See
-L<http://owl.phy.queensu.ca/~phil/exiftool/struct.html> for more details.
+L<https://exiftool.org/struct.html> for more details.
 
 Individual languages for C<lang-alt> tags are accessed by suffixing the tag
 name with a '-', followed by an RFC 3066 language code (eg. "XMP:Title-fr",
@@ -327,12 +336,13 @@ to preserve other existing languages (eg. "XMP-dc:Description-x-default").
 When reading, "x-default" is not specified.
 
 The XMP tags are organized according to schema B<Namespace> in the following
-tables.  In general, the ExifTool family 1 group names are derived from the
-namespace prefixes by adding a leading "XMP-" (eg. "XMP-dc"), but a few of
-the longer prefixes have been shortened for convenience (as mentioned in the
-documentation below).  The tags of any namespace may be deleted as a group
-by specifying the family 1 group name (eg. "-XMP-dc:all=" on the command
-line).  This includes namespaces which are not pre-defined by ExifTool.
+tables.  The ExifTool family 1 group names are derived from the namespace
+prefixes by adding a leading "XMP-" (eg. "XMP-dc").  A few of the longer
+prefixes have been shortened (as mentioned in the documentation below) to
+avoid excessively long ExifTool group names.  The tags of any namespace may
+be deleted as a group by specifying the family 1 group name (eg.
+"-XMP-dc:all=" on the command line).  This includes namespaces which are not
+pre-defined by ExifTool.
 
 In cases where a tag name exists in more than one namespace, less common
 namespaces are avoided when writing.  However, a specific namespace may be
@@ -345,7 +355,7 @@ recommended if possible.
 For structures, the heading of the first column is B<Field Name>.  Field
 names are very similar to tag names, except they are used to identify fields
 inside structures instead of stand-alone tags.  See
-L<the Field Name section of the Structured Information documentation|http://owl.phy.queensu.ca/~phil/exiftool/struct.html#Fields> for more
+L<the Field Name section of the Structured Information documentation|https://exiftool.org/struct.html#Fields> for more
 details.
 
 ExifTool will extract XMP information even if it is not listed in these
@@ -379,7 +389,7 @@ the B<Writable> format name.  For tags where a range of lengths is allowed,
 the minimum and maximum lengths are separated by a comma within the
 brackets.  When writing, ExifTool issues a minor warning and truncates the
 value if it is longer than allowed by the IPTC specification.  Minor errors
-may be ignored with the IgnoreMinorErrors (-m) option, allowing longer
+may be ignored with the L<IgnoreMinorErrors|../ExifTool.html#IgnoreMinorErrors> (-m) option, allowing longer
 values to be written, but beware that values like this may cause problems
 for some other IPTC readers. ExifTool will happily read IPTC values of any
 length.
@@ -403,6 +413,54 @@ only "IPTC" may be specified as the group.  To keep the IPTC consistent,
 ExifTool updates tags in all existing IPTC locations, but will create a new
 IPTC group only in the standard location.
 },
+    QuickTime => q{
+The QuickTime format is used for many different types of audio, video and
+image files (most notably, MOV/MP4 videos and HEIC/CR3 images).  Exiftool
+extracts standard meta information and a variety of audio, video and image
+parameters, as well as proprietary information written by many camera
+models.  Tags with a question mark after their name are not extracted unless
+the L<Unknown|../ExifTool.html#Unknown> option is set.
+
+When writing, ExifTool creates both QuickTime and XMP tags by default, but
+the group may be specified to write one or the other separately.  If no
+location is specified, newly created QuickTime tags are added in the
+L<ItemList|Image::ExifTool::TagNames/QuickTime ItemList Tags> location if
+possible, otherwise in
+L<UserData|Image::ExifTool::TagNames/QuickTime UserData Tags>, and
+finally in L<Keys|Image::ExifTool::TagNames/QuickTime Keys Tags>,
+but this order may be changed by setting the PREFERRED level of the
+appropriate table in the config file (see
+L<example.config|../config.html#PREF> in the full distribution for
+an example).  ExifTool currently writes only top-level metadata in
+QuickTime-based files; it extracts other track-specific and timed
+metadata, but can not yet edit tags in these locations (with the
+exception of track-level date/time tags).
+
+Alternate language tags may be accessed for
+L<ItemList|Image::ExifTool::TagNames/QuickTime ItemList Tags> and
+L<Keys|Image::ExifTool::TagNames/QuickTime Keys Tags> tags by adding
+a 3-character ISO 639-2 language code and an optional ISO 3166-1 alpha 2
+country code to the tag name (eg. "ItemList:Artist-deu" or
+"ItemList::Artist-deu-DE").  Most
+L<UserData|Image::ExifTool::TagNames/QuickTime UserData Tags> tags support a
+language code, but without a country code.  If no language code is specified
+when writing, alternate languages for the tag are deleted.  Use the "und"
+language code to write the default language without deleting alternate
+languages.  Note that "eng" is treated as a default language when reading,
+but not when writing.
+
+According to the specification, integer-format QuickTime date/time tags
+should be stored as UTC.  Unfortunately, digital cameras often store local
+time values instead (presumably because they don't know the time zone).  For
+this reason, by default ExifTool does not assume a time zone for these
+values.  However, if the L<QuickTimeUTC|../ExifTool.html#QuickTimeUTC> API option is set, then ExifTool will
+assume these values are properly stored as UTC, and will convert them to
+local time when extracting.
+
+See
+L<https://developer.apple.com/library/archive/documentation/QuickTime/QTFF/>
+for the official specification.
+},
     Photoshop => q{
 Photoshop tags are found in PSD and PSB files, as well as inside embedded
 Photoshop information in many other file types (JPEG, TIFF, PDF, PNG to name
@@ -411,7 +469,7 @@ a few).
 Many Photoshop tags are marked as Unknown (indicated by a question mark
 after the tag name) because the information they provide is not very useful
 under normal circumstances.  These unknown tags are not extracted unless the
-Unknown (-u) option is used.  See
+L<Unknown|../ExifTool.html#Unknown> (-u) option is used.  See
 L<http://www.adobe.com/devnet-apps/photoshop/fileformatashtml/> for the
 official specification
 
@@ -422,7 +480,7 @@ access to this information.
 },
     PrintIM => q{
 The format of the PrintIM information is known, however no PrintIM tags have
-been decoded.  Use the Unknown (-u) option to extract PrintIM information.
+been decoded.  Use the L<Unknown|../ExifTool.html#Unknown> (-u) option to extract PrintIM information.
 },
     GeoTiff => q{
 ExifTool extracts the following tags from GeoTIFF images.  See
@@ -470,7 +528,9 @@ These tags apply to CRW-format Canon RAW files and information in the APP0
 "CIFF" segment of JPEG images.  When writing CanonRaw/CIFF information, the
 length of the information is preserved (and the new information is truncated
 or padded as required) unless B<Writable> is C<resize>. Currently, only
-JpgFromRaw and ThumbnailImage are allowed to change size.
+JpgFromRaw and ThumbnailImage are allowed to change size.  See
+L<https://exiftool.org/canon_raw.html> for a description of the Canon CRW
+format.
 
 CRW images also support the addition of a CanonVRD trailer, which in turn
 supports XMP.  This trailer is created automatically if necessary when
@@ -485,7 +545,7 @@ settings have not been decoded for all models.  The tables below list the
 custom settings for the currently supported models.
 },
     Unknown => q{
-The following tags are decoded in unsupported maker notes.  Use the Unknown
+The following tags are decoded in unsupported maker notes.  Use the L<Unknown|../ExifTool.html#Unknown>
 (-u) option to display other unknown tags.
 },
     PDF => q{
@@ -497,7 +557,7 @@ specification.
 
 ExifTool supports reading and writing PDF documents up to version 1.7
 extension level 3, including support for RC4, AES-128 and AES-256
-encryption.  A Password option is provided to allow processing of
+encryption.  A L<Password|../ExifTool.html#Password> option is provided to allow processing of
 password-protected PDF files.
 
 ExifTool may be used to write native PDF and XMP metadata to PDF files. It
@@ -571,10 +631,9 @@ new XMP tags which are listed in the subsequent tables below.  See
 L<http://www.metadataworkinggroup.org/> for the official MWG specification.
 },
     MacOS => q{
-On MacOS systems, there are a number of additional tags with names beginning
-with "MDItem" and "XAttr" that may be extracted.  These tags are not
-extracted by default -- they must be specifically requested or enabled via
-an API option.
+On MacOS systems, the there are additional MDItem and XAttr Finder tags that
+may be extracted.  These tags are not extracted by default -- they must be
+specifically requested or enabled via an API option.
 
 The tables below list some of the tags that may be extracted, but ExifTool
 will extract all available information even for tags not listed.
@@ -591,7 +650,7 @@ L<Image::ExifTool::BuildTagLookup|Image::ExifTool::BuildTagLookup>.
 
 ~head1 AUTHOR
 
-Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2020, Phil Harvey (philharvey66 at gmail.com)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.
@@ -664,7 +723,7 @@ sub new
     my $that = shift;
     my $class = ref($that) || $that || 'Image::ExifTool::BuildTagLookup';
     my $self = bless {}, $class;
-    my (%subdirs, %isShortcut, %allStructs);
+    my (%subdirs, %isShortcut);
     my %count = (
         'unique tag names' => 0,
         'total tags' => 0,
@@ -767,7 +826,8 @@ sub new
         $hexID = $$vars{HEX_ID};
         my $processBinaryData = ($$table{PROCESS_PROC} and (
             $$table{PROCESS_PROC} eq \&Image::ExifTool::ProcessBinaryData or
-            $$table{PROCESS_PROC} eq \&Image::ExifTool::Nikon::ProcessNikonEncrypted));
+            $$table{PROCESS_PROC} eq \&Image::ExifTool::Nikon::ProcessNikonEncrypted or
+            $$table{PROCESS_PROC} eq \&Image::ExifTool::Sony::ProcessEnciphered));
         if ($$vars{ID_LABEL} or $processBinaryData) {
             my $s = $$table{FORMAT} ? Image::ExifTool::FormatSize($$table{FORMAT}) || 1 : 1;
             $binaryTable = 1;
@@ -883,6 +943,10 @@ TagID:  foreach $tagID (@keys) {
                 } elsif (not $$tagInfo{SubDirectory}) {
                     $writable = $$table{WRITABLE};
                 }
+                # in general, we can't write unless we have a WRITE_PROC
+                if ($writable and not ($$table{WRITE_PROC} or $tableName =~ /Shortcuts/ or $writable eq '2')) {
+                    undef $writable;
+                }
                 # validate some characteristics of obvious date/time tags
                 my @g = $et->GetGroup($tagInfo);
                 if ($$tagInfo{List} and $g[2] eq 'Time' and $writable and not $$tagInfo{Protected} and
@@ -904,6 +968,11 @@ TagID:  foreach $tagID (@keys) {
                 } elsif ($name =~ /DateTime(?!Stamp)/ and (not $$tagInfo{Groups}{2} or
                     $$tagInfo{Groups}{2} ne 'Time') and $short ne 'DICOM') {
                     warn "$short $name should be in 'Time' group!\n";
+                }
+                if ($name eq 'DateTimeOriginal' and (not $$tagInfo{Description} or
+                    $$tagInfo{Description} ne 'Date/Time Original'))
+                {
+                    warn "Need Description for $short DateTimeOriginal\n";
                 }
                 # validate Description (can't contain special characters)
                 if ($$tagInfo{Description} and
@@ -1101,7 +1170,7 @@ TagID:  foreach $tagID (@keys) {
                             my $n = scalar @values;
                             my ($bits, $i, $v);
                             foreach (@pk) {
-                                next if $_ eq '';
+                                next if $_ eq '' and $$printConv{$_} eq '';
                                 $_ eq 'BITMASK' and $bits = $$printConv{$_}, next;
                                 $_ eq 'OTHER' and next;
                                 my $index;
@@ -1195,12 +1264,21 @@ TagID:  foreach $tagID (@keys) {
                     }
                 }
                 if ($subdir and not $$tagInfo{SeparateTable}) {
-                    # subdirectories are only writable if specified explicitly
-                    my $tw = $$tagInfo{Writable};
-                    $writable = 'yes' if $tw and $writable eq '1';
-                    $writable = '-' . ($tw ? $writable : '');
-                    $writable .= '!' if $tw and ($$tagInfo{Protected} || 0) & 0x01;
-                    $writable .= '+' if $$tagInfo{List};
+                    if ($writable) {
+                        # subdirectories are only writable if specified explicitly
+                        my $tw = $$tagInfo{Writable};
+                        $writable = 'yes' if $tw and $writable eq '1' or $writable eq '2';
+                        $writable = '-' . ($tw ? $writable : '');
+                        $writable .= '!' if $tw and ($$tagInfo{Protected} || 0) & 0x01;
+                        $writable .= '+' if $$tagInfo{List};
+                        if (defined $$tagInfo{Permanent}) {
+                            $writable .= '^' unless $$tagInfo{Permanent};
+                        } elsif (defined $$table{PERMANENT}) {
+                            $writable .= '^' unless $$table{PERMANENT};
+                        }
+                    } else {
+                        $writable = '-';
+                    }
                 } else {
                     # not writable if we can't do the inverse conversions
                     my $noPrintConvInv;
@@ -1220,7 +1298,7 @@ TagID:  foreach $tagID (@keys) {
                     if (not $writable) {
                         $writable = 'no';
                     } else {
-                        $writable eq '1' and $writable = $format ? $format : 'yes';
+                        $writable = $format ? $format : 'yes' if $writable eq '1' or $writable eq '2';
                         my $count = $$tagInfo{Count} || 1;
                         # adjust count to Writable size if different than Format
                         if ($writable and $format and $writable ne $format and
@@ -1248,6 +1326,11 @@ TagID:  foreach $tagID (@keys) {
                     $writable .= '_' if defined $$tagInfo{Flat};
                     $writable .= '+' if $$tagInfo{List};
                     $writable .= ':' if $$tagInfo{Mandatory};
+                    if (defined $$tagInfo{Permanent}) {
+                        $writable .= '^' unless $$tagInfo{Permanent};
+                    } elsif (defined $$table{PERMANENT}) {
+                        $writable .= '^' unless $$table{PERMANENT};
+                    }
                     # separate tables link like subdirectories (flagged with leading '-')
                     $writable = "-$writable" if $subdir;
                 }
@@ -1371,11 +1454,13 @@ TagID:  foreach $tagID (@keys) {
                 if ($$table{$var}) {
                     foreach $tagID (@{$$table{$var}}) {
                         $$hash{$tagID} and delete($$hash{$tagID}), next;
-                        warn "Warning: Extra $var for $short tag $tagID\n";
+                        warn sprintf("Warning: Extra %s for %s tag %d (0x%.4x)\n",
+                                     $var, $short, $tagID, $tagID);
                     }
                 }
                 foreach $tagID (sort keys %$hash) {
-                    warn "Warning: Missing $var for $short $$hash{$tagID}\n";
+                    warn sprintf("Warning: Missing %s for %s %s, tag %d (0x%.4x)\n",
+                                 $var, $short, $$hash{$tagID}, $tagID, $tagID);
                 }
             }
         }
@@ -1389,7 +1474,7 @@ TagID:  foreach $tagID (@keys) {
         my $tag;
         foreach $tag (sort keys %$struct) {
             my $tagInfo = $$struct{$tag};
-            next unless ref $tagInfo eq 'HASH';
+            next unless ref $tagInfo eq 'HASH' and $tag ne 'NAMESPACE';
             my $writable = $$tagInfo{Writable};
             my @vals;
             unless ($writable) {
@@ -1513,7 +1598,10 @@ sub WriteTagLookup($$)
             } elsif ($tagID =~ /^\d+$/) {
                 $entry = sprintf('0x%x',$tagID);
             } else {
-                $entry = "'${tagID}'";
+                my $quot = "'";
+                # escape non-printable characters in tag ID if necessary
+                $quot = '"' if $tagID =~ s/[\x00-\x1f,\x7f-\xff]/sprintf('\\x%.2x',ord($&))/ge;
+                $entry = "$quot${tagID}$quot";
             }
             my $wrNum = $wrNum{$tableNum};
             push @entries, "$wrNum => $entry";
@@ -1652,9 +1740,9 @@ sub Doc2Html($)
     $doc =~ s/B&lt;(.*?)&gt;/<b>$1<\/b>/sg;
     $doc =~ s/C&lt;(.*?)&gt;/<code>$1<\/code>/sg;
     $doc =~ s/I&lt;(.*?)&gt;/<i>$1<\/i>/sg;
-    # L<some text|http://owl.phy.queensu.ca/~phil/exiftool/struct.html#Fields> --> <a href="../struct.html#Fields">some text</a>
+    # L<some text|https://exiftool.org/struct.html#Fields> --> <a href="../struct.html#Fields">some text</a>
     $doc =~ s{L&lt;([^&]+?)\|\Q$homePage\E/(.*?)&gt;}{<a href="../$2">$1<\/a>}sg;
-    # L<http://owl.phy.queensu.ca/~phil/exiftool/struct.html> --> <a href="http://owl.phy.queensu.ca/~phil/exiftool/struct.html">http://owl.phy.queensu.ca/~phil/exiftool/struct.html</a>
+    # L<https://exiftool.org/struct.html> --> <a href="https://exiftool.org/struct.html">https://exiftool.org/struct.html</a>
     $doc =~ s{L&lt;\Q$homePage\E/(.*?)&gt;}{<a href="../$1">$1<\/a>}sg;
     # L<XMP DICOM Tags|Image::ExifTool::TagNames/XMP DICOM Tags> --> <a href="XMP.html#DICOM">XMP DICOM Tags</a>
     # (specify "Image::ExifTool::TagNames" to link to another html file)
@@ -1851,7 +1939,9 @@ sub OpenHtmlFile($;$$)
         open(HTMLFILE, ">>${htmlFile}_tmp") or return 0;
     } else {
         open(HTMLFILE, ">${htmlFile}_tmp") or return 0;
-        print HTMLFILE "$docType<html>\n<head>\n<title>$title</title>\n";
+        print HTMLFILE "$docType<html>\n";
+        print HTMLFILE "<!-- (this file generated automatically by Image::ExifTool::BuildTagLookup) -->\n";
+        print HTMLFILE "<head>\n<title>$title</title>\n";
         print HTMLFILE "<link rel=stylesheet type='text/css' href='style.css' title='Style'>\n";
         print HTMLFILE "</head>\n<body>\n";
         if ($category ne $class and $docs{$class}) {
@@ -1896,6 +1986,7 @@ sub CloseHtmlFiles($)
         # write the trailers
         print HTMLFILE "<hr>\n";
         print HTMLFILE "(This document generated automatically by Image::ExifTool::BuildTagLookup)\n";
+        print HTMLFILE "<br><i>Created $createDate</i>\n" if $htmlFile eq 'html/TagNames/index.html';
         print HTMLFILE "<br><i>Last revised $fileDate</i>\n";
         print HTMLFILE "<p class=lf><a href=";
         if ($htmlFile =~ /index\.html$/) {
@@ -1977,6 +2068,7 @@ sub WriteTagNames($$)
 
     # open the file and write the header
     open(PODFILE, ">$podFile") or return 0;
+    $docs{ExifTool} = eval qq{"$docs{ExifTool}"};
     print PODFILE Doc2Pod($docs{PodHeader}, $docs{ExifTool}, $docs{ExifTool2});
     mkdir "$htmldir/TagNames", 0777;
     OpenHtmlFile($htmldir) or return 0;
@@ -2060,6 +2152,9 @@ sub WriteTagNames($$)
                     my $w = length($_) + length($$printConv{$_});
                     $wid = $w if $wid < $w;
                     push @keys, $_;
+                    if ($$printConv{$_} =~ /[\0-\x1f\x7f-\xff]/) {
+                        warn "Warning: Special characters in $tableName PrintConv ($$printConv{$_})\n";
+                    }
                 }
                 $wid = length($tableName)+7 if $wid < length($tableName)+7;
                 # print in multiple columns if there is room
@@ -2438,10 +2533,11 @@ sub WriteTagNames($$)
                 '!' => 'Unsafe',
                 '*' => 'Protected',
                 ':' => 'Mandatory',
+                '^' => 'Deletable',
             );
             my ($wstr, %hasAttr, @hasAttr);
             foreach $wstr (@$writable) {
-                next unless $wstr =~ m{([+/~!*:_]+)$};
+                next unless $wstr =~ m{([+/~!*:_^]+)$};
                 my @a = split //, $1;
                 foreach (@a) {
                     next if $hasAttr{$_};
@@ -2472,6 +2568,7 @@ sub WriteTagNames($$)
                     my ($smallNote, @values);
                     foreach (@$values) {
                         if (/^\(/) {
+                            $_ = Doc2Html($_);
                             # set the note font
                             $smallNote = 1 if $numTags < 2;
                             push @values, ($smallNote ? $noteFontSmall : $noteFont) . "$_</span>";
@@ -2482,6 +2579,7 @@ sub WriteTagNames($$)
                             if (s/^\[!HTML\]//) {
                                 push @values, $_;
                             } else {
+                                $_ = Doc2Html($_);
                                 push @values, "<span class=s>$_</span>";
                             }
                             next;
@@ -2610,13 +2708,13 @@ WriteTagNames().
 
 =item WRITE_PSEUDO
 
-List of writable pseudo tags.
+Returned list of writable pseudo tags.
 
 =back
 
 =head1 AUTHOR
 
-Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2020, Phil Harvey (philharvey66 at gmail.com)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

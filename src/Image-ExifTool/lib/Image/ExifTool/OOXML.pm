@@ -14,13 +14,14 @@ use Image::ExifTool qw(:DataAccess :Utils);
 use Image::ExifTool::XMP;
 use Image::ExifTool::ZIP;
 
-$VERSION = '1.07';
+$VERSION = '1.08';
 
 # test for recognized OOXML document extensions
 my %isOOXML = (
     DOCX => 1,  DOCM => 1,
     DOTX => 1,  DOTM => 1,
     POTX => 1,  POTM => 1,
+    PPAX => 1,  PPAM => 1,
     PPSX => 1,  PPSM => 1,
     PPTX => 1,  PPTM => 1,  THMX => 1,
     XLAM => 1,
@@ -394,7 +395,7 @@ archives of XML files.
 
 =head1 AUTHOR
 
-Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2020, Phil Harvey (philharvey66 at gmail.com)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

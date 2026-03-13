@@ -38,7 +38,7 @@ my %mandatory = (
         0x0128 => 2,        # ResolutionUnit (inches)
     },
     ExifIFD => {
-        0x9000 => '0231',   # ExifVersion
+        0x9000 => '0232',   # ExifVersion
         0x9101 => "1 2 3 0",# ComponentsConfiguration
         0xa000 => '0100',   # FlashpixVersion
         0xa001 => 0xffff,   # ColorSpace (uncalibrated)
@@ -367,9 +367,11 @@ sub ValidateImageData($$$;$)
         my $minor;
         $minor = 1 if $$et{DOC_NUM} or $$et{FILE_TYPE} ne 'TIFF';
         unless (@bitsPerSample == $samplesPerPix) {
-            # (just a warning for this problem)
-            my $s = $samplesPerPix eq '1' ? '' : 's';
-            $et->Warn("$dirName BitsPerSample should have $samplesPerPix value$s", $minor);
+            unless ($$et{FILE_TYPE} eq 'EPS' and @bitsPerSample == 1) {
+                # (just a warning for this problem)
+                my $s = $samplesPerPix eq '1' ? '' : 's';
+                $et->Warn("$dirName BitsPerSample should have $samplesPerPix value$s", $minor);
+            }
             push @bitsPerSample, $bitsPerSample[0] while @bitsPerSample < $samplesPerPix;
             foreach (@bitsPerSample) {
                 $et->WarnOnce("$dirName BitsPerSample values are different", $minor) if $_ ne $bitsPerSample[0];
@@ -412,7 +414,7 @@ sub ExifErr($$$)
 {
     my ($et, $errStr, $tagTablePtr) = @_;
     # MakerNote errors are minor by default
-    my $minor = ($$tagTablePtr{GROUPS}{0} eq 'MakerNotes');
+    my $minor = ($$tagTablePtr{GROUPS}{0} eq 'MakerNotes' or $$et{FILE_TYPE} eq 'MOV');
     if ($$tagTablePtr{VARS} and $$tagTablePtr{VARS}{MINOR_ERRORS}) {
         $et->Warn("$errStr. IFD dropped.") and return '' if $minor;
         $minor = 1;
@@ -520,6 +522,9 @@ sub WriteExif($$$)
     my $name = $$dirInfo{Name};
     $name = $dirName unless $name and $dirName eq 'MakerNotes' and $name !~ /^MakerNote/;
 
+    # save byte order of existing EXIF
+    $$et{SaveExifByteOrder} = GetByteOrder() if $dirName eq 'IFD0' or $dirName eq 'ExifIFD';
+
     # set encoding for strings
     $strEnc = $et->Options('CharsetEXIF') if $$tagTablePtr{GROUPS}{0} eq 'EXIF';
 
@@ -574,7 +579,7 @@ sub WriteExif($$$)
                 # only account for nextIFD pointer if we are going to use it
                 $len += 4 if $dataLen==$len+6 and ($$dirInfo{Multi} or $buff =~ /\0{4}$/);
                 UpdateTiffEnd($et, $offset+$base+2+$len);
-            } elsif ($dirLen) {
+            } elsif ($dirLen and $dirStart + 4 >= $dataLen) {
                 # error if we can't load IFD (unless we are creating
                 # from scratch, in which case dirLen will be zero)
                 my $str = $et->Options('IgnoreMinorErrors') ? 'Deleted bad' : 'Bad';
@@ -586,7 +591,10 @@ sub WriteExif($$$)
             $numEntries = Get16u($dataPt, $dirStart);
             $dirEnd = $dirStart + 2 + 12 * $numEntries;
             if ($dirEnd > $dataLen) {
-                return ExifErr($et, "Truncated $name directory", $tagTablePtr);
+                my $n = int(($dataLen - $dirStart - 2) / 12);
+                my $rtn = ExifErr($et, "Truncated $name directory", $tagTablePtr);
+                return undef unless $n and defined $rtn;
+                $numEntries = $n;   # continue processing the entries we have
             }
             # sort entries if necessary (but not in maker notes IFDs)
             unless ($inMakerNotes) {
@@ -1318,7 +1326,7 @@ NoOverwrite:            next if $isNew > 0;
                     unless (defined $offsetData{$dataTag} or $dataTag eq 'LeicaTrailer') {
                         # prefer tag from Composite table if it exists (otherwise
                         # PreviewImage data would be taken from Extra tag)
-                        my $compInfo = $Image::ExifTool::Composite{$dataTag};
+                        my $compInfo = Image::ExifTool::GetCompositeTagInfo($dataTag);
                         $offsetData{$dataTag} = $et->GetNewValue($compInfo || $dataTag);
                         my $err;
                         if (defined $offsetData{$dataTag}) {
@@ -1345,11 +1353,15 @@ NoOverwrite:            next if $isNew > 0;
                     if ($$et{DEL_GROUP}{MakerNotes} and
                        ($$et{DEL_GROUP}{MakerNotes} != 2 or $isNew <= 0))
                     {
-                        if ($isNew <= 0) {
-                            ++$$et{CHANGED};
-                            $verbose and print $out "  Deleting MakerNotes\n";
+                        if ($et->IsRawType()) {
+                            $et->WarnOnce("Can't delete MakerNotes from $$et{FileType}",1);
+                        } else {
+                            if ($isNew <= 0) {
+                                ++$$et{CHANGED};
+                                $verbose and print $out "  Deleting MakerNotes\n";
+                            }
+                            next;
                         }
-                        next;
                     }
                     my $saveOrder = GetByteOrder();
                     if ($isNew >= 0 and defined $set{$newID}) {
@@ -1765,7 +1777,7 @@ NoOverwrite:            next if $isNew > 0;
                         # - I'm going out of my way here to preserve data which is
                         #   invalidated anyway by our edits
                         my $odd;
-                        my $oddInfo = $Image::ExifTool::Composite{OriginalDecisionData};
+                        my $oddInfo = Image::ExifTool::GetCompositeTagInfo('OriginalDecisionData');
                         if ($oddInfo and $$et{NEW_VALUE}{$oddInfo}) {
                             $odd = $et->GetNewValue($dataTag);
                             if ($verbose > 1) {
@@ -2550,7 +2562,7 @@ This file contains routines to write EXIF metadata.
 
 =head1 AUTHOR
 
-Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2020, Phil Harvey (philharvey66 at gmail.com)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.
