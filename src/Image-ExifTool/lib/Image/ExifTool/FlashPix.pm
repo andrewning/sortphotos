@@ -21,7 +21,7 @@ use Image::ExifTool qw(:DataAccess :Utils);
 use Image::ExifTool::Exif;
 use Image::ExifTool::ASF;   # for GetGUID()
 
-$VERSION = '1.36';
+$VERSION = '1.40';
 
 sub ProcessFPX($$);
 sub ProcessFPXR($$$);
@@ -125,7 +125,7 @@ my @dirEntryType = qw(INVALID STORAGE STREAM LOCKBYTES PROPERTY ROOT);
 # list of code pages used by Microsoft
 # (ref http://msdn.microsoft.com/en-us/library/dd317756(VS.85).aspx)
 my %codePage = (
-    037 => 'IBM EBCDIC US-Canada',
+     37 => 'IBM EBCDIC US-Canada',
     437 => 'DOS United States',
     500 => 'IBM EBCDIC International',
     708 => 'Arabic (ASMO 708)',
@@ -298,6 +298,7 @@ my %fpxFileType = (
 %Image::ExifTool::FlashPix::Main = (
     PROCESS_PROC => \&ProcessFPXR,
     GROUPS => { 2 => 'Image' },
+    VARS => { LONG_TAGS => 0 },
     NOTES => q{
         The FlashPix file format, introduced in 1996, was developed by Kodak,
         Hewlett-Packard and Microsoft.  Internally the FPX file structure mimics
@@ -313,7 +314,8 @@ my %fpxFileType = (
         from DOC, PPT, XLS (Microsoft Word, PowerPoint and Excel) documents, VSD
         (Microsoft Visio) drawings, and FLA (Macromedia/Adobe Flash project) files
         since these are based on the same file format as FlashPix (the Windows
-        Compound Binary File format).  See
+        Compound Binary File format).  Note that ExifTool identifies any
+        unrecognized Windows Compound Binary file as a FlashPix (FPX) file.  See
         L<http://graphcomp.com/info/specs/livepicture/fpx.pdf> for the FlashPix
         specification.
     },
@@ -465,6 +467,25 @@ my %fpxFileType = (
             TagTable => 'Image::ExifTool::FlashPix::PreviewInfo',
             ByteOrder => 'BigEndian',
         },
+    },
+    # recognize Autodesk Revit files by looking at BasicFileInfo
+    # (but don't yet support reading their metatdata)
+    BasicFileInfo => {
+        Name => 'BasicFileInfo',
+        Binary => 1,
+        RawConv => q{
+            $val =~ tr/\0//d;   # brute force conversion to ASCII
+            if ($val =~ /\.(rfa|rft|rte|rvt)/) {
+                $self->OverrideFileType(uc($1), "application/$1", $1);
+            }
+            return $val;
+        },
+    },
+    IeImg => {
+        Name => 'EmbeddedImage',
+        Notes => 'embedded images in Scene7 vignette VNT files',
+        Groups => { 2 => 'Preview' },
+        Binary => 1,
     },
 );
 
@@ -1085,7 +1106,7 @@ my %fpxFileType = (
             0x0807 => 'German (Swiss)',
             0x0408 => 'Greek',
             0x0409 => 'English (US)',
-            0x0809 => 'English (British)',		
+            0x0809 => 'English (British)',
             0x0c09 => 'English (Australian)',
             0x040a => 'Spanish (Castilian)',
             0x080a => 'Spanish (Mexican)',
@@ -1108,7 +1129,7 @@ my %fpxFileType = (
             0x0415 => 'Polish',
             0x0416 => 'Portuguese (Brazilian)',
             0x0816 => 'Portuguese',
-            0x0417 => 'Rhaeto-Romanic',	
+            0x0417 => 'Rhaeto-Romanic',
             0x0418 => 'Romanian',
             0x0419 => 'Russian',
             0x041a => 'Croato-Serbian (Latin)',
@@ -1175,11 +1196,11 @@ my %fpxFileType = (
     VARS => { NO_ID => 1 },
     CommentBy => {
         Groups => { 2 => 'Author' },
-        Notes => 'enable Duplicates option to extract all entries',
+        Notes => 'enable L<Duplicates|../ExifTool.html#Duplicates> option to extract all entries',
     },
     LastSavedBy => {
         Groups => { 2 => 'Author' },
-        Notes => 'enable Duplicates option to extract history of up to 10 entries',
+        Notes => 'enable L<Duplicates|../ExifTool.html#Duplicates> option to extract history of up to 10 entries',
     },
     DOP => { SubDirectory => { TagTable => 'Image::ExifTool::FlashPix::DOP' } },
     ModifyDate => {
@@ -1368,29 +1389,48 @@ sub ReadFPXValue($$$$$;$$)
         my $flags = $type & 0xf000;
         if ($flags) {
             if ($flags == VT_VECTOR) {
-                $noPad = 1;     # values don't seem to be padded inside vectors
+                $noPad = 1;     # values sometimes aren't padded inside vectors!!
                 my $size = $oleFormatSize{VT_VECTOR};
-                last if $valPos + $size > $dirEnd;
+                if ($valPos + $size > $dirEnd) {
+                    $et->WarnOnce('Incorrect FPX VT_VECTOR size');
+                    last;
+                }
                 $count = Get32u($dataPt, $valPos);
                 push @vals, '' if $count == 0;  # allow zero-element vector
                 $valPos += 4;
             } else {
                 # can't yet handle this property flag
+                $et->WarnOnce('Unknown FPX property');
                 last;
             }
         }
         unless ($format =~ /^VT_/) {
             my $size = Image::ExifTool::FormatSize($format) * $count;
-            last if $valPos + $size > $dirEnd;
+            if ($valPos + $size > $dirEnd) {
+                $et->WarnOnce("Incorrect FPX $format size");
+                last;
+            }
             @vals = ReadValue($dataPt, $valPos, $format, $count, $size);
             # update position to end of value plus padding
             $valPos += ($count * $size + 3) & 0xfffffffc;
             last;
         }
         my $size = $oleFormatSize{$format};
-        my ($item, $val);
+        my ($item, $val, $len);
         for ($item=0; $item<$count; ++$item) {
-            last if $valPos + $size > $dirEnd;
+            if ($valPos + $size > $dirEnd) {
+                $et->WarnOnce("Truncated FPX $format value");
+                last;
+            }
+            # sometimes VT_VECTOR items are padded to even 4-byte boundaries, and sometimes they aren't
+            if ($noPad and defined $len and $len & 0x03) {
+                my $pad = 4 - ($len & 0x03);
+                if ($valPos + $pad + $size <= $dirEnd) {
+                    # skip padding if all zeros
+                    $valPos += $pad if substr($$dataPt, $valPos, $pad) eq "\0" x $pad;
+                }
+            }
+            undef $len;
             if ($format eq 'VT_VARIANT') {
                 my $subType = Get32u($dataPt, $valPos);
                 $valPos += $size;
@@ -1428,9 +1468,12 @@ sub ReadFPXValue($$$$$;$$)
                 $val = ($val - 25569) * 24 * 3600 if $val != 0;
                 $val = Image::ExifTool::ConvertUnixTime($val);
             } elsif ($format =~ /STR$/) {
-                my $len = Get32u($dataPt, $valPos);
+                $len = Get32u($dataPt, $valPos);
                 $len *= 2 if $format eq 'VT_LPWSTR';    # convert to byte count
-                last if $valPos + $len + 4 > $dirEnd;
+                if ($valPos + $len + 4 > $dirEnd) {
+                    $et->WarnOnce("Truncated $format value");
+                    last;
+                }
                 $val = substr($$dataPt, $valPos + 4, $len);
                 if ($format eq 'VT_LPWSTR') {
                     # convert wide string from Unicode
@@ -1439,7 +1482,7 @@ sub ReadFPXValue($$$$$;$$)
                     my $charset = $Image::ExifTool::charsetName{"cp$codePage"};
                     if ($charset) {
                         $val = $et->Decode($val, $charset);
-                    } elsif ($codePage eq 1200) {   # UTF-16, little endian
+                    } elsif ($codePage == 1200) {   # UTF-16, little endian
                         $val = $et->Decode($val, 'UCS2', 'II');
                     }
                 }
@@ -1449,8 +1492,11 @@ sub ReadFPXValue($$$$$;$$)
                 #  on even 32-bit boundaries, but this isn't always the case)
                 $valPos += $noPad ? $len : ($len + 3) & 0xfffffffc;
             } elsif ($format eq 'VT_BLOB' or $format eq 'VT_CF') {
-                my $len = Get32u($dataPt, $valPos);
-                last if $valPos + $len + 4 > $dirEnd;
+                my $len = Get32u($dataPt, $valPos); # (use local $len because we always expect padding)
+                if ($valPos + $len + 4 > $dirEnd) {
+                    $et->WarnOnce("Truncated $format value");
+                    last;
+                }
                 $val = substr($$dataPt, $valPos + 4, $len);
                 # update position for data length plus padding
                 # (does this padding disappear in arrays too?)
@@ -1577,14 +1623,16 @@ sub ProcessDocumentTable($)
         my $key = 'TableOffsets' . ($i ? " ($i)" : '');
         my $offsets = $$value{$key};
         last unless defined $offsets;
-        my $doc = $$extra{$key}{G3} if $$extra{$key};
+        my $doc;
+        $doc = $$extra{$key}{G3} if $$extra{$key};
         $doc = '' unless $doc;
         # get DocFlags for this sub-document
         my ($docFlags, $docTable);
         for ($j=0; ; ++$j) {
             my $key = 'DocFlags' . ($j ? " ($j)" : '');
             last unless defined $$value{$key};
-            my $tmp = $$extra{$key}{G3} if $$extra{$key};
+            my $tmp;
+            $tmp = $$extra{$key}{G3} if $$extra{$key};
             $tmp = '' unless $tmp;
             if ($tmp eq $doc) {
                 $docFlags = $$value{$key};
@@ -1597,7 +1645,8 @@ sub ProcessDocumentTable($)
         for ($j=0; ; ++$j) {
             my $key = $tag . ($j ? " ($j)" : '');
             last unless defined $$value{$key};
-            my $tmp = $$extra{$key}{G3} if $$extra{$key};
+            my $tmp;
+            $tmp = $$extra{$key}{G3} if $$extra{$key};
             $tmp = '' unless $tmp;
             if ($tmp eq $doc) {
                 $docTable = \$$value{$key};
@@ -1642,14 +1691,14 @@ sub ProcessCommentBy($$$)
     my $pos = $$dirInfo{DirStart};
     my $end = $$dirInfo{DirLen} + $pos;
     $et->VerboseDir($$dirInfo{DirName});
-	while ($pos + 2 < $end) {
-		my $len = Get16u($dataPt, $pos);
-		$pos += 2;
-	    last if $pos + $len * 2 > $end;
-		my $author = $et->Decode(substr($$dataPt, $pos, $len*2), 'UCS2');
-		$pos += $len * 2;
-		$et->HandleTag($tagTablePtr, CommentBy => $author);
-	}
+    while ($pos + 2 < $end) {
+        my $len = Get16u($dataPt, $pos);
+        $pos += 2;
+        last if $pos + $len * 2 > $end;
+        my $author = $et->Decode(substr($$dataPt, $pos, $len*2), 'UCS2');
+        $pos += $len * 2;
+        $et->HandleTag($tagTablePtr, CommentBy => $author);
+    }
     return 1;
 }
 
@@ -1665,24 +1714,24 @@ sub ProcessLastSavedBy($$$)
     my $end = $$dirInfo{DirLen} + $pos;
     return 0 if $pos + 6 > $end;
     $et->VerboseDir($$dirInfo{DirName});
-	my $num = Get16u($dataPt, $pos+2);
-	$pos += 6;
-	while ($num >= 2) {
-	    last if $pos + 2 > $end;
-		my $len = Get16u($dataPt, $pos);
-		$pos += 2;
-	    last if $pos + $len * 2 > $end;
-		my $author = $et->Decode(substr($$dataPt, $pos, $len*2), 'UCS2');
-		$pos += $len * 2;
-	    last if $pos + 2 > $end;
-		$len = Get16u($dataPt, $pos);
-		$pos += 2;
-	    last if $pos + $len * 2 > $end;
-		my $path = $et->Decode(substr($$dataPt, $pos, $len*2), 'UCS2');
-		$pos += $len * 2;
-		$et->HandleTag($tagTablePtr, LastSavedBy => "$author ($path)");
-		$num -= 2;
-	}
+    my $num = Get16u($dataPt, $pos+2);
+    $pos += 6;
+    while ($num >= 2) {
+        last if $pos + 2 > $end;
+        my $len = Get16u($dataPt, $pos);
+        $pos += 2;
+        last if $pos + $len * 2 > $end;
+        my $author = $et->Decode(substr($$dataPt, $pos, $len*2), 'UCS2');
+        $pos += $len * 2;
+        last if $pos + 2 > $end;
+        $len = Get16u($dataPt, $pos);
+        $pos += 2;
+        last if $pos + $len * 2 > $end;
+        my $path = $et->Decode(substr($$dataPt, $pos, $len*2), 'UCS2');
+        $pos += $len * 2;
+        $et->HandleTag($tagTablePtr, LastSavedBy => "$author ($path)");
+        $num -= 2;
+    }
     return 1;
 }
 
@@ -1995,7 +2044,7 @@ sub ProcessFPXR($$$)
             $et->Warn("Unlisted FPXR segment (index $index)") if $index != 255;
         }
 
-    } elsif ($type ne 3) {  # not a "Reserved" segment
+    } elsif ($type != 3) {  # not a "Reserved" segment
 
         $et->Warn("Unknown FPXR segment (type $type)");
 
@@ -2213,14 +2262,15 @@ sub ProcessFPX($$)
             # remove instance number or class ID from tag if necessary
             $tagInfo = $et->GetTagInfo($tagTablePtr, $1) if
                 ($tag =~ /(.*) \d{6}$/s and $$tagTablePtr{$1}) or
-                ($tag =~ /(.*)_[0-9a-f]{16}$/s and $$tagTablePtr{$1});
+                ($tag =~ /(.*)_[0-9a-f]{16}$/s and $$tagTablePtr{$1}) or
+                ($tag =~ /(.*)_[0-9]{4}$/s and $$tagTablePtr{$1});  # IeImg instances
         }
 
         my $lSib = Get32u(\$dir, $pos + 0x44);  # left sibling
         my $rSib = Get32u(\$dir, $pos + 0x48);  # right sibling
         my $chld = Get32u(\$dir, $pos + 0x4c);  # child directory
 
-        # save information about object hierachy
+        # save information about object hierarchy
         my ($obj, $sub);
         $obj = $hier{$index} or $obj = $hier{$index} = { };
         $$obj{Left} = $lSib unless $lSib == FREE_SECT;
@@ -2366,7 +2416,7 @@ JPEG images.
 
 =head1 AUTHOR
 
-Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2022, Phil Harvey (philharvey66 at gmail.com)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

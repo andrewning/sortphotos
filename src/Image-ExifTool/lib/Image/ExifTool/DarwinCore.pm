@@ -6,7 +6,7 @@
 # Revisions:    2013-01-28 - P. Harvey Created
 #
 # References:   1) http://rs.tdwg.org/dwc/index.htm
-#               2) http://u88.n24.queensu.ca/exiftool/forum/index.php/topic,4442.0/all.html
+#               2) https://exiftool.org/forum/index.php/topic,4442.0/all.html
 #------------------------------------------------------------------------------
 
 package Image::ExifTool::DarwinCore;
@@ -15,7 +15,7 @@ use strict;
 use vars qw($VERSION);
 use Image::ExifTool::XMP;
 
-$VERSION = '1.02';
+$VERSION = '1.07';
 
 my %dateTimeInfo = (
     # NOTE: Do NOT put "Groups" here because Groups hash must not be common!
@@ -28,7 +28,7 @@ my %dateTimeInfo = (
 my %materialSample = (
     STRUCT_NAME => 'DarwinCore MaterialSample',
     NAMESPACE => 'dwc',
-    materialSampleID            => { },
+    materialSampleID    => { },
 );
 
 my %event = (
@@ -38,9 +38,28 @@ my %event = (
     earliestDate        => { %dateTimeInfo, Groups => { 2 => 'Time' } },
     endDayOfYear        => { Writable => 'integer', Groups => { 2 => 'Time' } },
     eventDate           => { %dateTimeInfo, Groups => { 2 => 'Time' } },
-    eventID             => { },
+    eventID             => { Avoid => 1, Notes => 'avoided in favor of XMP-iptcExt:EventID' },
     eventRemarks        => { Writable => 'lang-alt' },
-    eventTime           => { %dateTimeInfo, Groups => { 2 => 'Time' } },
+    eventTime => {
+        Groups => { 2 => 'Time' },
+        Writable => 'string', # (so we can format this ourself)
+        Shift => 'Time',
+        # (allow date/time or just time value)
+        ValueConv => 'Image::ExifTool::XMP::ConvertXMPDate($val)',
+        PrintConv => '$self->ConvertDateTime($val)',
+        ValueConvInv => 'Image::ExifTool::XMP::FormatXMPDate($val) or $val',
+        PrintConvInv => q{
+            my $v = $self->InverseDateTime($val,undef,1);
+            undef $Image::ExifTool::evalWarning;
+            return $v if $v;
+            # allow time-only values by adding dummy date (thanks Herb)
+            my $v = $self->InverseDateTime("2000:01:01 $val",undef,1);
+            undef $Image::ExifTool::evalWarning;
+            return $v if $v and $v =~ s/.* //;  # strip off dummy date
+            $Image::ExifTool::evalWarning = 'Invalid date/time or time-only value (use HH:MM:SS[.ss][+/-HH:MM|Z])';
+            return undef;
+        },
+    },
     fieldNotes          => { },
     fieldNumber         => { },
     habitat             => { },
@@ -119,6 +138,9 @@ my %event = (
             identificationVerificationStatus => { },
             identifiedBy                => { },
             typeStatus                  => { },
+            # new, ref forum13707
+            identifiedByID              => { },
+            verbatimIdentification      => { },
         },
     },
     LivingSpecimen      => { Struct => \%materialSample },
@@ -170,6 +192,11 @@ my %event = (
             recordNumber                => { },
             reproductiveCondition       => { },
             sex                         => { },
+            # new, ref forum13707
+            degreeOfEstablishment       => { },
+            georeferenceVerificationStatus => { },
+            pathway                     => { },
+            recordedByID                => { },
         },
     },
     OccurrenceOccurrenceDetails => { Name => 'OccurrenceDetails', Flat => 1 },
@@ -223,6 +250,7 @@ my %event = (
             relationshipRemarks         => { },
             resourceID                  => { },
             resourceRelationshipID      => { },
+            relationshipOfResourceID    => { }, # new, ref forum13707
         },
     },
     Taxon => {
@@ -236,6 +264,7 @@ my %event = (
             genus                       => { },
             higherClassification        => { },
             infraspecificEpithet        => { },
+            cultivarEpithet             => { }, # new, ref forum13707
             kingdom                     => { },
             nameAccordingTo             => { },
             nameAccordingToID           => { },
@@ -319,6 +348,8 @@ my %event = (
             verbatimLongitude           => { },
             verbatimSRS                 => { },
             waterBody                   => { },
+            # new, ref forum13707
+            verticalDatum               => { },
         },
     },
 );
@@ -341,7 +372,7 @@ This file contains tag definitions for the Darwin Core XMP namespace.
 
 =head1 AUTHOR
 
-Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2022, Phil Harvey (philharvey66 at gmail.com)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

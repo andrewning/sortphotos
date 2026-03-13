@@ -105,7 +105,7 @@ sub CheckIPTC($$$)
     my $format = $$tagInfo{Format} || $$tagInfo{Table}{FORMAT} || '';
     if ($format =~ /^int(\d+)/) {
         my $bytes = int(($1 || 0) / 8);
-        if ($bytes ne 1 and $bytes ne 2 and $bytes ne 4) {
+        if ($bytes != 1 and $bytes != 2 and $bytes != 4) {
             return "Can't write $bytes-byte integer";
         }
         my $val = $$valPtr;
@@ -170,7 +170,7 @@ sub FormatIPTC($$$$$;$)
         } else {
             my $len = int(($1 || 0) / 8);
             if ($len == 1) {        # 1 byte
-                $$valPtr = chr($$valPtr);
+                $$valPtr = chr($$valPtr & 0xff);
             } elsif ($len == 2) {   # 2-byte integer
                 $$valPtr = pack('n', $$valPtr);
             } else {                # 4-byte integer
@@ -191,7 +191,7 @@ sub FormatIPTC($$$$$;$)
             my $len = length $$valPtr;
             $maxlen or $maxlen = $minlen;
             if ($len < $minlen) {
-                if ($et->Warn("String to short for IPTC:$$tagInfo{Name} (padded)", 2)) {
+                if ($et->Warn("String too short for IPTC:$$tagInfo{Name} (padded)", 2)) {
                     $$valPtr .= ' ' x ($minlen - $len);
                 }
             } elsif ($len > $maxlen) {
@@ -215,7 +215,7 @@ sub FormatIPTC($$$$$;$)
 sub IptcDate($)
 {
     my $val = shift;
-    unless ($val =~ s/^.*(\d{4}):?(\d{2}):?(\d{2}).*/$1$2$3/s) {
+    unless ($val =~ s{^.*(\d{4})[-:/.]?(\d{2})[-:/.]?(\d{2}).*}{$1$2$3}s) {
         warn "Invalid date format (use YYYY:mm:dd)\n";
         undef $val;
     }
@@ -242,7 +242,7 @@ sub IptcTime($)
             if ($date and $date =~ /^(\d{4}):(\d{2}):(\d{2})\s*$/ and eval { require Time::Local }) {
                 # we were given a date too, so determine the local timezone
                 # offset at the specified date/time
-                my @d = ($3,$2-1,$1-1900);
+                my @d = ($3,$2-1,$1);
                 $val =~ /(\d{2})(\d{2})(\d{2})/;
                 @tm = ($3,$2,$1,@d);
                 $time = Image::ExifTool::TimeLocal(@tm);
@@ -334,13 +334,9 @@ sub DoWriteIPTC($$$)
     # - improves speed
     # - avoids changing current MD5 digest unnecessarily
     # - avoids adding mandatory tags unless some other IPTC is changed
-    unless (exists $$et{EDIT_DIRS}{$$dirInfo{DirName}} or
+    return undef unless exists $$et{EDIT_DIRS}{$$dirInfo{DirName}} or
         # standard IPTC tags in other locations should be edited too (eg. AFCP_IPTC)
-        ($tagTablePtr eq \%Image::ExifTool::IPTC::Main and exists $$et{EDIT_DIRS}{IPTC}))
-    {
-        print $out "$$et{INDENT}  [nothing changed]\n" if $verbose;
-        return undef;
-    }
+        ($tagTablePtr eq \%Image::ExifTool::IPTC::Main and exists $$et{EDIT_DIRS}{IPTC});
     my $dataPt = $$dirInfo{DataPt};
     unless ($dataPt) {
         my $emptyData = '';
@@ -715,7 +711,7 @@ seldom-used routines.
 
 =head1 AUTHOR
 
-Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2022, Phil Harvey (philharvey66 at gmail.com)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

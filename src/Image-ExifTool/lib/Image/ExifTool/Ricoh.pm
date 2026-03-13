@@ -19,7 +19,7 @@ use vars qw($VERSION);
 use Image::ExifTool qw(:DataAccess :Utils);
 use Image::ExifTool::Exif;
 
-$VERSION = '1.33';
+$VERSION = '1.35';
 
 sub ProcessRicohText($$$);
 sub ProcessRicohRMETA($$$);
@@ -330,9 +330,13 @@ my %ricohLensIDs = (
         },
     },
     0x1018 => { #3
-        Name => 'CropMode35mm',
+        Name => 'CropMode',
         Writable => 'int16u',
-        PrintConv => { 0 => 'Off', 1 => 'On' },
+        PrintConv => {
+            0 => 'Off',
+            1 => 'On (35mm)',
+            2 => 'On (47mm)', #IB
+        },
     },
     0x1019 => { #3
         Name => 'NDFilter',
@@ -871,6 +875,7 @@ my %ricohLensIDs = (
         Name => 'SoundFile',
         Notes => 'audio data recorded in JPEG images by the G700SE',
     },
+    _barcode => { Name => 'Barcodes', List => 1 },
 );
 
 # information stored in Ricoh AVI images (ref PH)
@@ -1000,6 +1005,23 @@ sub ProcessRicohRMETA($$$)
         # (but it looks like the int16u at $dirStart+6 is the next block number
         # if the data is continued, or 0 for the last block)
         $dirLen < 14 and $et->Warn('Short Ricoh RMETA block', 1), return 0;
+        if ($$dataPt =~ /^.{20}BARCODE/s) {
+            my $val = substr($$dataPt, 20);
+            $val =~ s/\0.*//s;
+            $val =~ s/^BARCODE\w+,\d{2},//;
+            my @codes;
+            for (;;) {
+                $val =~ s/(\d+),// and length $val >= $1 or last;
+                push @codes, substr($val, 0, $1);
+                last unless length $val > $1;
+                $val = substr($val, $1+1);
+            }
+            $et->HandleTag($tagTablePtr, '_barcode', \@codes) if @codes;
+            return 1;
+        } elsif ($$dataPt =~ /^.{18}ASCII/s) {
+            # (ignore barcode tag names for now)
+            return 1;
+        }
         my $audioLen = Get16u($dataPt, $dirStart+12);
         $audioLen + 14 > $dirLen and $et->Warn('Truncated Ricoh RMETA audio data', 1), return 0;
         my $buff = substr($$dataPt, $dirStart + 14, $audioLen);
@@ -1121,7 +1143,7 @@ interpret Ricoh maker notes EXIF meta information.
 
 =head1 AUTHOR
 
-Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2022, Phil Harvey (philharvey66 at gmail.com)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

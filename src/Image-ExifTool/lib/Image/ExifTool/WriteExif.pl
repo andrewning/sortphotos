@@ -38,7 +38,7 @@ my %mandatory = (
         0x0128 => 2,        # ResolutionUnit (inches)
     },
     ExifIFD => {
-        0x9000 => '0231',   # ExifVersion
+        0x9000 => '0232',   # ExifVersion
         0x9101 => "1 2 3 0",# ComponentsConfiguration
         0xa000 => '0100',   # FlashpixVersion
         0xa001 => 0xffff,   # ColorSpace (uncalibrated)
@@ -367,9 +367,11 @@ sub ValidateImageData($$$;$)
         my $minor;
         $minor = 1 if $$et{DOC_NUM} or $$et{FILE_TYPE} ne 'TIFF';
         unless (@bitsPerSample == $samplesPerPix) {
-            # (just a warning for this problem)
-            my $s = $samplesPerPix eq '1' ? '' : 's';
-            $et->Warn("$dirName BitsPerSample should have $samplesPerPix value$s", $minor);
+            unless ($$et{FILE_TYPE} eq 'EPS' and @bitsPerSample == 1) {
+                # (just a warning for this problem)
+                my $s = $samplesPerPix eq '1' ? '' : 's';
+                $et->Warn("$dirName BitsPerSample should have $samplesPerPix value$s", $minor);
+            }
             push @bitsPerSample, $bitsPerSample[0] while @bitsPerSample < $samplesPerPix;
             foreach (@bitsPerSample) {
                 $et->WarnOnce("$dirName BitsPerSample values are different", $minor) if $_ ne $bitsPerSample[0];
@@ -412,7 +414,7 @@ sub ExifErr($$$)
 {
     my ($et, $errStr, $tagTablePtr) = @_;
     # MakerNote errors are minor by default
-    my $minor = ($$tagTablePtr{GROUPS}{0} eq 'MakerNotes');
+    my $minor = ($$tagTablePtr{GROUPS}{0} eq 'MakerNotes' or $$et{FILE_TYPE} eq 'MOV');
     if ($$tagTablePtr{VARS} and $$tagTablePtr{VARS}{MINOR_ERRORS}) {
         $et->Warn("$errStr. IFD dropped.") and return '' if $minor;
         $minor = 1;
@@ -520,6 +522,9 @@ sub WriteExif($$$)
     my $name = $$dirInfo{Name};
     $name = $dirName unless $name and $dirName eq 'MakerNotes' and $name !~ /^MakerNote/;
 
+    # save byte order of existing EXIF
+    $$et{SaveExifByteOrder} = GetByteOrder() if $dirName eq 'IFD0' or $dirName eq 'ExifIFD';
+
     # set encoding for strings
     $strEnc = $et->Options('CharsetEXIF') if $$tagTablePtr{GROUPS}{0} eq 'EXIF';
 
@@ -543,7 +548,7 @@ sub WriteExif($$$)
         my $mustRead;
         if ($dirStart < 0 or $dirStart > $dataLen-2) {
             $mustRead = 1;
-        } elsif ($dirLen > 2) {
+        } elsif ($dirLen >= 2) {
             my $len = 2 + 12 * Get16u($dataPt, $dirStart);
             $mustRead = 1 if $dirStart + $len > $dataLen;
         }
@@ -574,33 +579,37 @@ sub WriteExif($$$)
                 # only account for nextIFD pointer if we are going to use it
                 $len += 4 if $dataLen==$len+6 and ($$dirInfo{Multi} or $buff =~ /\0{4}$/);
                 UpdateTiffEnd($et, $offset+$base+2+$len);
-            } elsif ($dirLen) {
+            } elsif ($dirLen and $dirStart + 4 >= $dataLen) {
                 # error if we can't load IFD (unless we are creating
                 # from scratch, in which case dirLen will be zero)
                 my $str = $et->Options('IgnoreMinorErrors') ? 'Deleted bad' : 'Bad';
                 $et->Error("$str $name directory", 1);
             }
         }
-        my ($index, $dirEnd, $numEntries);
+        my ($index, $dirEnd, $numEntries, %hasOldID, $unsorted);
         if ($dirStart + 4 < $dataLen) {
             $numEntries = Get16u($dataPt, $dirStart);
             $dirEnd = $dirStart + 2 + 12 * $numEntries;
             if ($dirEnd > $dataLen) {
-                return ExifErr($et, "Truncated $name directory", $tagTablePtr);
+                my $n = int(($dataLen - $dirStart - 2) / 12);
+                my $rtn = ExifErr($et, "Truncated $name directory", $tagTablePtr);
+                return undef unless $n and defined $rtn;
+                $numEntries = $n;   # continue processing the entries we have
             }
-            # sort entries if necessary (but not in maker notes IFDs)
-            unless ($inMakerNotes) {
-                my $lastID = -1;
-                for ($index=0; $index<$numEntries; ++$index) {
-                    my $tagID = Get16u($dataPt, $dirStart + 2 + 12 * $index);
-                    # check for proper sequence (but ignore null entries at end)
-                    if ($tagID < $lastID and ($tagID or $$tagTablePtr{0})) {
-                        SortIFD($dataPt, $dirStart, $numEntries, $$tagTablePtr{0});
-                        $et->Warn("Entries in $name were out of sequence. Fixed.",1);
-                        last;
-                    }
-                    $lastID = $tagID;
-                }
+            # create lookup for existing tag ID's and determine if directory is sorted
+            my $lastID = -1;
+            for ($index=0; $index<$numEntries; ++$index) {
+                my $tagID = Get16u($dataPt, $dirStart + 2 + 12 * $index);
+                $hasOldID{$tagID} = 1;
+                # check for proper sequence (but ignore null entries at end)
+                $unsorted = 1 if $tagID < $lastID and ($tagID or $$tagTablePtr{0});
+                $lastID = $tagID;
+            }
+            # sort entries if out-of-order (but not in maker notes IFDs or RAW files)
+            if ($unsorted and not ($inMakerNotes or $et->IsRawType())) {
+                SortIFD($dataPt, $dirStart, $numEntries, $$tagTablePtr{0});
+                $et->Warn("Entries in $name were out of sequence. Fixed.",1);
+                $unsorted = 0;
             }
         } else {
             $numEntries = 0;
@@ -608,11 +617,12 @@ sub WriteExif($$$)
         }
 
         # loop through new values and accumulate all information for this IFD
-        my (%set, %mayDelete, $tagInfo);
+        my (%set, %mayDelete, $tagInfo, %hasNewID);
         my $wrongDir = $crossDelete{$dirName};
         my @newTagInfo = $et->GetNewTagInfoList($tagTablePtr);
         foreach $tagInfo (@newTagInfo) {
             my $tagID = $$tagInfo{TagID};
+            $hasNewID{$tagID} = 1;
             # must evaluate Condition later when we have all DataMember's available
             $set{$tagID} = (ref $$tagTablePtr{$tagID} eq 'ARRAY' or $$tagInfo{Condition}) ? '' : $tagInfo;
         }
@@ -964,7 +974,7 @@ Entry:  for (;;) {
                             $readCount = $oldSize / $formatSize[$readFormat];
                         }
                     }
-                    if ($oldID <= $lastTagID and not $inMakerNotes) {
+                    if ($oldID <= $lastTagID and not ($inMakerNotes or $et->IsRawType())) {
                         my $str = $oldInfo ? "$$oldInfo{Name} tag" : sprintf('tag 0x%x',$oldID);
                         if ($oldID == $lastTagID) {
                             $et->Warn("Duplicate $str in $name");
@@ -998,6 +1008,23 @@ Entry:  for (;;) {
                 }
             } else {
                 $isNew = $oldID <=> $newID;
+                # special logic needed if directory has out-of-order entries
+                if ($unsorted and $isNew) {
+                    if ($isNew > 0 and $hasOldID{$newID}) {
+                        # we wanted to create the new tag, but an old tag
+                        # does exist with this ID, so defer writing the new tag
+                        $isNew = -1;
+                    }
+                    if ($isNew < 0 and $hasNewID{$oldID}) {
+                        # we wanted to write the old tag, but we have
+                        # a new tag with this ID, so move it up in the order
+                        my @tmpTags = ( $oldID );
+                        $_ == $oldID or push @tmpTags, $_ foreach @newTags;
+                        @newTags = @tmpTags;
+                        $newID = $oldID;
+                        $isNew = 0;
+                    }
+                }
             }
             my $newInfo = $oldInfo;
             my $newFormat = $oldFormat;
@@ -1318,7 +1345,7 @@ NoOverwrite:            next if $isNew > 0;
                     unless (defined $offsetData{$dataTag} or $dataTag eq 'LeicaTrailer') {
                         # prefer tag from Composite table if it exists (otherwise
                         # PreviewImage data would be taken from Extra tag)
-                        my $compInfo = $Image::ExifTool::Composite{$dataTag};
+                        my $compInfo = Image::ExifTool::GetCompositeTagInfo($dataTag);
                         $offsetData{$dataTag} = $et->GetNewValue($compInfo || $dataTag);
                         my $err;
                         if (defined $offsetData{$dataTag}) {
@@ -1345,11 +1372,15 @@ NoOverwrite:            next if $isNew > 0;
                     if ($$et{DEL_GROUP}{MakerNotes} and
                        ($$et{DEL_GROUP}{MakerNotes} != 2 or $isNew <= 0))
                     {
-                        if ($isNew <= 0) {
-                            ++$$et{CHANGED};
-                            $verbose and print $out "  Deleting MakerNotes\n";
+                        if ($et->IsRawType()) {
+                            $et->WarnOnce("Can't delete MakerNotes from $$et{FileType}",1);
+                        } else {
+                            if ($isNew <= 0) {
+                                ++$$et{CHANGED};
+                                $verbose and print $out "  Deleting MakerNotes\n";
+                            }
+                            next;
                         }
-                        next;
                     }
                     my $saveOrder = GetByteOrder();
                     if ($isNew >= 0 and defined $set{$newID}) {
@@ -1765,7 +1796,7 @@ NoOverwrite:            next if $isNew > 0;
                         # - I'm going out of my way here to preserve data which is
                         #   invalidated anyway by our edits
                         my $odd;
-                        my $oddInfo = $Image::ExifTool::Composite{OriginalDecisionData};
+                        my $oddInfo = Image::ExifTool::GetCompositeTagInfo('OriginalDecisionData');
                         if ($oddInfo and $$et{NEW_VALUE}{$oddInfo}) {
                             $odd = $et->GetNewValue($dataTag);
                             if ($verbose > 1) {
@@ -1820,6 +1851,7 @@ NoOverwrite:            next if $isNew > 0;
                                 warn "Internal error writing offsets for $$newInfo{Name}\n";
                                 return undef;
                             }
+                            $newValuePt = \$newValue;
                         }
                         $offsetInfo or $offsetInfo = $offsetInfo[$ifd] = { };
                         # save location of valuePtr in new directory
@@ -2157,17 +2189,39 @@ NoOverwrite:            next if $isNew > 0;
             my @offsetList;
             if ($ifd >= 0) {
                 my $offsetInfo = $offsetInfo[$ifd] or next;
+                if ($$offsetInfo{0x111} and $$offsetInfo{0x144}) {
+                    # SubIFD may contain double-referenced data as both strips and tiles
+                    # for Sony ARW files when SonyRawFileType is "Lossless Compressed RAW 2"
+                    if ($dirName eq 'SubIFD' and $$et{TIFF_TYPE} eq 'ARW' and
+                        $$offsetInfo{0x117} and $$offsetInfo{0x145} and
+                        $$offsetInfo{0x111}[2]==1) # (must be a single strip or the tile offsets could get out of sync)
+                    {
+                        # some Sony ARW images contain double-referenced raw data stored as both strips
+                        # and tiles.  Copy the data using only the strip tags, but store the TileOffets
+                        # information for updating later (see PanasonicRaw:PatchRawDataOffset for a
+                        # description of offsetInfo elements)
+                        $$offsetInfo{0x111}[5] = $$offsetInfo{0x144}; # hack to save TileOffsets
+                        # delete tile information from offsetInfo because we will copy as strips
+                        delete $$offsetInfo{0x144};
+                        delete $$offsetInfo{0x145};
+                    } else {
+                        $et->Error("TIFF $dirName contains both strip and tile data");
+                    }
+                }
                 # patch Panasonic RAW/RW2 StripOffsets/StripByteCounts if necessary
                 my $stripOffsets = $$offsetInfo{0x111};
-                if ($stripOffsets and $$stripOffsets[0]{PanasonicHack}) {
+                my $rawDataOffset = $$offsetInfo{0x118};
+                if ($stripOffsets and $$stripOffsets[0]{PanasonicHack} or
+                    $rawDataOffset and $$rawDataOffset[0]{PanasonicHack})
+                {
                     require Image::ExifTool::PanasonicRaw;
                     my $err = Image::ExifTool::PanasonicRaw::PatchRawDataOffset($offsetInfo, $raf, $ifd);
                     $err and $et->Error($err);
                 }
                 my $tagID;
-                # loop through all tags in reverse order so we save thumbnail
+                # loop through all tags in reverse numerical order so we save thumbnail
                 # data before main image data if both exist in the same IFD
-                foreach $tagID (reverse sort keys %$offsetInfo) {
+                foreach $tagID (reverse sort { $a <=> $b } keys %$offsetInfo) {
                     my $tagInfo = $$offsetInfo{$tagID}[0];
                     next unless $$tagInfo{IsOffset}; # handle byte counts with offsets
                     my $sizeInfo = $$offsetInfo{$$tagInfo{OffsetPair}};
@@ -2285,8 +2339,8 @@ NoOverwrite:            next if $isNew > 0;
                     } elsif ($ifd < 0) {
                         # pad if necessary (but don't pad contiguous image blocks)
                         my $pad = 0;
-                        ++$pad if $size & 0x01 and ($n+1 >= $count or not $oldEnd or
-                                  $oldEnd != $$oldOffset[$n+1]);
+                        ++$pad if ($blockSize + $size) & 0x01 and ($n+1 >= $count or
+                                  not $oldEnd or $oldEnd != $$oldOffset[$n+1]);
                         # preserve original image padding if specified
                         if ($$origDirInfo{PreserveImagePadding} and $n+1 < $count and
                             $oldEnd and $$oldOffset[$n+1] > $oldEnd)
@@ -2393,10 +2447,28 @@ NoOverwrite:            next if $isNew > 0;
                     # also add to subIfdDataFixup if necessary
                     $subIfdDataFixup->AddFixup($offsetPos, $dataTag) if $subIfdDataFixup;
                     # must also (sometimes) update StripOffsets in Panasonic RW2 images
+                    # and TileOffsets in Sony ARW images
                     my $otherPos = $$offsetPair[0][5];
-                    if ($otherPos and $$tagInfo{PanasonicHack}) {
-                        Set32u($newOffset, \$newData, $otherPos);
-                        $fixup->AddFixup($otherPos, $dataTag);
+                    if ($otherPos) {
+                        if ($$tagInfo{PanasonicHack}) {
+                            Set32u($newOffset, \$newData, $otherPos);
+                            $fixup->AddFixup($otherPos, $dataTag);
+                        } elsif (ref $otherPos eq 'ARRAY') {
+                            # the image data was copied as one large strip, and is double-referenced
+                            # as tile data, so all we need to do now is properly update the tile offsets
+                            my $oldRawDataOffset = $$offsetPair[0][3][0];
+                            my $count = $$otherPos[2];
+                            my $i;
+                            # point to offsets in value data if more than one pointer
+                            $$otherPos[1] = Get32u(\$newData, $$otherPos[1]) if $count > 1;
+                            for ($i=0; $i<$count; ++$i) {
+                                my $oldTileOffset = $$otherPos[3][$i];
+                                my $ptrPos = $$otherPos[1] + 4 * $i;
+                                Set32u($newOffset + $oldTileOffset - $oldRawDataOffset, \$newData, $ptrPos);
+                                $fixup->AddFixup($ptrPos, $dataTag);
+                                $subIfdDataFixup->AddFixup($ptrPos, $dataTag) if $subIfdDataFixup;
+                            }
+                        }
                     }
                     if ($ifd >= 0) {
                         # buff length must be even (Note: may have changed since $size was set)
@@ -2550,7 +2622,7 @@ This file contains routines to write EXIF metadata.
 
 =head1 AUTHOR
 
-Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2022, Phil Harvey (philharvey66 at gmail.com)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

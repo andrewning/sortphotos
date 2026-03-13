@@ -13,10 +13,11 @@ package Image::ExifTool::Torrent;
 use strict;
 use vars qw($VERSION);
 use Image::ExifTool qw(:DataAccess :Utils);
+use Image::ExifTool::XMP;
 
-$VERSION = '1.03';
+$VERSION = '1.05';
 
-sub ReadBencode($$);
+sub ReadBencode($$$);
 sub ExtractTags($$$;$$@);
 
 # tags extracted from BitTorrent files
@@ -41,7 +42,10 @@ sub ExtractTags($$$;$$@);
         PrintConv => '$self->ConvertDateTime($val)',
     },
     'encoding'      => { },
-    'info'          => { SubDirectory => { TagTable => 'Image::ExifTool::Torrent::Info' } },
+    'info'          => {
+        SubDirectory => { TagTable => 'Image::ExifTool::Torrent::Info' },
+        Notes => 'extracted as a structure with the Struct option',
+    },
     'url-list'      => { Name => 'URLList1' },
 );
 
@@ -96,12 +100,12 @@ sub ReadMore($$)
 
 #------------------------------------------------------------------------------
 # Read bencoded value
-# Inputs: 0) input file, 1) buffer (pos must be set to current position)
+# Inputs: 0) ExifTool ref, 1) input file, 2) buffer (pos must be set to current position)
 # Returns: HASH ref, ARRAY ref, SCALAR ref, SCALAR, or undef on error or end of data
 # Notes: Sets BencodeError element of RAF on any error
-sub ReadBencode($$)
+sub ReadBencode($$$)
 {
-    my ($raf, $dataPt) = @_;
+    my ($et, $raf, $dataPt) = @_;
 
     # read more if necessary (keep a minimum of 64 bytes in the buffer)
     my $pos = pos($$dataPt);
@@ -120,21 +124,21 @@ sub ReadBencode($$)
     } elsif ($tok eq 'd') { # dictionary
         $val = { };
         for (;;) {
-            my $k = ReadBencode($raf, $dataPt);
+            my $k = ReadBencode($et, $raf, $dataPt);
             last unless defined $k;
             # the key must be a byte string
             if (ref $k) {
                 ref $k ne 'SCALAR' and $$raf{BencodeError} = 'Bad dictionary key', last;
                 $k = $$k;
             }
-            my $v = ReadBencode($raf, $dataPt);
+            my $v = ReadBencode($et, $raf, $dataPt);
             last unless defined $v;
             $$val{$k} = $v;
         }
     } elsif ($tok eq 'l') { # list
         $val = [ ];
         for (;;) {
-            my $v = ReadBencode($raf, $dataPt);
+            my $v = ReadBencode($et, $raf, $dataPt);
             last unless defined $v;
             push @$val, $v;
         }
@@ -162,8 +166,14 @@ sub ReadBencode($$)
         }
         if (defined $value) {
             # return as binary data unless it is a reasonable-length ASCII string
-            if (length($value) > 256 or $value =~ /[^\t\x20-\x7e]/) {
+            if (length($value) > 256) {
                 $val = \$value;
+            } elsif ($value =~ /[^\t\x20-\x7e]/) {
+                if (Image::ExifTool::XMP::IsUTF8(\$value) >= 0) {
+                    $val = $et->Decode($value, 'UTF8');
+                } else {
+                    $val = \$value;
+                }
             } else {
                 $val = $value;
             }
@@ -203,7 +213,7 @@ sub ExtractTags($$$;$$@)
             my $tagInfo = $et->GetTagInfo($tagTablePtr, $id) or next;
             if (ref $val eq 'ARRAY') {
                 if ($$tagInfo{JoinPath}) {
-                    $val = join '/', @$val;
+                    $val = join '/', map { ref $_ ? '(Binary data)' : $_ } @$val;
                 } else {
                     push @more, @$val;
                     next if ref $more[0] eq 'ARRAY'; # continue expanding nested lists
@@ -232,6 +242,11 @@ sub ExtractTags($$$;$$@)
                 $tagInfo = $et->GetTagInfo($tagTablePtr, $id) or next;
             }
             if (ref $val eq 'HASH') {
+                if ($et->Options('Struct') and $tagInfo and $$tagInfo{Name} eq 'Info') {
+                    $et->FoundTag($tagInfo, $val);
+                    ++$count;
+                    next;
+                }
                 # extract tags from this dictionary
                 my ($table, $rootID, $rootName);
                 if ($$tagInfo{SubDirectory}) {
@@ -265,10 +280,10 @@ sub ProcessTorrent($$)
     my $raf = $$dirInfo{RAF};
     my $buff = '';
     pos($buff) = 0;
-    my $dict = ReadBencode($raf, \$buff);
+    my $dict = ReadBencode($et, $raf, \$buff);
     my $err = $$raf{BencodeError};
     $et->Warn("Bencode error: $err") if $err;
-    if (ref $dict eq 'HASH' and $$dict{announce}) {
+    if (ref $dict eq 'HASH' and ($$dict{announce} or $$dict{'created by'})) {
         $et->SetFileType();
         my $tagTablePtr = GetTagTable('Image::ExifTool::Torrent::Main');
         ExtractTags($et, $dict, $tagTablePtr) and $success = 1;
@@ -295,7 +310,7 @@ bencoded information from BitTorrent files.
 
 =head1 AUTHOR
 
-Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2022, Phil Harvey (philharvey66 at gmail.com)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

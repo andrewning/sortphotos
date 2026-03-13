@@ -15,7 +15,7 @@ use vars qw($VERSION);
 use Image::ExifTool qw(:DataAccess :Utils);
 use Image::ExifTool::Exif;
 
-$VERSION = '1.05';
+$VERSION = '1.07';
 
 sub WritePhaseOne($$$);
 sub ProcessPhaseOne($$$);
@@ -73,10 +73,11 @@ my @formatName = ( undef, 'string', 'int16s', undef, 'int32s' );
         PrintConv => { #PH
             1 => 'RAW 1', #? (encrypted)
             2 => 'RAW 2', #? (encrypted)
-            3 => 'IIQ L',
+            3 => 'IIQ L', # (now "L14", ref IB)
             # 4?
             5 => 'IIQ S',
-            6 => 'IIQ Sv2',
+            6 => 'IIQ Sv2', # (now "S14" for "IIQ 14 Smart" and "IIQ 14 Sensor+", ref IB)
+            8 => 'IIQ L16', #IB ("IIQ 16 Extended" and "IIQ 16 Large")
         },
     },
     0x010f => {
@@ -260,6 +261,7 @@ my @formatName = ( undef, 'string', 'int16s', undef, 'int32s' );
     CHECK_PROC => \&Image::ExifTool::Exif::CheckExif,
     GROUPS => { 0 => 'MakerNotes', 2 => 'Camera' },
     TAG_PREFIX => 'SensorCalibration',
+    WRITE_GROUP => 'PhaseOne',
     VARS => { ENTRY_SIZE => 12 }, # (entries do not contain a format field)
     0x0400 => {
         Name => 'SensorDefects',
@@ -435,7 +437,7 @@ sub WritePhaseOne($$$)
 
     # nothing to do if we aren't changing any PhaseOne tags
     my $newTags = $et->GetNewTagInfoHash($tagTablePtr);
-    return undef unless %$newTags or $$et{DropTags};
+    return undef unless %$newTags or $$et{DropTags} or $$et{EDIT_DIRS}{PhaseOne};
 
     my $dataPt = $$dirInfo{DataPt};
     my $dataPos = $$dirInfo{DataPos} || 0;
@@ -710,7 +712,7 @@ One maker notes.
 
 =head1 AUTHOR
 
-Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2022, Phil Harvey (philharvey66 at gmail.com)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

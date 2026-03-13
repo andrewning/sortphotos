@@ -20,7 +20,7 @@ use strict;
 use vars qw($VERSION);
 use Image::ExifTool qw(:DataAccess :Utils);
 
-$VERSION = '1.16';
+$VERSION = '1.19';
 
 # road map of directory locations in GIF images
 my %gifMap = (
@@ -42,7 +42,7 @@ my %gifMap = (
     Comment    => {
         # for documentation only -- flag as writable for the docs, but
         # it won't appear in the TagLookup because there is no WRITE_PROC
-        Writable => 1,
+        Writable => 2,
     },
     Duration   => {
         Notes => 'duration of a single animation iteration',
@@ -54,6 +54,7 @@ my %gifMap = (
     Extensions => { # (for documentation only)
         SubDirectory => { TagTable => 'Image::ExifTool::GIF::Extensions' },
     },
+    TransparentColor => { },
 );
 
 # GIF89a application extensions:
@@ -67,12 +68,12 @@ my %gifMap = (
     'XMP Data/XMP' => { #2
         Name => 'XMP',
         IncludeLengthBytes => 1, # length bytes are included in the data
-        Writable => 1,
+        Writable => 2,
         SubDirectory => { TagTable => 'Image::ExifTool::XMP::Main' },
     },
     'ICCRGBG1/012' => { #4
         Name => 'ICC_Profile',
-        Writable => 1,
+        Writable => 2,
         SubDirectory => { TagTable => 'Image::ExifTool::ICC_Profile::Main' },
     },
     'MIDICTRL/Jon' => { #5
@@ -115,6 +116,11 @@ my %gifMap = (
         ValueConv => '$val + 1',
     },
     5 => 'BackgroundColor',
+    6 => {
+        Name => 'PixelAspectRatio',
+        RawConv => '$val ? $val : undef',
+        ValueConv => '($val + 15) / 64',
+    },
 );
 
 # GIF Netscape 2.0 animation extension (ref 3)
@@ -466,10 +472,13 @@ Block:
         } elsif ($a == 0xf9 and $length == 4) {     # graphic control extension
 
             last unless $raf->Read($buff, $length) == $length;
-            # sum the indivual delay times
+            # sum the individual delay times
             my $delay = Get16u(\$buff, 1);
             $delayTime += $delay;
             $verbose and printf $out "Graphic Control: delay=%.2f\n", $delay / 100;
+            # get transparent colour
+            my $bits = Get8u(\$buff, 0);
+            $et->HandleTag($tagTablePtr, 'TransparentColor', Get8u(\$buff,3)) if $bits & 0x01;
             $raf->Seek(-$length, 1) or last;
 
         } elsif ($a == 0x01 and $length == 12) {    # plain text extension
@@ -532,7 +541,7 @@ write GIF meta information.
 
 =head1 AUTHOR
 
-Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2022, Phil Harvey (philharvey66 at gmail.com)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

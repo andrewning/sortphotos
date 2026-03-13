@@ -573,6 +573,8 @@ my %epsg_vertcs = (
             3053 => 'Hjorsey 1955 Lambert',
             3057 => 'ISN93 Lambert 1993',
             3300 => 'Estonian Coordinate System of 1992',
+            3786 => 'Popular Visualisation CRS / Mercator', #PH (NC)
+            3857 => 'WGS 84 / Pseudo-Mercator', #PH (NC)
             20137 => 'Adindan UTM zone 37N',
             20138 => 'Adindan UTM zone 38N',
             20248 => 'AGD66 AMG zone 48',
@@ -603,7 +605,7 @@ my %epsg_vertcs = (
             20499 => 'Ain el Abd Bahrain Grid',
             20538 => 'Afgooye UTM zone 38N',
             20539 => 'Afgooye UTM zone 39N',
-            20700 => 'Lisbon Portugese Grid',
+            20700 => 'Lisbon Portuguese Grid',
             20822 => 'Aratu UTM zone 22S',
             20823 => 'Aratu UTM zone 23S',
             20824 => 'Aratu UTM zone 24S',
@@ -2240,7 +2242,7 @@ coordinates.
 
 =head1 AUTHOR
 
-Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2022, Phil Harvey (philharvey66 at gmail.com)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

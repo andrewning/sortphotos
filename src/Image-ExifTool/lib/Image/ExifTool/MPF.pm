@@ -28,8 +28,8 @@ sub ProcessMPImageList($$$);
         from this segment is stored as a JPEG trailer.  The MPF tags are not
         writable, however the MPF segment may be deleted as a group (with "MPF:All")
         but then the JPEG trailer should also be deleted (with "Trailer:All").  See
-        L<http://www.cipa.jp/std/documents/e/DC-007_E.pdf> for the official
-        specification.
+        L<https://web.archive.org/web/20190713230858/http://www.cipa.jp/std/documents/e/DC-007_E.pdf>
+        for the official specification.
     },
     0xb000 => 'MPFVersion',
     0xb001 => 'NumberOfImages',
@@ -97,7 +97,7 @@ sub ProcessMPImageList($$$);
     NOTES => q{
         The first MPF "Large Thumbnail" image is extracted as PreviewImage, and the
         rest of the embedded MPF images are extracted as MPImage#.  The
-        ExtractEmbedded (-ee) option may be used to extract information from these
+        L<ExtractEmbedded|../ExifTool.html#ExtractEmbedded> (-ee) option may be used to extract information from these
         embedded images.
     },
     0.1 => {
@@ -163,7 +163,7 @@ sub ProcessMPImageList($$$);
         },
         Notes => q{
             the first MPF "Large Thumbnail" is extracted as PreviewImage, and the rest
-            of the embedded MPF images are extracted as MPImage#.  The ExtractEmbedded
+            of the embedded MPF images are extracted as MPImage#.  The L<ExtractEmbedded|../ExifTool.html#ExtractEmbedded>
             option may be used to extract information from these embedded images.
         },
         # extract all MPF images (not just one)
@@ -266,7 +266,7 @@ Format (MPF) information from JPEG images.
 
 =head1 AUTHOR
 
-Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2022, Phil Harvey (philharvey66 at gmail.com)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.
