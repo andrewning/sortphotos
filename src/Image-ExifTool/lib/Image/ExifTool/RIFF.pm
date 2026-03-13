@@ -29,7 +29,7 @@ use strict;
 use vars qw($VERSION);
 use Image::ExifTool qw(:DataAccess :Utils);
 
-$VERSION = '1.51';
+$VERSION = '1.54';
 
 sub ConvertTimecode($);
 sub ProcessSGLT($$$);
@@ -142,7 +142,7 @@ my %code2charset = (
     0x64 => 'APICOM G.726 ADPCM',
     0x65 => 'APICOM G.722 ADPCM',
     0x66 => 'Microsoft DSAT', #6
-    0x67 => 'Micorsoft DSAT DISPLAY', #6
+    0x67 => 'Microsoft DSAT DISPLAY', #6
     0x69 => 'Voxware Byte Aligned', #7
     0x70 => 'Voxware AC8', #7
     0x71 => 'Voxware AC10', #7
@@ -339,7 +339,7 @@ my %code2charset = (
         these files, information is extracted from subsequent RIFF chunks as
         sub-documents, but the Duration is calculated for the full video.
     },
-    # (not 100% sure that the concatination technique mentioned above is valid - PH)
+    # (not 100% sure that the concatenation technique mentioned above is valid - PH)
    'fmt ' => {
         Name => 'AudioFormat',
         SubDirectory => { TagTable => 'Image::ExifTool::RIFF::AudioFormat' },
@@ -534,6 +534,38 @@ my %code2charset = (
             ProcessProc => \&ProcessSLLT,
         },
     },
+    iXML => { #PH
+        SubDirectory => { TagTable => 'Image::ExifTool::XMP::XML' },
+    },
+    aXML => { #PH
+        SubDirectory => { TagTable => 'Image::ExifTool::XMP::XML' },
+    },
+#
+# tags found in an AlphaImagingTech AVI video - PH
+#
+    LIST_INF0 => {  # ('0' instead of 'O' -- odd)
+        Name => 'Info',
+        SubDirectory => { TagTable => 'Image::ExifTool::RIFF::Info' },
+    },
+    gps0 => {
+        Name => 'GPSTrack',
+        SetGroups => 'RIFF', # (moves "QuickTime" tags to the "RIFF" group)
+        SubDirectory => {
+            TagTable => 'Image::ExifTool::QuickTime::Stream',
+            # (don't use code ref here or get "Prototype mismatch" warning with some Perl versions)
+            ProcessProc => 'Image::ExifTool::QuickTime::Process_gps0',
+        },
+    },
+    gsen => {
+        Name => 'GSensor',
+        SetGroups => 'RIFF', # (moves "QuickTime" tags to the "RIFF" group)
+        SubDirectory => {
+            TagTable => 'Image::ExifTool::QuickTime::Stream',
+            ProcessProc => 'Image::ExifTool::QuickTime::Process_gsen',
+        },
+    },
+    # gpsa - seen hex "01 20 00 00", same as QuickTime
+    # gsea - 16 bytes hex "04 08 02 00 20 02 00 00 1f 03 00 00 01 00 00 00"
 );
 
 # the maker notes used by some digital cameras
@@ -605,7 +637,11 @@ my %code2charset = (
         Name => 'BWFVersion',
         Format => 'int16u',
     },
-    # 348 - int8u[64] - SMPTE 330M UMID (Unique Material Identifier)
+    348 => {
+        Name => 'BWF_UMID',
+        Format => 'undef[64]',
+        ValueConv => '$_=unpack("H*",$val); s/0{64}$//; uc $_',
+    },
     # 412 - int8u[190] - reserved
     602 => {
         Name => 'CodingHistory',
@@ -878,7 +914,7 @@ my %code2charset = (
 
 # RIFF character set chunk
 %Image::ExifTool::RIFF::CSET = (
-    PROCESS_PROC => \&Image::ExifTool::RIFF::ProcessBinaryData,
+    PROCESS_PROC => \&Image::ExifTool::ProcessBinaryData,
     GROUPS => { 2 => 'Other' },
     FORMAT => 'int16u',
     0 => {
@@ -1248,7 +1284,7 @@ my %code2charset = (
         # (can't calculate duration like this for compressed audio types)
         RawConv => q{
             return undef if $$self{VALUE}{FileType} =~ /^(LA|OFR|PAC|WV)$/;
-            return ($val[0] and not ($val[2] or $val[3])) ? $val[1] / $val[0] : undef;
+            return(($val[0] and not ($val[2] or $val[3])) ? $val[1] / $val[0] : undef);
         },
         PrintConv => 'ConvertDuration($val)',
     },
@@ -1320,7 +1356,8 @@ sub CalcDuration($@)
         # FujiFilm REAL 3D AVI's), but the video stream information isn't reliable for
         # some cameras (eg. Olympus FE models), so use the video stream information
         # only if the RIFF header duration is 2 to 3 times longer
-        my $dur1 = $val[1] / $val[0] if $val[0];
+        my $dur1;
+        $dur1 = $val[1] / $val[0] if $val[0];
         if ($val[2] and $val[3]) {
             my $dur2 = $val[3] / $val[2];
             my $rat = $dur1 / $dur2;
@@ -1431,8 +1468,7 @@ sub MakeTagInfo($$)
 
 #------------------------------------------------------------------------------
 # Process RIFF chunks
-# Inputs: 0) ExifTool object reference, 1) directory information reference
-#         2) tag table reference
+# Inputs: 0) ExifTool ref, 1) dirInfo ref, 2) tag table ref
 # Returns: 1 on success
 sub ProcessChunks($$$)
 {
@@ -1660,9 +1696,14 @@ sub ProcessRIFF($$)
         }
         # RIFF chunks are padded to an even number of bytes
         my $len2 = $len + ($len & 0x01);
-        if ($$tagTbl{$tag} or (($verbose or $unknown) and $tag !~ /^(data|idx1|LIST_movi|RIFF)$/)) {
+        my $tagInfo = $$tagTbl{$tag};
+        if ($tagInfo or (($verbose or $unknown) and $tag !~ /^(data|idx1|LIST_movi|RIFF)$/)) {
             $raf->Read($buff, $len2) == $len2 or $err=1, last;
-            MakeTagInfo($tagTbl, $tag) if not $$tagTbl{$tag} and ($verbose or $unknown);
+            my $setGroups;
+            if ($tagInfo and ref $tagInfo eq 'HASH' and $$tagInfo{SetGroups}) {
+                $setGroups = $$et{SET_GROUP0} = $$et{SET_GROUP1} = $$tagInfo{SetGroups};
+            }
+            MakeTagInfo($tagTbl, $tag) if not $tagInfo and ($verbose or $unknown);
             $et->HandleTag($tagTbl, $tag, $buff,
                 DataPt  => \$buff,
                 DataPos => 0,   # (relative to Base)
@@ -1670,6 +1711,10 @@ sub ProcessRIFF($$)
                 Size    => $len2,
                 Base    => $pos,
             );
+            if ($setGroups) {
+                delete $$et{SET_GROUP0};
+                delete $$et{SET_GROUP1};
+            }
         } elsif ($tag eq 'RIFF') {
             # don't read into RIFF chunk (eg. concatenated video file)
             $raf->Read($buff, 4) == 4 or $err=1, last;
@@ -1709,7 +1754,7 @@ including AVI videos, WAV audio files and WEBP images.
 
 =head1 AUTHOR
 
-Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2020, Phil Harvey (philharvey66 at gmail.com)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

@@ -11,7 +11,7 @@ package Image::ExifTool::Lang::tr;
 use strict;
 use vars qw($VERSION);
 
-$VERSION = '1.04';
+$VERSION = '1.05';
 
 %Image::ExifTool::Lang::tr::Translate = (
    'Album' => 'Albüm',
@@ -499,6 +499,7 @@ $VERSION = '1.04';
     },
    'WhitePoint' => 'Beya nokta kromatik',
    'Writer-Editor' => 'Açıklama Yazarı',
+   'XResolution' => 'X çözünürlüğü',
    'YCbCrCoefficients' => 'Renk alanı transformasyon matriks katsayısı',
    'YCbCrPositioning' => {
       Description => 'Y ve C konumlama',
@@ -508,6 +509,7 @@ $VERSION = '1.04';
       },
     },
    'YCbCrSubSampling' => 'Y den C\'ye alt örnekleme oranı',
+   'YResolution' => 'Y çözünürlüğü',
 );
 
 1;  # end
@@ -526,7 +528,7 @@ and values.
 
 =head1 AUTHOR
 
-Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2020, Phil Harvey (philharvey66 at gmail.com)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

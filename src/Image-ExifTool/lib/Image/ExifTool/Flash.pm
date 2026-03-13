@@ -418,7 +418,7 @@ Record: for ($rec=0; ; ++$rec) {
             my $num = Get32u($dataPt, $pos);
             $$dirInfo{Pos} = $pos + 4;
             my ($i, @vals);
-            # add array index to compount tag name
+            # add array index to compound tag name
             my $structName = $$dirInfo{StructName};
             for ($i=0; $i<$num; ++$i) {
                 $$dirInfo{StructName} = $structName . $i if defined $structName;
@@ -721,7 +721,7 @@ will add AMF3 support.
 
 =head1 AUTHOR
 
-Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2020, Phil Harvey (philharvey66 at gmail.com)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

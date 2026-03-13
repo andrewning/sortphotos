@@ -28,7 +28,7 @@ use strict;
 use vars qw($VERSION $AUTOLOAD $iptcDigestInfo);
 use Image::ExifTool qw(:DataAccess :Utils);
 
-$VERSION = '1.62';
+$VERSION = '1.64';
 
 sub ProcessPhotoshop($$$);
 sub WritePhotoshop($$$);
@@ -545,7 +545,7 @@ my %unicodeString = (
         PrintConv => 'sprintf("%d%%",$val)',
     },
     # tags extracted from additional layer information (tag ID's are real)
-    # - must be able to accomodate a blank entry to preserve the list ordering
+    # - must be able to accommodate a blank entry to preserve the list ordering
     luni => {
         Name => 'LayerUnicodeNames',
         List => 1,
@@ -675,9 +675,18 @@ sub ProcessLayersAndMask($$$)
     # check for Lr16 block if layers length is 0 (ref https://forums.adobe.com/thread/1540914)
     if ($len == 0 and $num == 0) {
         $raf->Read($data,10) == 10 or return 0;
-        if ($data =~/^..8BIMLr16/s) {
+        if ($data =~ /^..8BIMLr16/s) {
             $raf->Read($data, $psiz+2) == $psiz+2 or return 0;
             $len = $psb ? Get64u(\$data, 0) : Get32u(\$data, 0);
+        } elsif ($data =~ /^..8BIMMt16/s) { # (have seen Mt16 before Lr16, ref PH)
+            $raf->Read($data, $psiz) == $psiz or return 0;
+            $raf->Read($data, 8) == 8 or return 0;
+            if ($data eq '8BIMLr16') {
+                $raf->Read($data, $psiz+2) == $psiz+2 or return 0;
+                $len = $psb ? Get64u(\$data, 0) : Get32u(\$data, 0);
+            } else {
+                $raf->Seek(-18-$psiz, 1) or return 0;
+            }
         } else {
             $raf->Seek(-10, 1) or return 0;
         }
@@ -819,7 +828,7 @@ sub ProcessDocumentData($$$)
     my $raf = $$dirInfo{RAF};
     my $dirLen = $$dirInfo{DirLen};
     my $pos = 36;   # length of header
-    my $buff;
+    my ($buff, $n, $err);
 
     $et->VerboseDir('Photoshop Document Data', undef, $dirLen);
     unless ($raf) {
@@ -838,27 +847,26 @@ sub ProcessDocumentData($$$)
     }
     my $psb = ($1 eq 'V0002');
     my %dinfo = ( DataPt => \$buff );
-    my ($n, $setOrder);
     $$et{IsPSB} = $psb; # set PSB flag (needed when handling Layers directory)
     while ($pos + 12 <= $dirLen) {
-        $raf->Read($buff, 8) == 8 or last;
+        $raf->Read($buff, 8) == 8 or $err = 'Error reading document data', last;
         # set byte order according to byte order of first signature
         SetByteOrder($buff =~ /^(8BIM|8B64)/ ? 'MM' : 'II') if $pos == 36;
         $buff = pack 'N*', unpack 'V*', $buff if GetByteOrder() eq 'II';
         my $sig = substr($buff, 0, 4);
-        last unless $sig eq '8BIM' or $sig eq '8B64';   # verify signature
+        $sig eq '8BIM' or $sig eq '8B64' or $err = 'Bad photoshop resource', last; # verify signature
         my $tag = substr($buff, 4, 4);
         if ($psb and $tag =~ /^(LMsk|Lr16|Lr32|Layr|Mt16|Mt32|Mtrn|Alph|FMsk|lnk2|FEid|FXid|PxSD)$/) {
-            last if $pos + 16 > $dirLen;
-            $raf->Read($buff, 8) == 8 or last;
+            $pos + 16 > $dirLen and $err = 'Short PSB resource', last;
+            $raf->Read($buff, 8) == 8 or $err = 'Error reading PSB resource', last;
             $n = Get64u(\$buff, 0);
             $pos += 4;
         } else {
-            $raf->Read($buff, 4) == 4 or last;
+            $raf->Read($buff, 4) == 4 or $err = 'Error reading PSD resource', last;
             $n = Get32u(\$buff, 0);
         }
         $pos += 12;
-        last if $pos + $n > $dirLen;
+        $pos + $n > $dirLen and $err = 'Truncated photoshop resource', last;
         my $pad = (4 - ($n & 3)) & 3;   # number of padding bytes
         my $tagInfo = $$tagTablePtr{$tag};
         if ($tagInfo or $verbose) {
@@ -866,20 +874,21 @@ sub ProcessDocumentData($$$)
                 my $fpos = $raf->Tell() + $n + $pad;
                 my $subTable = GetTagTable($$tagInfo{SubDirectory}{TagTable});
                 $et->ProcessDirectory({ RAF => $raf, DirLen => $n }, $subTable);
-                $raf->Seek($fpos, 0) or last;
+                $raf->Seek($fpos, 0) or $err = 'Seek error', last;
             } else {
                 $dinfo{DataPos} = $raf->Tell();
                 $dinfo{Start} = 0;
                 $dinfo{Size} = $n;
-                $raf->Read($buff, $n) == $n or last;
+                $raf->Read($buff, $n) == $n or $err = 'Error reading photoshop resource', last;
                 $et->HandleTag($tagTablePtr, $tag, undef, %dinfo);
-                $raf->Seek($pad, 1) or last;
+                $raf->Seek($pad, 1) or $err = 'Seek error', last;
             }
         } else {
-            $raf->Seek($n + $pad, 1) or last;
+            $raf->Seek($n + $pad, 1) or $err = 'Seek error', last;
         }
         $pos += $n + $pad;              # step to start of next structure
     }
+    $err and $et->Warn($err);
     return 1;
 }
 
@@ -910,6 +919,9 @@ sub ProcessPhotoshop($$$)
                 $et->Warn("Non-standard Photoshop at $path", 1);
             }
         }
+    }
+    if ($$et{FILE_TYPE} eq 'JPEG' and $$dirInfo{Parent} ne 'APP13') {
+        $$et{LOW_PRIORITY_DIR}{'*'} = 1;    # lower priority of all these tags
     }
     SetByteOrder('MM');     # Photoshop is always big-endian
     $verbose and $et->VerboseDir('Photoshop', 0, $$dirInfo{DirLen});
@@ -975,6 +987,7 @@ sub ProcessPhotoshop($$$)
         $size += 1 if $size & 0x01; # size is padded to an even # bytes
         $pos += $size;
     }
+    delete $$et{LOW_PRIORITY_DIR}{'*'};
     return $success;
 }
 
@@ -1123,7 +1136,7 @@ be preserved when copying Photoshop information via user-defined tags.
 
 =head1 AUTHOR
 
-Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2020, Phil Harvey (philharvey66 at gmail.com)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

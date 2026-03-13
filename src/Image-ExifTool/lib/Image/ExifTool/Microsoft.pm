@@ -152,7 +152,7 @@ my %sRegions = (
     Rectangle         => { },
     PersonDisplayName => { },
     PersonEmailDigest => { },
-    PersonLiveIdCID   => { },  # (see http://130.15.24.88/exiftool/forum/index.php?topic=4274.msg20368#msg20368)
+    PersonLiveIdCID   => { },  # (see https://exiftool.org/forum/index.php?topic=4274.msg20368#msg20368)
     PersonSourceID    => { },
 );
 %Image::ExifTool::Microsoft::MP = (
@@ -884,7 +884,7 @@ Microsoft-specific EXIF and XMP tags.
 
 =head1 AUTHOR
 
-Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2020, Phil Harvey (philharvey66 at gmail.com)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

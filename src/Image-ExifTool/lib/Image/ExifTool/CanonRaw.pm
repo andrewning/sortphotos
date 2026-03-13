@@ -683,7 +683,7 @@ sub ProcessCanonRaw($$$)
         my ($value, $delRawConv);
         if ($valueInDir) {  # is the value data in the directory?
             # this type of tag stores the value in the 'size' and 'ptr' fields
-            $valueDataPos = $dirOffset + $pt + 4;
+            $valueDataPos = $dirOffset + $pt + 4; # (remember, +2 for the entry count)
             $size = 8;
             $value = substr($buff, $pt+2, $size);
             # set count to 1 by default for normal values in directory
@@ -877,7 +877,7 @@ tags.)
 
 =head1 AUTHOR
 
-Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2020, Phil Harvey (philharvey66 at gmail.com)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.
@@ -892,7 +892,7 @@ under the same terms as Perl itself.
 
 =item L<http://xyrion.org/ciff/>
 
-=item L<http://owl.phy.queensu.ca/~phil/exiftool/canon_raw.html>
+=item L<https://exiftool.org/canon_raw.html>
 
 =back
 

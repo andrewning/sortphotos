@@ -21,7 +21,7 @@ use strict;
 use vars qw($VERSION);
 use Image::ExifTool qw(:DataAccess :Utils);
 
-$VERSION = '1.15';
+$VERSION = '1.16';
 
 sub ProcessPEResources($$);
 sub ProcessPEVersion($$);
@@ -52,6 +52,10 @@ my %resourceType = (
 );
 
 my %languageCode = (
+    Notes => q{
+        See L<https://docs.microsoft.com/en-us/openspecs/windows_protocols/ms-lcid>
+        for the full list of Microsoft language codes.
+    },
     '0000' => 'Neutral',
     '007F' => 'Invariant',
     '0400' => 'Process default',
@@ -397,7 +401,7 @@ my %languageCode = (
         existing StringFileInfo tags even if not listed in this table.
     },
     LanguageCode => {
-        Notes => 'extracted from the StringFileInfo value',
+        Notes => 'Windows code page; extracted from the StringFileInfo value',
         # ref http://techsupt.winbatch.com/TS/T000001050F49.html
         # (also see http://support.bigfix.com/fixlet/documents/WinInspectors-2006-08-10.pdf)
         # (also see ftp://ftp.dyu.edu.tw/pub/cpatch/faq/tech/tech_nlsnt.txt)
@@ -1362,7 +1366,7 @@ sub ProcessEXE($$)
             python => 'py',
             ruby   => 'rb',
             php    => 'php',
-        }->{$1};
+        }->{$prog};
         # use '.sh' for extension of all shell scripts
         $ext = $prog =~ /sh$/ ? 'sh' : '' unless defined $ext;
     }
@@ -1391,7 +1395,7 @@ library files.
 
 =head1 AUTHOR
 
-Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2020, Phil Harvey (philharvey66 at gmail.com)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

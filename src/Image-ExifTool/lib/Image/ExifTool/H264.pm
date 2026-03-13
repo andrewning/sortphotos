@@ -64,7 +64,7 @@ my $parsePictureTiming; # flag to enable parsing of picture timing information (
         Information (SEI).  I<[Yes, this description is confusing, but nothing
         compared to the challenge of actually decoding the data!]>  This information
         may exist at regular intervals through the entire video, but only the first
-        occurrence is extracted unless the ExtractEmbedded (-ee) option is used (in
+        occurrence is extracted unless the L<ExtractEmbedded|../ExifTool.html#ExtractEmbedded> (-ee) option is used (in
         which case subsequent occurrences are extracted as sub-documents).
     },
     # (Note: all these are explained in IEC 61834-4, but it costs money so it is useless to me)
@@ -458,7 +458,7 @@ my $parsePictureTiming; # flag to enable parsing of picture timing information (
         ValueConv => '$val == 0xff ? undef : $val',
         PrintConv => q{
             my $foc = ($val & 0x7e) / (($val & 0x01) ? 40 : 400);
-            return ($val & 0x80 ? 'Manual' : 'Auto') . " ($foc)";
+            return(($val & 0x80 ? 'Manual' : 'Auto') . " ($foc)");
         },
     },
 );
@@ -1108,7 +1108,7 @@ information from H.264 video streams.
 
 =head1 AUTHOR
 
-Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2020, Phil Harvey (philharvey66 at gmail.com)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

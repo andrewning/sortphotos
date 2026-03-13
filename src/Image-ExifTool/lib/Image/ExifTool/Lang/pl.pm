@@ -11,7 +11,7 @@ package Image::ExifTool::Lang::pl;
 use strict;
 use vars qw($VERSION);
 
-$VERSION = '1.10';
+$VERSION = '1.12';
 
 %Image::ExifTool::Lang::pl::Translate = (
    'A100DataOffset' => 'Przesunięcie danych A100',
@@ -1064,7 +1064,7 @@ $VERSION = '1.10';
    'SubfileType' => {
       Description => 'Typ podsekcji',
       PrintConv => {
-        'Full-resolution Image' => 'Obraz w pełnej rozdzielczości',
+        'Full-resolution image' => 'Obraz w pełnej rozdzielczości',
         'Reduced-resolution image' => 'Obraz o zredukowanej rozdzielczości',
         'Single page of multi-page image' => 'Jedna strona obrazu wielostronicowego',
         'Single page of multi-page reduced-resolution image' => 'Jedna strona obrazu wielostronicowego o zredukowanej rozdzielczości',
@@ -1258,7 +1258,7 @@ and values.
 
 =head1 AUTHOR
 
-Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2020, Phil Harvey (philharvey66 at gmail.com)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

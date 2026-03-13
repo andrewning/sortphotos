@@ -11,7 +11,7 @@ package Image::ExifTool::Lang::ja;
 use strict;
 use vars qw($VERSION);
 
-$VERSION = '1.23';
+$VERSION = '1.25';
 
 %Image::ExifTool::Lang::ja::Translate = (
    'AEAperture' => 'AE絞り',
@@ -633,6 +633,7 @@ $VERSION = '1.23';
         'On' => 'オン',
       },
     },
+   'AutoBracketingSet' => 'オートブラケット設定',
    'AutoExposureBracketing' => {
       Description => 'フラッシュバイアス',
       PrintConv => {
@@ -820,6 +821,7 @@ $VERSION = '1.23';
    'BurstMode' => {
       Description => 'ブラストモード',
       PrintConv => {
+        'Auto Exposure Bracketing (AEB)' => '無限',
         'Infinite' => '無限',
         'Off' => 'オフ',
         'On' => 'オン',
@@ -2190,6 +2192,7 @@ $VERSION = '1.23';
    'FlashEnergy' => 'フラッシュ強度',
    'FlashExposureBracketValue' => 'フラッシュ露出ブラケット値',
    'FlashExposureComp' => 'フラッシュ露出補正',
+   'FlashExposureComp2' => 'フラッシュ露出補正',
    'FlashExposureCompSet' => 'ストロボ露出補正設定',
    'FlashExposureLock' => {
       PrintConv => {
@@ -3352,6 +3355,7 @@ $VERSION = '1.23';
    'MaskedAreas' => 'マスク領域',
    'MasterDocumentID' => 'マスタ文書ID',
    'MasterGain' => 'マスターゲイン',
+   'MatrixMetering' => '分割測光',
    'Matteing' => 'マッチング',
    'MaxAperture' => '最大絞り',
    'MaxApertureAtCurrentFocal' => '現在焦点距離の最大絞り',
@@ -3472,6 +3476,7 @@ $VERSION = '1.23';
     },
    'Model' => '画像入力機器モデル',
    'Model2' => '画像入力機器モデル(2)',
+   'ModelID' => 'モデルID',
    'ModelTiePoint' => 'モデル拘束ポイントタグ',
    'ModelTransform' => 'モデル変化タグ',
    'ModelingFlash' => {
@@ -4215,6 +4220,7 @@ $VERSION = '1.23';
         'n/a' => '未設定',
       },
     },
+   'Quality2' => '品質',
    'QualityMode' => {
       Description => '品質モード',
       PrintConv => {
@@ -4877,7 +4883,8 @@ $VERSION = '1.23';
         'Soft2' => 'ソフト2',
         'n/a' => '該当無し',
       },
-    },   'SharpnessFactor' => 'シャープネス要因',
+    },
+   'SharpnessFactor' => 'シャープネス要因',
    'SharpnessFaithful' => 'シャープネス忠実設定',
    'SharpnessFrequency' => {
       PrintConv => {
@@ -5061,6 +5068,7 @@ $VERSION = '1.23';
    'SpecialInstructions' => '手順',
    'SpecialMode' => 'スペシャルモード',
    'SpectralSensitivity' => 'スペクトル感度',
+   'Sport' => 'スポーツ',
    'SpotFocusPointX' => 'スポットフォーカスポイントX',
    'SpotFocusPointY' => 'スポットフォーカスポイントY',
    'SpotMeterLinkToAFPoint' => {
@@ -5693,6 +5701,10 @@ $VERSION = '1.23';
         'Custom WB 4' => 'カスタムホワイトバランス4',
         'Custom WB 5400K' => 'カスタムホワイトバランス5400K',
         'Custom WB 8000K' => 'カスタムホワイトバランス8000K',
+        'One Touch WB 1' => 'カスタムホワイトバランス1',
+        'One Touch WB 2' => 'カスタムホワイトバランス2',
+        'One Touch WB 3' => 'カスタムホワイトバランス3',
+        'One Touch WB 4' => 'カスタムホワイトバランス4',
       },
     },
    'WhiteBalanceAdj' => {
@@ -5829,7 +5841,7 @@ and values.
 
 =head1 AUTHOR
 
-Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2020, Phil Harvey (philharvey66 at gmail.com)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

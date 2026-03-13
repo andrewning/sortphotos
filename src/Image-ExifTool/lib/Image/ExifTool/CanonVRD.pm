@@ -13,7 +13,7 @@
 #               2018/03/13 - PH Update to DPP 4.8.20
 #
 # References:   1) Bogdan private communication (Canon DPP v3.4.1.1)
-#               2) Gert Kello private communiation (DPP 3.8)
+#               2) Gert Kello private communication (DPP 3.8)
 #------------------------------------------------------------------------------
 
 package Image::ExifTool::CanonVRD;
@@ -23,7 +23,7 @@ use vars qw($VERSION);
 use Image::ExifTool qw(:DataAccess :Utils);
 use Image::ExifTool::Canon;
 
-$VERSION = '1.32';
+$VERSION = '1.33';
 
 sub ProcessCanonVRD($$;$);
 sub WriteCanonVRD($$;$);
@@ -150,8 +150,8 @@ my $blankFooter = "CANON OPTIONAL DATA\0" . ("\0" x 42) . "\xff\xd9";
         },{
             Name => 'IHL_EXIF',
             Notes => q{
-                extracted as a block if the Unknown option is used, or processed as the
-                first sub-document with the ExtractEmbedded option
+                extracted as a block if the L<Unknown|../ExifTool.html#Unknown> option is used, or processed as the
+                first sub-document with the L<ExtractEmbedded|../ExifTool.html#ExtractEmbedded> option
             },
             Binary => 1,
             Unknown => 1,
@@ -1818,7 +1818,7 @@ sub ProcessDR4($$;$)
         if (not $format) {
             $val = unpack 'H*', substr($$dataPt, $off, $len);
             $format = 'undef';
-        } elsif ($format eq 'double' and $len eq 8) {
+        } elsif ($format eq 'double' and $len == 8) {
             # avoid teeny weeny values
             $val = ReadValue($dataPt, $off, $format, undef, $len);
             $val = 0 if abs($val) < 1e-100;
@@ -1955,6 +1955,28 @@ sub WriteCanonVRD($$;$)
 }
 
 #------------------------------------------------------------------------------
+# Write DR4-type CanonVRD edit record
+# Inputs: 0) ExifTool object ref, 1) dirInfo ref, 2) tag table ref
+# Returns: VRD data block (may be empty if deleted, of undef on error)
+sub WriteCanonDR4($$;$)
+{
+    my ($et, $dirInfo, $tagTablePtr) = @_;
+    $et or return 1;    # allow dummy access
+    my $nvHash = $et->GetNewValueHash($Image::ExifTool::Extra{CanonDR4});
+    my $val = $et->GetNewValue($nvHash);
+    if (defined $val) {
+        return undef unless $et->IsOverwriting($nvHash, $val);
+        $et->VPrint(0, "  Writing CanonDR4 as a block\n");
+        ++$$et{CHANGED};
+        return WrapDR4($val);
+    }
+    my $buff = '';
+    $$dirInfo{OutFile} = \$buff;
+    return $buff if ProcessCanonVRD($et, $dirInfo, $tagTablePtr) > 0;
+    return undef;
+}
+
+#------------------------------------------------------------------------------
 # Read/write CanonVRD information (from VRD file or VRD trailer)
 # Inputs: 0) ExifTool object reference, 1) dirInfo reference
 # Returns: 1 on success, 0 not valid VRD, or -1 error writing
@@ -2015,7 +2037,7 @@ sub ProcessCanonVRD($$;$)
         # (so we must disable all Write() calls for this case)
         $dataPt = $outfile;
     }
-    if ($fromFile) {
+    if ($fromFile or $$dirInfo{DirStart}) {
         $dataPt = \$buff unless $dataPt;
         # read VRD data into memory if necessary
         unless ($raf->Read($$dataPt, $dirLen) == $dirLen) {
@@ -2112,7 +2134,7 @@ sub ProcessCanonVRD($$;$)
             $blockType = Get32u($dataPt, $pos);
             $blockLen = Get32u($dataPt, $pos + 4);
         }
-        $vrdType = 'DR4' if $blockType eq 0xffff00f7;
+        $vrdType = 'DR4' if $blockType == 0xffff00f7;
         $pos += 8;  # move to start of block
         if ($pos + $blockLen > $end) {
             $et->Warn('Possibly corrupt CanonVRD block');
@@ -2242,7 +2264,7 @@ files, and as a trailer in JPEG, CRW, CR2 and TIFF images.
 
 =head1 AUTHOR
 
-Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2020, Phil Harvey (philharvey66 at gmail.com)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

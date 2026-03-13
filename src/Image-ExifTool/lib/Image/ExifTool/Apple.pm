@@ -68,7 +68,7 @@ $VERSION = '1.04';
     },
     # 0x000c - rational64s[2]: eg) "0.1640625 0.19921875"
     # 0x000d - int32s: 0,1,6,20,24,32,40
-    # 0x000e - int32s: 0,1,4,12 (Orienation? 0=landscape? 4=portrait? ref 1)
+    # 0x000e - int32s: 0,1,4,12 (Orientation? 0=landscape? 4=portrait? ref 1)
     # 0x000f - int32s: 2,3
     # 0x0010 - int32s: 1
     0x0011 => {
@@ -148,7 +148,7 @@ Apple maker notes in EXIF information.
 
 =head1 AUTHOR
 
-Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2020, Phil Harvey (philharvey66 at gmail.com)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.
