@@ -11,6 +11,8 @@
 #               4) http://www.color.org/privatetag2007-01.pdf
 #               5) http://www.color.org/icc_specs2.xalter (approved revisions, 2010-07-16)
 #               6) Eef Vreeland private communication
+#               7) https://color.org/specification/ICC.2-2019.pdf
+#               8) https://www.color.org/specification/ICC.1-2022-05.pdf
 #
 # Notes:        The ICC profile information is different: the format of each
 #               tag is embedded in the information instead of in the directory
@@ -24,7 +26,7 @@ use strict;
 use vars qw($VERSION);
 use Image::ExifTool qw(:DataAccess :Utils);
 
-$VERSION = '1.35';
+$VERSION = '1.42';
 
 sub ProcessICC($$);
 sub ProcessICC_Profile($$$);
@@ -52,6 +54,11 @@ my %profileClass = (
     abst => 'Abstract Profile',
     nmcl => 'NamedColor Profile',
     nkpf => 'Nikon Input Device Profile (NON-STANDARD!)', # (written by Nikon utilities)
+    # additions in v5 (ref 7)
+    cenc => 'ColorEncodingSpace Profile',
+   'mid '=> 'MultiplexIdentification Profile',
+    mlnk => 'MultiplexLink Profile',
+    mvis => 'MultiplexVisualization Profile',
 );
 my %manuSig = ( #6
     'NONE' => 'none',
@@ -61,7 +68,7 @@ my %manuSig = ( #6
     'AAMA' => 'Aamazing Technologies, Inc.',
     'ACER' => 'Acer Peripherals',
     'ACLT' => 'Acolyte Color Research',
-    'ACTI' => 'Actix Sytems, Inc.',
+    'ACTI' => 'Actix Systems, Inc.',
     'ADAR' => 'Adara Technology, Inc.',
     'ADBE' => 'Adobe Systems Inc.',
     'ADI ' => 'ADI Systems, Inc.',
@@ -323,12 +330,14 @@ my %manuSig = ( #6
     'WTG2' => 'Ware To Go',
     'WYSE' => 'WYSE Technology',
     'XERX' => 'Xerox Corporation',
+    'XM  ' => 'Xiaomi',
     'XRIT' => 'X-Rite',
     'yxym' => 'YxyMaster GmbH',
     'Z123' => "Lavanya's test Company",
     'Zebr' => 'Zebra Technologies Inc',
     'ZRAN' => 'Zoran Corporation',
     # also seen: "    ",ACMS,KCMS,UCCM,etc2,SCTX
+    # registry: https://www.color.org/signatureRegistry/index.xalter
 );
 
 # ICC_Profile tag table
@@ -487,6 +496,10 @@ my %manuSig = ( #6
         },
     },
     ciis => 'ColorimetricIntentImageState', #5
+    cicp => { #8 (Coding-independent Code Points)
+        Name => 'ColorRepresentation',
+        SubDirectory => { TagTable => 'Image::ExifTool::ICC_Profile::ColorRep' },
+    },
     scoe => 'SceneColorimetryEstimates', #5
     sape => 'SceneAppearanceEstimates', #5
     fpce => 'FocalPlaneColorimetryEstimates', #5
@@ -516,11 +529,11 @@ my %manuSig = ( #6
             prmg => 'Perceptual Reference Medium Gamut',
         },
     },
-    meta => { #5 (EVENTUALLY DECODE THIS ONCE WE HAVE A SAMPLE!!)
+    meta => { #5
         Name => 'Metadata',
         SubDirectory => {
             TagTable => 'Image::ExifTool::ICC_Profile::Metadata',
-            Validate => '$type eq "meta"',
+            Validate => '$type eq "dict"',
         },
     },
 
@@ -538,6 +551,91 @@ my %manuSig = ( #6
         Name => 'PostScript2CRD3',
         Binary => 1, # (NC)
     },
+
+    # new tags in v5 (ref 7)
+    A2B3 => 'AToB3',
+    A2M0 => 'AToM0',
+    B2A3 => 'BToA3',
+    bcp0 => 'BRDFColorimetricParam0',
+    bcp1 => 'BRDFColorimetricParam1',
+    bcp2 => 'BRDFColorimetricParam2',
+    bcp3 => 'BRDFColorimetricParam3',
+    bsp0 => 'BRDFSpectralParam0',
+    bsp1 => 'BRDFSpectralParam1',
+    bsp2 => 'BRDFSpectralParam2',
+    bsp3 => 'BRDFSpectralParam3',
+    bAB0 => 'BRDFAToB0',
+    bAB1 => 'BRDFAToB1',
+    bAB2 => 'BRDFAToB2',
+    bAB3 => 'BRDFAToB3',
+    bBA0 => 'BRDFBToA0',
+    bBA1 => 'BRDFBToA1',
+    bBA2 => 'BRDFBToA2',
+    bBA3 => 'BRDFBToA3',
+    bBD0 => 'BRDFBToD0',
+    bBD1 => 'BRDFBToD1',
+    bBD2 => 'BRDFBToD2',
+    bBD3 => 'BRDFBToD3',
+    bDB0 => 'BRDFDToB0',
+    bDB1 => 'BRDFDToB1',
+    bDB2 => 'BRDFDToB2',
+    bDB3 => 'BRDFDToB3',
+    bMB0 => 'BRDFMToB0',
+    bMB1 => 'BRDFMToB1',
+    bMB2 => 'BRDFMToB2',
+    bMB3 => 'BRDFMToB3',
+    bMS0 => 'BRDFMToS0',
+    bMS1 => 'BRDFMToS1',
+    bMS2 => 'BRDFMToS2',
+    bMS3 => 'BRDFMToS3',
+    dAB0 => 'DirectionalAToB0',
+    dAB1 => 'DirectionalAToB1',
+    dAB2 => 'DirectionalAToB2',
+    dAB3 => 'DirectionalAToB3',
+    dBA0 => 'DirectionalBToA0',
+    dBA1 => 'DirectionalBToA1',
+    dBA2 => 'DirectionalBToA2',
+    dBA3 => 'DirectionalBToA3',
+    dBD0 => 'DirectionalBToD0',
+    dBD1 => 'DirectionalBToD1',
+    dBD2 => 'DirectionalBToD2',
+    dBD3 => 'DirectionalBToD3',
+    dDB0 => 'DirectionalDToB0',
+    dDB1 => 'DirectionalDToB1',
+    dDB2 => 'DirectionalDToB2',
+    dDB3 => 'DirectionalDToB3',
+    gdb0 => 'GamutBoundaryDescription0',
+    gdb1 => 'GamutBoundaryDescription1',
+    gdb2 => 'GamutBoundaryDescription2',
+    gdb3 => 'GamutBoundaryDescription3',
+   'mdv '=> 'MultiplexDefaultValues',
+    mcta => 'MultiplexTypeArray',
+    minf => 'MeasurementInfo',
+    miin => 'MeasurementInputInfo',
+    M2A0 => 'MToA0',
+    M2B0 => 'MToB0',
+    M2B1 => 'MToB1',
+    M2B2 => 'MToB2',
+    M2B3 => 'MToB3',
+    M2S0 => 'MToS0',
+    M2S1 => 'MToS1',
+    M2S2 => 'MToS2',
+    M2S3 => 'MToS3',
+    cept => 'ColorEncodingParams',
+    csnm => 'ColorSpaceName',
+    cloo => 'ColorantOrderOut',
+    clio => 'ColorantInfoOut',
+    c2sp => 'CustomToStandardPcc',
+   'CxF '=> 'CXF',
+    nmcl => 'NamedColor',
+    psin => 'ProfileSequenceInfo',
+    rfnm => 'ReferenceName',
+    svcn => 'SpectralViewingConditions',
+    swpt => 'SpectralWhitePoint',
+    s2cp => 'StandardToCustomPcc',
+    smap => 'SurfaceMap',
+    # smwp ? (seen in some v5 samples [was a mistake in sample production])
+    hdgm => { Name => 'HDGainMapInfo', Binary => 1 }, #PH
 
     # the following entry represents the ICC profile header, and doesn't
     # exist as a tag in the directory.  It is only in this table to provide
@@ -657,6 +755,78 @@ my %manuSig = ( #6
     },
 );
 
+# Coding-independent code points (cicp) definition
+# (NOTE: conversions are the same as Image::ExifTool::QuickTime::ColorRep tags)
+%Image::ExifTool::ICC_Profile::ColorRep = (
+    PROCESS_PROC => \&Image::ExifTool::ProcessBinaryData,
+    GROUPS => { 0 => 'ICC_Profile', 1 => 'ICC-cicp', 2 => 'Image' },
+    8 => {
+        Name => 'ColorPrimaries',
+        PrintConv => {
+            1 => 'BT.709',
+            2 => 'Unspecified',
+            4 => 'BT.470 System M (historical)',
+            5 => 'BT.470 System B, G (historical)',
+            6 => 'BT.601',
+            7 => 'SMPTE 240',
+            8 => 'Generic film (color filters using illuminant C)',
+            9 => 'BT.2020, BT.2100',
+            10 => 'SMPTE 428 (CIE 1931 XYZ)', #forum14766
+            11 => 'SMPTE RP 431-2',
+            12 => 'SMPTE EG 432-1',
+            22 => 'EBU Tech. 3213-E',
+        },
+    },
+    9 => {
+        Name => 'TransferCharacteristics',
+        PrintConv => {
+            0 => 'For future use (0)',
+            1 => 'BT.709',
+            2 => 'Unspecified',
+            3 => 'For future use (3)',
+            4 => 'BT.470 System M (historical)',    # Gamma 2.2? (ref forum14960)
+            5 => 'BT.470 System B, G (historical)', # Gamma 2.8? (ref forum14960)
+            6 => 'BT.601',
+            7 => 'SMPTE 240 M',
+            8 => 'Linear',
+            9 => 'Logarithmic (100 : 1 range)',
+            10 => 'Logarithmic (100 * Sqrt(10) : 1 range)',
+            11 => 'IEC 61966-2-4',
+            12 => 'BT.1361',
+            13 => 'sRGB or sYCC',
+            14 => 'BT.2020 10-bit systems',
+            15 => 'BT.2020 12-bit systems',
+            16 => 'SMPTE ST 2084, ITU BT.2100 PQ',
+            17 => 'SMPTE ST 428',
+            18 => 'BT.2100 HLG, ARIB STD-B67',
+        },
+    },
+    10 => {
+        Name => 'MatrixCoefficients',
+        PrintConv => {
+            0 => 'Identity matrix',
+            1 => 'BT.709',
+            2 => 'Unspecified',
+            3 => 'For future use (3)',
+            4 => 'US FCC 73.628',
+            5 => 'BT.470 System B, G (historical)',
+            6 => 'BT.601',
+            7 => 'SMPTE 240 M',
+            8 => 'YCgCo',
+            9 => 'BT.2020 non-constant luminance, BT.2100 YCbCr',
+            10 => 'BT.2020 constant luminance',
+            11 => 'SMPTE ST 2085 YDzDx',
+            12 => 'Chromaticity-derived non-constant luminance',
+            13 => 'Chromaticity-derived constant luminance',
+            14 => 'BT.2100 ICtCp',
+        },
+    },
+    11 => {
+        Name => 'VideoFullRangeFlag',
+        PrintConv => { 0 => 'Limited', 1 => 'Full' },
+    },
+);
+
 # viewingConditionsType (view) definition
 %Image::ExifTool::ICC_Profile::ViewingConditions = (
     PROCESS_PROC => \&Image::ExifTool::ProcessBinaryData,
@@ -725,6 +895,7 @@ my %manuSig = ( #6
         Name => 'ChromaticityColorant',
         Format => 'int16u',
         PrintConv => {
+            0 => 'Unknown',
             1 => 'ITU-R BT.709',
             2 => 'SMPTE RP145-1994',
             3 => 'EBU Tech.3213-E',
@@ -793,7 +964,7 @@ my %manuSig = ( #6
 %Image::ExifTool::ICC_Profile::Metadata = (
     PROCESS_PROC => \&ProcessMetadata,
     GROUPS => { 0 => 'ICC_Profile', 1 => 'ICC-meta', 2 => 'Image' },
-    VARS => { NO_ID => 1 },
+    VARS => { ID_FMT => 'none' },
     NOTES => q{
         Only these few tags have been pre-defined, but ExifTool will extract any
         Metadata tags that exist.
@@ -801,6 +972,7 @@ my %manuSig = ( #6
     ManufacturerName => { },
     MediaColor       => { },
     MediaWeight      => { },
+    CreatorApp       => { },
 );
 
 #------------------------------------------------------------------------------
@@ -850,7 +1022,7 @@ sub FormatICCTag($$$)
     # dataType
     if ($type eq 'data' and $size >= 12) {
         my $form = Get32u($dataPt, $offset+8);
-        # format 0 is ASCII data
+        # format 0 is UTF-8 data
         $form == 0 and return substr($$dataPt, $offset+12, $size-12);
         # binary data and other data types treat as binary (ie. don't format)
     }
@@ -910,7 +1082,7 @@ sub FormatICCTag($$$)
 }
 
 #------------------------------------------------------------------------------
-# Process ICC metadata record (ref 5) (UNTESTED!)
+# Process ICC metadata record (ref 5)
 # Inputs: 0) ExifTool ref, 1) dirInfo ref, 2) tag table ref
 # Returns: 1 on success
 sub ProcessMetadata($$$)
@@ -942,7 +1114,7 @@ sub ProcessMetadata($$$)
         my $namePtr = Get32u($dataPt, $entry);
         my $nameLen = Get32u($dataPt, $entry + 4);
         my $valuePtr = Get32u($dataPt, $entry + 8);
-        my $valueLen = Get32u($dataPt, $entry + 16);
+        my $valueLen = Get32u($dataPt, $entry + 12);
         next unless $namePtr and $valuePtr;   # ignore if offsets are zero
         if ($namePtr < $minPtr or $namePtr + $nameLen > $dirLen or
             $valuePtr < $minPtr or $valuePtr + $valueLen > $dirLen)
@@ -950,8 +1122,8 @@ sub ProcessMetadata($$$)
             $et->Warn('Corrupted ICC meta dictionary');
             last;
         }
-        my $tag = substr($dataPt, $dirStart + $namePtr, $nameLen);
-        my $val = substr($dataPt, $dirStart + $valuePtr, $valueLen);
+        my $tag = substr($$dataPt, $dirStart + $namePtr, $nameLen);
+        my $val = substr($$dataPt, $dirStart + $valuePtr, $valueLen);
         $tag = $et->Decode($tag, 'UTF16', 'MM', 'UTF8');
         $val = $et->Decode($val, 'UTF16', 'MM');
         # generate tagInfo if it doesn't exist
@@ -960,6 +1132,7 @@ sub ProcessMetadata($$$)
             $name =~ s/\s+(.)/\u$1/g;
             $name =~ tr/-_a-zA-Z0-9//dc;
             next unless length $name;
+            $et->VPrint(0, $$et{INDENT}, "[adding $tag]\n");
             AddTagToTable($tagTablePtr, $tag, { Name => $name });
         }
         $et->HandleTag($tagTablePtr, $tag, $val);
@@ -1022,7 +1195,7 @@ sub ValidateICC($)
     $profileClass{substr($$valPtr, 12, 4)} or $err = 'profile class';
     my $col = substr($$valPtr, 16, 4); # ColorSpaceData
     my $con = substr($$valPtr, 20, 4); # ConnectionSpace
-    my $match = '(XYZ |Lab |Luv |YCbr|Yxy |RGB |GRAY|HSV |HLS |CMYK|CMY |[2-9A-F]CLR)';
+    my $match = '(XYZ |Lab |Luv |YCbr|Yxy |RGB |GRAY|HSV |HLS |CMYK|CMY |[2-9A-F]CLR|nc..|\0{4})';
     $col =~ /$match/ or $err = 'color space';
     $con =~ /$match/ or $err = 'connection space';
     return $err ? "Invalid ICC profile (bad $err)" : undef;
@@ -1134,7 +1307,7 @@ sub ProcessICC_Profile($$$)
         my $tagInfo = $et->GetTagInfo($tagTablePtr, $tagID);
         # unknown tags aren't generated automatically by GetTagInfo()
         # if the tagID's aren't numeric, so we must do this manually:
-        if (not $tagInfo and $$et{OPTIONS}{Unknown}) {
+        if (not $tagInfo and ($$et{OPTIONS}{Unknown} or $verbose)) {
             $tagInfo = { Unknown => 1 };
             AddTagToTable($tagTablePtr, $tagID, $tagInfo);
         }
@@ -1222,10 +1395,10 @@ sub ProcessICC_Profile($$$)
                 DirName  => $name,
                 Parent   => $$dirInfo{DirName},
             );
-            my $type = substr($$dataPt, $valuePtr, 4);
+            my $type = $fmt;
             #### eval Validate ($type)
             if (defined $$subdir{Validate} and not eval $$subdir{Validate}) {
-                $et->Warn("Invalid $name data");
+                $et->Warn("Invalid ICC $name data");
             } else {
                 $et->ProcessDirectory(\%subdirInfo, $newTagTable, $$subdir{ProcessProc});
             }
@@ -1264,7 +1437,7 @@ data created on one device into another device's native color space.
 
 =head1 AUTHOR
 
-Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2026, Phil Harvey (philharvey66 at gmail.com)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.
@@ -1276,6 +1449,8 @@ under the same terms as Perl itself.
 =item L<http://www.color.org/icc_specs2.html>
 
 =item L<http://developer.apple.com/documentation/GraphicsImaging/Reference/ColorSync_Manager/ColorSync_Manager.pdf>
+
+=item L<https://color.org/specification/ICC.2-2019.pdf>
 
 =back
 

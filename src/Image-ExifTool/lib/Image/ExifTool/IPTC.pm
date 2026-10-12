@@ -15,7 +15,7 @@ use strict;
 use vars qw($VERSION $AUTOLOAD %iptcCharset);
 use Image::ExifTool qw(:DataAccess :Utils);
 
-$VERSION = '1.56';
+$VERSION = '1.59';
 
 %iptcCharset = (
     "\x1b%G"  => 'UTF8',
@@ -411,6 +411,7 @@ my %fileFormat = (
         Shift => 'Time',
         ValueConv => 'Image::ExifTool::Exif::ExifDate($val)',
         ValueConvInv => 'Image::ExifTool::IPTC::IptcDate($val)',
+        PrintConv => '$self->Options("DateFormat") ? $self->ConvertDateTime("$val 00:00:00") : $val',
         PrintConvInv => 'Image::ExifTool::IPTC::InverseDateOrTime($self,$val)',
     },
     60 => {
@@ -420,6 +421,7 @@ my %fileFormat = (
         Shift => 'Time',
         ValueConv => 'Image::ExifTool::Exif::ExifTime($val)',
         ValueConvInv => 'Image::ExifTool::IPTC::IptcTime($val)',
+        PrintConv => '$self->Options("DateFormat") ? $self->ConvertDateTime("1970:01:01 $val") : $val',
         PrintConvInv => 'Image::ExifTool::IPTC::InverseDateOrTime($self,$val)',
     },
     62 => {
@@ -429,6 +431,7 @@ my %fileFormat = (
         Shift => 'Time',
         ValueConv => 'Image::ExifTool::Exif::ExifDate($val)',
         ValueConvInv => 'Image::ExifTool::IPTC::IptcDate($val)',
+        PrintConv => '$self->Options("DateFormat") ? $self->ConvertDateTime("$val 00:00:00") : $val',
         PrintConvInv => 'Image::ExifTool::IPTC::InverseDateOrTime($self,$val)',
     },
     63 => {
@@ -438,6 +441,7 @@ my %fileFormat = (
         Shift => 'Time',
         ValueConv => 'Image::ExifTool::Exif::ExifTime($val)',
         ValueConvInv => 'Image::ExifTool::IPTC::IptcTime($val)',
+        PrintConv => '$self->Options("DateFormat") ? $self->ConvertDateTime("1970:01:01 $val") : $val',
         PrintConvInv => 'Image::ExifTool::IPTC::InverseDateOrTime($self,$val)',
     },
     65 => {
@@ -497,6 +501,7 @@ my %fileFormat = (
     103 => {
         Name => 'OriginalTransmissionReference',
         Format => 'string[0,32]',
+        Notes => 'now used as a job identifier',
     },
     105 => {
         Name => 'Headline',
@@ -1020,7 +1025,7 @@ sub TranslateCodedString($$$$)
         $$valPtr = $et->Decode($$valPtr, $$xlatPtr);
     } else {
         # don't yet support reading ISO 2022 shifted character sets
-        $et->WarnOnce('Some IPTC characters not converted (ISO 2022 shifting not supported)');
+        $et->Warn('Some IPTC characters not converted (ISO 2022 shifting not supported)');
     }
 }
 
@@ -1050,8 +1055,9 @@ sub ProcessIPTC($$$)
     my $dirLen = $$dirInfo{DirLen} || 0;
     my $dirEnd = $pos + $dirLen;
     my $verbose = $et->Options('Verbose');
+    my $validate = $et->Options('Validate');
     my $success = 0;
-    my ($lastRec, $recordPtr, $recordName);
+    my ($lastRec, $recordPtr, $recordName, %seen);
 
     $verbose and $dirInfo and $et->VerboseDir('IPTC', 0, $$dirInfo{DirLen});
 
@@ -1077,7 +1083,7 @@ sub ProcessIPTC($$$)
                 $et->FoundTag('CurrentIPTCDigest', $md5);
             }
         } else {
-            if (($Image::ExifTool::MWG::strict or $et->Options('Validate')) and
+            if (($Image::ExifTool::MWG::strict or $validate) and
                 $$et{FILE_TYPE} =~ /^(JPEG|TIFF|PSD)$/)
             {
                 if ($Image::ExifTool::MWG::strict) {
@@ -1153,9 +1159,12 @@ sub ProcessIPTC($$$)
             last;
         }
         if (not defined $lastRec or $lastRec != $rec) {
+            if ($validate and defined $lastRec and $rec < $lastRec) {
+                $et->Warn("IPTC doesn't conform to spec: Records out of sequence",1)
+            }
             my $tableInfo = $tagTablePtr->{$rec};
             unless ($tableInfo) {
-                $et->WarnOnce("Unrecognized IPTC record $rec (ignored)");
+                $et->Warn("Unrecognized IPTC record $rec (ignored)");
                 $pos += $len;
                 next;   # ignore this entry
             }
@@ -1177,15 +1186,35 @@ sub ProcessIPTC($$$)
             # - no Name so name is generated automatically with decimal tag number
             AddTagToTable($recordPtr, $tag, { Unknown => 1 });
         }
-
         my $tagInfo = $et->GetTagInfo($recordPtr, $tag);
+        if ($validate and not $$tagInfo{List} and not $$tagInfo{Unknown}) {
+            $et->Warn("Multiple IPTC $$tagInfo{Name} tags") if $seen{$tagInfo};
+            $seen{$tagInfo} = 1;
+        }
         my $format;
         # (could use $$recordPtr{FORMAT} if no Format below, but don't do this to
         #  be backward compatible with improperly written PhotoMechanic tags)
         $format = $$tagInfo{Format} if $tagInfo;
-        # use logic to determine format if not specified
-        unless ($format) {
+        if (not $format) {
+            # guess at "int" format if not specified
             $format = 'int' if $len <= 4 and $len != 3 and $val =~ /[\0-\x08]/;
+        } elsif ($validate) {
+            my ($fmt,$min,$max);
+            if ($format =~ /(.*)\[(\d+)(,(\d+))?\]/) {
+                $fmt = $1;
+                $min = $2;
+                $max = $4 || $2;
+            } else {
+                $fmt = $format;
+                $min = $max = 1;
+            }
+            my $siz = Image::ExifTool::FormatSize($fmt) || 1;
+            $min *= $siz; $max *= $siz;
+            if ($len < $min or $len > $max) {
+                my $should = ($min == $max) ? $min : ($len < $min ? "$min min" : "$max max");
+                my $what = ($len < $siz * $min) ? 'short' : 'long';
+                $et->Warn("IPTC $$tagInfo{Name} too $what ($len bytes; should be $should)", 1);
+            }
         }
         if ($format) {
             if ($format =~ /^int/) {
@@ -1197,7 +1226,10 @@ sub ProcessIPTC($$$)
                     }
                 }
             } elsif ($format =~ /^string/) {
-                $val =~ s/\0+$//;   # some braindead softwares add null terminators
+                # some braindead softwares add null terminators
+                if ($val =~ s/\0+$// and $validate) {
+                    $et->Warn("IPTC $$tagInfo{Name} improperly terminated", 1);
+                }
                 if ($rec == 1) {
                     # handle CodedCharacterSet tag
                     $xlat = HandleCodedCharset($et, $val) if $tag == 90;
@@ -1207,9 +1239,11 @@ sub ProcessIPTC($$$)
                     TranslateCodedString($et, \$val, \$xlat, 1);
                 }
             } elsif ($format =~ /^digits/) {
-                $val =~ s/\0+$//;
+                if ($val =~ s/\0+$// and $validate) {
+                    $et->Warn("IPTC $$tagInfo{Name} improperly terminated", 1);
+                }
             } elsif ($format !~ /^undef/) {
-                warn("Invalid IPTC format: $format");
+                warn("Invalid IPTC format: $format");   # (this would be a programming error)
             }
         }
         $verbose and $et->VerboseInfo($tag, $tagInfo,
@@ -1253,7 +1287,7 @@ image files.
 
 =head1 AUTHOR
 
-Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2026, Phil Harvey (philharvey66 at gmail.com)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

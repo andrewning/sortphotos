@@ -11,7 +11,7 @@
 #               3) http://homepage3.nifty.com/kamisaka/makernote/makernote_casio.htm
 #               4) http://gvsoft.homedns.org/exif/makernote-casio-type1.html
 #               5) Robert Chi private communication (EX-F1)
-#               6) http://u88.n24.queensu.ca/exiftool/forum/index.php/topic,3701.html
+#               6) https://exiftool.org/forum/index.php/topic,3701.html
 #               JD) Jens Duttke private communication
 #------------------------------------------------------------------------------
 
@@ -634,7 +634,7 @@ $VERSION = '1.38';
             15 => 'High Speed Best Selection',
             16 => 'Portrait',
             17 => 'Scenery',
-            18 => 'Portrait With Scenery',
+            18 => 'Portrait with Scenery',
             19 => 'Flower',
             20 => 'Natural Green',
             21 => 'Autumn Leaves',
@@ -723,7 +723,7 @@ $VERSION = '1.38';
             14 => 'High Speed Best Selection',
             15 => 'Portrait',
             16 => 'Scenery',
-            17 => 'Portrait With Scenery',
+            17 => 'Portrait with Scenery',
             18 => 'Flower',
             19 => 'Natural Green',
             20 => 'Autumn Leaves',
@@ -1408,7 +1408,7 @@ $VERSION = '1.38';
             0 => 'Off',
             1 => 'Portrait',
             2 => 'Scenery',
-            3 => 'Portrait With Scenery',
+            3 => 'Portrait with Scenery',
             4 => 'Children',
             5 => 'Sports',
             6 => 'Night Scene',
@@ -2034,7 +2034,7 @@ Casio maker notes in EXIF information.
 
 =head1 AUTHOR
 
-Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2026, Phil Harvey (philharvey66 at gmail.com)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

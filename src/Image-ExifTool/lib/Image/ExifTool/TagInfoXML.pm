@@ -15,7 +15,7 @@ use vars qw($VERSION @ISA $makeMissing);
 use Image::ExifTool qw(:Utils :Vars);
 use Image::ExifTool::XMP;
 
-$VERSION = '1.30';
+$VERSION = '1.38';
 @ISA = qw(Exporter);
 
 # set this to a language code to generate Lang module with 'MISSING' entries
@@ -28,16 +28,17 @@ sub NumbersFirst;
 # names for acknowledgements in the POD documentation
 my %credits = (
     cs   => 'Jens Duttke and Petr MichE<aacute>lek',
-    de   => 'Jens Duttke and Herbert Kauer',
+    de   => 'Jens Duttke, Herbert Kauer and Jobi',
     es   => 'Jens Duttke, Santiago del BrE<iacute>o GonzE<aacute>lez and Emilio Sancha',
     fi   => 'Jens Duttke and Jarkko ME<auml>kineva',
-    fr   => 'Jens Duttke, Bernard Guillotin, Jean Glasser, Jean Piquemal, Harry Nizard and Alphonse Philippe',
+    fr   => 'Jens Duttke, Bernard Guillotin, Jean Glasser, Jean Piquemal, Harry Nizard, Alphonse Philippe and Philippe Bonnaure (GraphicConverter)',
     it   => 'Jens Duttke, Ferdinando Agovino, Emilio Dati and Michele Locati',
     ja   => 'Jens Duttke and Kazunari Nishina',
     ko   => 'Jens Duttke and Jeong Beom Kim',
     nl   => 'Jens Duttke, Peter Moonen, Herman Beld and Peter van der Laan',
     pl   => 'Jens Duttke, Przemyslaw Sulek and Kacper Perschke',
-    ru   => 'Jens Duttke, Sergey Shemetov, Dmitry Yerokhin and Anton Sukhinov',
+    ru   => 'Jens Duttke, Sergey Shemetov, Dmitry Yerokhin, Anton Sukhinov and Alexander',
+    sk   => 'Peter Bagin',
     sv   => 'Jens Duttke and BjE<ouml>rn SE<ouml>derstrE<ouml>m',
    'tr'  => 'Jens Duttke, Hasan Yildirim and Cihan Ulusoy',
     zh_cn => 'Jens Duttke and Haibing Zhong',
@@ -58,6 +59,12 @@ my %translateLang = (
 my $numbersFirst = 1;   # set to -1 to sort numbers last, or 2 to put negative numbers last
 my $caseInsensitive;    # used internally by sort routine
 
+# write groups that don't represent real family 1 group names
+my %fakeWriteGroup = (
+    Comment => 1,   # (JPEG Comment)
+    colr => 1,      # (Jpeg2000 'colr' box)
+);
+
 #------------------------------------------------------------------------------
 # Utility to print tag information database as an XML list
 # Inputs: 0) output file name (undef to send to console),
@@ -67,9 +74,9 @@ sub Write(;$$%)
 {
     local ($_, *PTIFILE);
     my ($file, $group, %opts) = @_;
-    my @groups = split ':', $group if $group;
-    my $et = new Image::ExifTool;
-    my ($fp, $tableName, %langInfo, @langs, $defaultLang);
+    my $et = Image::ExifTool->new;
+    my ($fp, $tableName, %langInfo, @langs, $defaultLang, @groups);
+    @groups = split ':', $group if $group;
 
     Image::ExifTool::LoadAllTables();   # first load all our tables
     unless ($opts{NoDesc}) {
@@ -119,6 +126,7 @@ PTILoop:    for ($index=0; $index<@infoArray; ++$index) {
                 my $tagInfo = $infoArray[$index];
                 # don't list subdirectories unless they are writable
                 next unless $$tagInfo{Writable} or not $$tagInfo{SubDirectory};
+                next if $$tagInfo{Hidden};
                 if (@groups) {
                     my @tg = $et->GetGroup($tagInfo);
                     foreach $group (@groups) {
@@ -151,6 +159,7 @@ PTILoop:    for ($index=0; $index<@infoArray; ++$index) {
                 my $writable = $format ? 'true' : 'false';
                 # check our conversions to make sure we can really write this tag
                 if ($writable eq 'true') {
+                    $writable = 'false' if defined $$tagInfo{Writable} and not $$tagInfo{Writable};
                     foreach ('PrintConv','ValueConv') {
                         next unless $$tagInfo{$_};
                         next if $$tagInfo{$_ . 'Inv'};
@@ -160,10 +169,11 @@ PTILoop:    for ($index=0; $index<@infoArray; ++$index) {
                         last;
                     }
                 }
-                $format = $$tagInfo{Format} || $$table{FORMAT} if not defined $format or $format eq '1';
+                $format = $$tagInfo{Format} || $$table{FORMAT} if not $format or $format eq '1';
                 $format = 'struct' if $$tagInfo{Struct};
                 if (defined $format) {
                     $format =~ s/\[.*\$.*\]//;   # remove expressions from format
+                    $format = 'undef' if $format eq '2'; # (special case)
                 } elsif ($isBinary) {
                     $format = 'int8u';
                 } else {
@@ -177,9 +187,8 @@ PTILoop:    for ($index=0; $index<@infoArray; ++$index) {
                 }
                 my @groups = $et->GetGroup($tagInfo);
                 my $writeGroup = $$tagInfo{WriteGroup} || $$table{WRITE_GROUP};
-                if ($writeGroup and $writeGroup ne 'Comment') {
-                    $groups[1] = $writeGroup;   # use common write group for group 1
-                }
+                # use common write group for group 1 (unless fake)
+                $groups[1] = $writeGroup if $writeGroup and not $fakeWriteGroup{$writeGroup};
                 # add group names if different from table defaults
                 my $grp = '';
                 for ($fam=0; $fam<3; ++$fam) {
@@ -198,6 +207,8 @@ PTILoop:    for ($index=0; $index<@infoArray; ++$index) {
                     push @flags, 'Permanent' if $$tagInfo{Permanent} or
                         ($groups[0] eq 'MakerNotes' and not defined $$tagInfo{Permanent});
                     $grp = " flags='" . join(',', sort @flags) . "'$grp" if @flags;
+                    # add parent structure tag ID
+                    $grp .= " struct='$$tagInfo{ParentTagInfo}{TagID}'" if $$tagInfo{ParentTagInfo};
                 }
                 print $fp " <tag id='${xmlID}' name='${name}'$ind type='${format}'$count writable='${writable}'$grp";
                 if ($opts{NoDesc}) {
@@ -232,6 +243,8 @@ PTILoop:    for ($index=0; $index<@infoArray; ++$index) {
                 print $fp "$altDescr\n";
                 for (my $i=0; ; ++$i) {
                     my $conv = $$tagInfo{PrintConv};
+                    # (hidden = '' disables PrintConv in -listx output)
+                    last if defined $$tagInfo{Hidden} and $$tagInfo{Hidden} eq '';
                     my $idx = '';
                     if (ref $conv eq 'ARRAY') {
                         last unless $i < @$conv;
@@ -249,7 +262,7 @@ PTILoop:    for ($index=0; $index<@infoArray; ++$index) {
                     # add bitmask values to main lookup
                     if ($$conv{BITMASK}) {
                         foreach $key (keys %{$$conv{BITMASK}}) {
-                            my $mask = 0x01 << $key;
+                            my $mask = "Bit$key";
                             next if not $mask or $$conv{$mask};
                             $$conv{$mask} = $$conv{BITMASK}{$key};
                         }
@@ -366,7 +379,13 @@ sub BuildLangModules($;$)
                 $id = Image::ExifTool::XMP::FullUnescapeXML($1);
                 $name = $2;
                 $index = $4;
-                $id = hex($id) if $id =~ /^0x[\da-fA-F]+$/; # convert hex ID's
+                # convert hex ID's unless ID_FMT is something other than 'hex'
+                # (for string ID's that look like hex)
+                if ($id =~ /^0x[\da-fA-F]+$/ and (not defined $$table{VARS} or
+                    not defined $$table{VARS}{ID_FMT} or $$table{VARS}{ID_FMT} eq 'hex'))
+                {
+                    $id = hex($id);
+                }
                 next;
             }
             if ($tok eq 'values') {
@@ -388,10 +407,14 @@ sub BuildLangModules($;$)
                 my $val = ucfirst $tval;
                 $val = $tval if $tval =~ /^(cRAW|iTun)/; # special-case non-capitalized values
                 my $cap = ($tval ne $val);
-                if ($makeMissing and $lang eq 'en') {
-                    $lang = $makeMissing;
-                    $val = 'MISSING';
-                    undef $cap;
+                if ($makeMissing) {
+                    if ($lang eq 'en') {
+                        $lang = $makeMissing;
+                        $val = 'MISSING';
+                        undef $cap;
+                    }
+                } elsif ($val eq 'MISSING') {
+                    next;   # ignore "MISSING" entries
                 }
                 my $isDefault = ($lang eq $Image::ExifTool::defaultLang);
                 unless ($langInfo{$lang} or $isDefault) {
@@ -619,7 +642,6 @@ HEADER
 
 1;  # end
 
-
 __END__
 
 ~head1 NAME
@@ -633,7 +655,7 @@ and values.
 
 ~head1 AUTHOR
 
-Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2026, Phil Harvey (philharvey66 at gmail.com)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.
@@ -817,7 +839,7 @@ Number of modules updated, or negative on error.
 
 =head1 AUTHOR
 
-Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2026, Phil Harvey (philharvey66 at gmail.com)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

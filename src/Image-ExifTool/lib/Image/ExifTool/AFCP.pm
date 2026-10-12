@@ -14,7 +14,7 @@ use strict;
 use vars qw($VERSION);
 use Image::ExifTool qw(:DataAccess :Utils);
 
-$VERSION = '1.08';
+$VERSION = '1.10';
 
 sub ProcessAFCP($$);
 
@@ -63,10 +63,10 @@ for the AFCP specification.
 #------------------------------------------------------------------------------
 # Read/write AFCP information in a file
 # Inputs: 0) ExifTool object reference, 1) dirInfo reference
-# (Set 'ScanForAFCP' member in dirInfo to scan from current position for AFCP)
+# (Set 'ScanForTrailer' member in dirInfo to scan from current position for AFCP)
 # Returns: 1 on success, 0 if this file didn't contain AFCP information
 #          -1 on write error or if the offsets were incorrect on reading
-# - updates DataPos to point to actual AFCP start if ScanForAFCP is set
+# - updates DataPos to point to actual AFCP start if ScanForTrailer is set
 # - updates DirLen to trailer length
 # - returns Fixup reference in dirInfo hash when writing
 sub ProcessAFCP($$)
@@ -91,8 +91,8 @@ NoAFCP: for (;;) {
             $fix = 0;
         } else {
             $rtnVal = -1;
-            # look for start of AXS trailer if 'ScanForAFCP'
-            last unless $$dirInfo{ScanForAFCP} and $raf->Seek($curPos, 0);
+            # look for start of AXS trailer if 'ScanForTrailer'
+            last unless $$dirInfo{ScanForTrailer} and $raf->Seek($curPos, 0);
             my $actualPos = $curPos;
             # first look for header right at current position
             for (;;) {
@@ -134,7 +134,7 @@ NoAFCP: for (;;) {
             $dirBuff = $valBuff = '';
             require Image::ExifTool::Fixup;
             $fixup = $$dirInfo{Fixup};
-            $fixup or $fixup = $$dirInfo{Fixup} = new Image::ExifTool::Fixup;
+            $fixup or $fixup = $$dirInfo{Fixup} = Image::ExifTool::Fixup->new;
             $vers = substr($buff, 4, 2); # get version number
         } else {
             $et->DumpTrailer($dirInfo) if $verbose or $$et{HTML_DUMP};
@@ -259,7 +259,7 @@ scanning for AFCP information.
 
 =head1 AUTHOR
 
-Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2026, Phil Harvey (philharvey66 at gmail.com)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

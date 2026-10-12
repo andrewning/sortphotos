@@ -13,7 +13,7 @@
 #               2018/03/13 - PH Update to DPP 4.8.20
 #
 # References:   1) Bogdan private communication (Canon DPP v3.4.1.1)
-#               2) Gert Kello private communiation (DPP 3.8)
+#               2) Gert Kello private communication (DPP 3.8)
 #------------------------------------------------------------------------------
 
 package Image::ExifTool::CanonVRD;
@@ -23,7 +23,7 @@ use vars qw($VERSION);
 use Image::ExifTool qw(:DataAccess :Utils);
 use Image::ExifTool::Canon;
 
-$VERSION = '1.32';
+$VERSION = '1.41';
 
 sub ProcessCanonVRD($$;$);
 sub WriteCanonVRD($$;$);
@@ -51,6 +51,7 @@ my %vrdFormat = (
     8 => 'int32u',
     9 => 'int32s',
     13 => 'double',
+    24 => 'int32s', # (rectangle coordinates)
     33 => 'int32u', # (array)
     38 => 'double', # (array)
     # 254 => 'undef', ?
@@ -150,8 +151,8 @@ my $blankFooter = "CANON OPTIONAL DATA\0" . ("\0" x 42) . "\xff\xd9";
         },{
             Name => 'IHL_EXIF',
             Notes => q{
-                extracted as a block if the Unknown option is used, or processed as the
-                first sub-document with the ExtractEmbedded option
+                extracted as a block if the L<Unknown|../ExifTool.html#Unknown> option is used, or processed as the
+                first sub-document with the L<ExtractEmbedded|../ExifTool.html#ExtractEmbedded> option
             },
             Binary => 1,
             Unknown => 1,
@@ -187,6 +188,7 @@ my $blankFooter = "CANON OPTIONAL DATA\0" . ("\0" x 42) . "\xff\xd9";
     WRITE_PROC => \&Image::ExifTool::WriteBinaryData,
     CHECK_PROC => \&Image::ExifTool::CheckBinaryData,
     WRITABLE => 1,
+    PERMANENT => 1, # (can't add/delete these individually)
     FIRST_ENTRY => 0,
     GROUPS => { 2 => 'Image' },
     DATAMEMBER => [ 0x002 ],   # necessary for writing
@@ -485,6 +487,7 @@ my $blankFooter = "CANON OPTIONAL DATA\0" . ("\0" x 42) . "\xff\xd9";
     WRITE_PROC => \&Image::ExifTool::WriteBinaryData,
     CHECK_PROC => \&Image::ExifTool::CheckBinaryData,
     WRITABLE => 1,
+    PERMANENT => 1, # (can't add/delete these individually)
     FIRST_ENTRY => 0,
     FORMAT => 'int16s',
     DATAMEMBER => [ 0x58, 0xdc, 0xdf, 0xe0 ], # (required for DataMember and var-format tags)
@@ -999,8 +1002,9 @@ my $blankFooter = "CANON OPTIONAL DATA\0" . ("\0" x 42) . "\xff\xd9";
     PROCESS_PROC => \&ProcessDR4,
     WRITE_PROC => \&ProcessDR4,
     WRITABLE => 1,
-    GROUPS => { 2 => 'Image' },
-    VARS => { HEX_ID => 1, SORT_PROC => \&SortDR4 },
+    PERMANENT => 1, # (can't add/delete these individually)
+    GROUPS => { 1 => 'CanonDR4', 2 => 'Image' },
+    VARS => { ID_FMT => 'hex', SORT_PROC => \&SortDR4 },
     NOTES => q{
         Tags written by Canon DPP version 4 in CanonVRD trailers and DR4 files. Each
         tag has three associated flag words which are stored with the directory
@@ -1016,6 +1020,18 @@ my $blankFooter = "CANON OPTIONAL DATA\0" . ("\0" x 42) . "\xff\xd9";
     # 0x10018 - fmt=8: 0
     # 0x10020 - fmt=2: ''
     0x10021 => 'CustomPictureStyle', # (string)
+    0x10100 => { #forum15965
+        Name => 'Rating',
+        PrintConv => {
+            0 => 'Unrated',
+            1 => 1,
+            2 => 2,
+            3 => 3,
+            4 => 4,
+            5 => 5,
+            4294967295 => 'Rejected',
+        },
+    },
     0x10101 => {
         Name => 'CheckMark',
         PrintConv => {
@@ -1196,9 +1212,9 @@ my $blankFooter = "CANON OPTIONAL DATA\0" . ("\0" x 42) . "\xff\xd9";
             4 => 'Emphasize Center',
         },
     },
+    0x2070b => { Name => 'DiffractionCorrectionOn', %noYes },
     # 0x20800 - fmt=1: 0
     # 0x20801 - fmt=1: 0
-    0x2070b => { Name => 'DiffractionCorrectionOn', %noYes },
     0x20900 => 'ColorHue',
     0x20901 => 'SaturationAdj',
     0x20910 => 'RedHSL',
@@ -1223,6 +1239,11 @@ my $blankFooter = "CANON OPTIONAL DATA\0" . ("\0" x 42) . "\xff\xd9";
     # 0x20a08 - (unknown picture style settings)
     # 0x20a09 - Custom picture style settings
     # 0x20a20 - Fine Detail picture style settings
+    0x20b10 => 'DPRAWMicroadjustBackFront', #forum15660
+    0x20b12 => 'DPRAWMicroadjustStrength', #forum15660
+    0x20b20 => 'DPRAWBokehShift', #forum15660
+    0x20b21 => 'DPRAWBokehShiftArea', #PH
+    0x20b30 => 'DPRAWGhostingReductionArea', #forum15660
     0x30101 => {
         Name => 'CropAspectRatio',
         PrintConv => {
@@ -1261,6 +1282,9 @@ my $blankFooter = "CANON OPTIONAL DATA\0" . ("\0" x 42) . "\xff\xd9";
     # 0xf0521 - DLO data
     # 0xf0520 - DLO data
     # 0xf0530 - created when dust delete data applied (4 bytes, all zero)
+    # 0xf0561 - 1932 bytes, related to Partial Adjustment Tool Palette (ref forum15660)
+    # 0xf0562 - 1596 bytes, related to Partial Adjustment Tool Palette (ref forum15660)
+    # 0xf0566 - 1520 bytes, related to Partial Adjustment Tool Palette (ref forum15660)
     # 0xf0600 - fmt=253 (2308 bytes, JPG images)
     # 0xf0601 - fmt=253 (2308 bytes, JPG images)
     # 0x1ff52c - values: 129,130,132 (related to custom picture style somehow)
@@ -1276,13 +1300,13 @@ my $blankFooter = "CANON OPTIONAL DATA\0" . ("\0" x 42) . "\xff\xd9";
     WRITABLE => 1,
     FIRST_ENTRY => 0,
     FORMAT => 'int32u',
-    GROUPS => { 2 => 'Image' },
+    GROUPS => { 1 => 'CanonDR4', 2 => 'Image' },
     # 0 - value: 'IIII' (presumably byte order)
     # 1 - value: 0x00040004 (currently use this for magic number)
     # 2 - value: 6
     3 => {
         Name => 'DR4CameraModel',
-        Writable => 'int32u',
+        Format => 'int32u',
         PrintHex => 1,
         SeparateTable => 'Canon CanonModelID',
         PrintConv => \%Image::ExifTool::Canon::canonModelID,
@@ -1301,7 +1325,7 @@ my $blankFooter = "CANON OPTIONAL DATA\0" . ("\0" x 42) . "\xff\xd9";
     WRITABLE => 1,
     FIRST_ENTRY => 0,
     FORMAT => 'int32u',
-    GROUPS => { 2 => 'Image' },
+    GROUPS => { 1 => 'CanonDR4', 2 => 'Image' },
     0x00 => {
         Name => 'ToneCurveColorSpace',
         PrintConv => {
@@ -1354,7 +1378,7 @@ my $blankFooter = "CANON OPTIONAL DATA\0" . ("\0" x 42) . "\xff\xd9";
     WRITABLE => 1,
     FIRST_ENTRY => 0,
     FORMAT => 'double',
-    GROUPS => { 2 => 'Image' },
+    GROUPS => { 1 => 'CanonDR4', 2 => 'Image' },
     0x02 => 'GammaContrast',
     0x03 => 'GammaColorTone',
     0x04 => 'GammaSaturation',
@@ -1410,7 +1434,7 @@ my $blankFooter = "CANON OPTIONAL DATA\0" . ("\0" x 42) . "\xff\xd9";
     WRITABLE => 1,
     FIRST_ENTRY => 0,
     FORMAT => 'int32s',
-    GROUPS => { 2 => 'Image' },
+    GROUPS => { 1 => 'CanonDR4', 2 => 'Image' },
     0 => { Name => 'CropActive', %noYes },
     1 => 'CropRotatedOriginalWidth',
     2 => 'CropRotatedOriginalHeight',
@@ -1418,21 +1442,22 @@ my $blankFooter = "CANON OPTIONAL DATA\0" . ("\0" x 42) . "\xff\xd9";
     4 => 'CropY',
     5 => 'CropWidth',
     6 => 'CropHeight',
+    7 => 'CropRotation',
     8 => {
-        Name => 'CropRotation',
+        Name => 'CropAngle',
         Format => 'double',
         PrintConv => 'sprintf("%.7g",$val)',
         PrintConvInv => '$val',
     },
-    0x0a => 'CropOriginalWidth',
-    0x0b => 'CropOriginalHeight',
-    # 0x0c double - value: 100
+    10 => 'CropOriginalWidth',
+    11 => 'CropOriginalHeight',
+    # 12 double - value: 100
 );
 
 # DR4 Stamp Tool tags (ref PH)
 %Image::ExifTool::CanonVRD::StampInfo = (
     PROCESS_PROC => \&Image::ExifTool::ProcessBinaryData,
-    GROUPS => { 2 => 'Image' },
+    GROUPS => { 1 => 'CanonDR4', 2 => 'Image' },
     FORMAT => 'int32u',
     FIRST_ENTRY => 0,
     0x02 => 'StampToolCount',
@@ -1441,7 +1466,7 @@ my $blankFooter = "CANON OPTIONAL DATA\0" . ("\0" x 42) . "\xff\xd9";
 # DR4 dust delete information (ref PH)
 %Image::ExifTool::CanonVRD::DustInfo = (
     PROCESS_PROC => \&Image::ExifTool::ProcessBinaryData,
-    GROUPS => { 2 => 'Image' },
+    GROUPS => { 1 => 'CanonDR4', 2 => 'Image' },
     FORMAT => 'int32u',
     FIRST_ENTRY => 0,
     0x02 => { Name => 'DustDeleteApplied', %noYes },
@@ -1749,7 +1774,7 @@ sub ProcessDR4($$;$)
     } else {
         # load DR4 file into memory
         my $buff;
-        $raf->Read($buff, 8) == 8 and $buff eq "IIII\x04\0\x04\0" or return 0;
+        $raf->Read($buff, 8) == 8 and $buff =~ /^IIII[\x04|\x05]\0\x04\0/ or return 0;
         $et->SetFileType();
         $raf->Seek(0, 2) or return $err = 1;
         $dirLen = $raf->Tell();
@@ -1818,7 +1843,7 @@ sub ProcessDR4($$;$)
         if (not $format) {
             $val = unpack 'H*', substr($$dataPt, $off, $len);
             $format = 'undef';
-        } elsif ($format eq 'double' and $len eq 8) {
+        } elsif ($format eq 'double' and $len == 8) {
             # avoid teeny weeny values
             $val = ReadValue($dataPt, $off, $format, undef, $len);
             $val = 0 if abs($val) < 1e-100;
@@ -1955,6 +1980,28 @@ sub WriteCanonVRD($$;$)
 }
 
 #------------------------------------------------------------------------------
+# Write DR4-type CanonVRD edit record
+# Inputs: 0) ExifTool object ref, 1) dirInfo ref, 2) tag table ref
+# Returns: VRD data block (may be empty if deleted, of undef on error)
+sub WriteCanonDR4($$;$)
+{
+    my ($et, $dirInfo, $tagTablePtr) = @_;
+    $et or return 1;    # allow dummy access
+    my $nvHash = $et->GetNewValueHash($Image::ExifTool::Extra{CanonDR4});
+    my $val = $et->GetNewValue($nvHash);
+    if (defined $val) {
+        return undef unless $et->IsOverwriting($nvHash, $val);
+        $et->VPrint(0, "  Writing CanonDR4 as a block\n");
+        ++$$et{CHANGED};
+        return WrapDR4($val);
+    }
+    my $buff = '';
+    $$dirInfo{OutFile} = \$buff;
+    return $buff if ProcessCanonVRD($et, $dirInfo, $tagTablePtr) > 0;
+    return undef;
+}
+
+#------------------------------------------------------------------------------
 # Read/write CanonVRD information (from VRD file or VRD trailer)
 # Inputs: 0) ExifTool object reference, 1) dirInfo reference
 # Returns: 1 on success, 0 not valid VRD, or -1 error writing
@@ -1986,7 +2033,7 @@ sub ProcessCanonVRD($$;$)
             $verbose and print $out "  Creating CanonVRD trailer\n";
             $created = 1;
         }
-        $raf = new File::RandomAccess($dataPt);
+        $raf = File::RandomAccess->new($dataPt);
     }
     # read and validate the footer
     $raf->Seek(-0x40-$offset, 2)    or return 0;
@@ -2015,7 +2062,7 @@ sub ProcessCanonVRD($$;$)
         # (so we must disable all Write() calls for this case)
         $dataPt = $outfile;
     }
-    if ($fromFile) {
+    if ($fromFile or $$dirInfo{DirStart}) {
         $dataPt = \$buff unless $dataPt;
         # read VRD data into memory if necessary
         unless ($raf->Read($$dataPt, $dirLen) == $dirLen) {
@@ -2024,17 +2071,16 @@ sub ProcessCanonVRD($$;$)
             return 0;
         }
     }
-    # exit quickly if writing and no CanonVRD tags are being edited
-    if ($outfile and not exists $$et{EDIT_DIRS}{CanonVRD}) {
-        print $out "$$et{INDENT}  [nothing changed]\n" if $verbose;
-        return 1 if $outfile eq $dataPt;
-        return Write($outfile, $$dataPt) ? 1 : -1;
-    }
-
     my $vrdType = 'VRD';
 
     if ($outfile) {
         $verbose and not $created and print $out "  Rewriting CanonVRD trailer\n";
+        # exit quickly if writing and no CanonVRD tags are being edited
+        unless (exists $$et{EDIT_DIRS}{CanonVRD}) {
+            print $out "$$et{INDENT}  [nothing changed in CanonVRD]\n" if $verbose;
+            return 1 if $outfile eq $dataPt;
+            return Write($outfile, $$dataPt) ? 1 : -1;
+        }
         # delete CanonVRD information if specified
         my $doDel = $$et{DEL_GROUP}{CanonVRD};
         unless ($doDel) {
@@ -2112,7 +2158,7 @@ sub ProcessCanonVRD($$;$)
             $blockType = Get32u($dataPt, $pos);
             $blockLen = Get32u($dataPt, $pos + 4);
         }
-        $vrdType = 'DR4' if $blockType eq 0xffff00f7;
+        $vrdType = 'DR4' if $blockType == 0xffff00f7;
         $pos += 8;  # move to start of block
         if ($pos + $blockLen > $end) {
             $et->Warn('Possibly corrupt CanonVRD block');
@@ -2242,7 +2288,7 @@ files, and as a trailer in JPEG, CRW, CR2 and TIFF images.
 
 =head1 AUTHOR
 
-Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2026, Phil Harvey (philharvey66 at gmail.com)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

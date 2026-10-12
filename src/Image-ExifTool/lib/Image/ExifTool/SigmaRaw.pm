@@ -16,7 +16,7 @@ use vars qw($VERSION);
 use Image::ExifTool qw(:DataAccess :Utils);
 use Image::ExifTool::Sigma;
 
-$VERSION = '1.26';
+$VERSION = '1.33';
 
 sub ProcessX3FHeader($$$);
 sub ProcessX3FDirectory($$$);
@@ -279,7 +279,7 @@ sub ExtractUnicodeString($$$)
         last unless $$chars[$i];
     }
     my $buff = pack('v*', @$chars[$pos..$i-1]);
-    return $et->Decode($buff, 'UCS2', 'II');
+    return $et->Decode($buff, 'UTF16', 'II');
 }
 
 #------------------------------------------------------------------------------
@@ -385,14 +385,14 @@ sub WriteX3F($$)
     my ($et, $dirInfo) = @_;
     my $raf = $$dirInfo{RAF};
     my $outfile = $$dirInfo{OutFile};
-    my ($outDir, $buff, $ver, $entries, $dir, $outPos, $index, $didContain);
+    my ($hdr, $buff, $ver, $entries, $dir, $outPos, $index, $didContain, %order, @order);
 
     $raf->Seek($$dirInfo{DirStart}, 0) or return 'Error seeking to directory start';
 
     # read the X3F directory header (will be copied directly to output)
-    $raf->Read($outDir, 12) == 12 or return 'Truncated X3F image';
-    $outDir =~ /^SECd/ or return 'Bad section header';
-    ($ver, $entries) = unpack('x4V2', $outDir);
+    $raf->Read($hdr, 12) == 12 or return 'Truncated X3F image';
+    $hdr =~ /^SECd/ or return 'Bad section header';
+    ($ver, $entries) = unpack('x4V2', $hdr);
 
     # do sanity check on number of entries in directory
     return 'Invalid X3F directory count' unless $entries > 2 and $entries < 20;
@@ -400,12 +400,16 @@ sub WriteX3F($$)
     unless ($raf->Read($dir, $entries * 12) == $entries * 12) {
         return 'Truncated X3F directory';
     }
-    # do a quick scan to determine the offset of the first data subsection
+    # do a quick scan to determine the offset of the first data subsection,
+    # and the order in which the actual data is stored in the file
     for ($index=0; $index<$entries; ++$index) {
         my $pos = $index * 12;
         my ($offset, $len, $tag) = unpack("x${pos}V2a4", $dir);
         # remember position of first data subsection
         $outPos = $offset if not defined $outPos or $outPos > $offset;
+        # save the order of the data
+        $order{BAD} = 1 if defined $order{$offset};
+        $order{$offset} = $index;
     }
     # copy the file header up to the start of the first data subsection
     unless ($raf->Seek(0,0) and $raf->Read($buff, $outPos) == $outPos) {
@@ -413,8 +417,25 @@ sub WriteX3F($$)
     }
     Write($outfile, $buff) or return -1;
 
-    # loop through directory, rewriting each section
-    for ($index=0; $index<$entries; ++$index) {
+    # this is a bit tricky/unfortunate:  the current version of Sigma Photo Pro
+    # (2022-10-18) is sensitive to the order of the data sections, and these may
+    # differ from the order of their respective entries in the footer.  To patch
+    # this, instead of looping through the footer sections in order, we process
+    # them in the order of the offsets they contain, writing their referenced data
+    # sequentially as we go.  This preserves both the order of the data sections
+    # and the order of the footer entries.  (Note that the upcoming release of
+    # Sigma Photo Pro will fix this issue at their end, but this patch will remain
+    # to maintain backward compatibilty with older SPP versions.)
+    if ($order{BAD}) {
+        # (this could perhaps happen if any of the sections is ever zero-length)
+        $et->Error('Double-referenced data in footer directory!', 1);
+        @order = ( 0 .. $entries-1 );
+    } else {
+        @order = map $order{$_}, sort { $a <=> $b } keys %order;
+    }
+
+    # loop through footer directory, rewriting each section
+    foreach $index (@order) {
 
         my $pos = $index * 12;
         my ($offset, $len, $tag) = unpack("x${pos}V2a4", $dir);
@@ -427,54 +448,64 @@ sub WriteX3F($$)
             $len -= 28;
 
             # only rewrite full-sized JpgFromRaw (version 2.0, type 2, format 18)
-            if ($buff =~ /^SECi\0\0\x02\0\x02\0\0\0\x12\0\0\0/ and
-                $$et{ImageWidth} == unpack('x16V', $buff))
-            {
+            if ($buff =~ /^SECi\0\0\x02\0\x02\0\0\0\x12\0\0\0/) {
                 $raf->Read($buff, $len) == $len or return 'Error reading JpgFromRaw';
-                # use same write directories as JPEG
-                $et->InitWriteDirs('JPEG');
-                # rewrite the embedded JPEG in memory
-                my $newData;
-                my %jpegInfo = (
-                    Parent  => 'X3F',
-                    RAF     => new File::RandomAccess(\$buff),
-                    OutFile => \$newData,
-                );
-                $$et{FILE_TYPE} = 'JPEG';
-                my $success = $et->WriteJPEG(\%jpegInfo);
-                $$et{FILE_TYPE} = 'X3F';
-                SetByteOrder('II');
-                return 'Error writing X3F JpgFromRaw' unless $success and $newData;
-                return -1 if $success < 0;
-                # write new data if anything changed, otherwise copy old image
-                my $outPt = $$et{CHANGED} ? \$newData : \$buff;
-                Write($outfile, $$outPt) or return -1;
-                # set $len to the total subsection data length
-                $len = length($$outPt) + 28;
-                $didContain = 1;
+                if ($buff =~ /^\xff\xd8\xff\xe1/) { # does this preview contain EXIF?
+                    # use same write directories as JPEG
+                    $et->InitWriteDirs('JPEG');
+                    # make sure we don't add APP0 JFIF because it would mess up our preview identification
+                    delete $$et{ADD_DIRS}{APP0};
+                    delete $$et{ADD_DIRS}{JFIF};
+                    # rewrite the embedded JPEG in memory
+                    my $newData;
+                    my %jpegInfo = (
+                        Parent  => 'X3F',
+                        RAF     => File::RandomAccess->new(\$buff),
+                        OutFile => \$newData,
+                    );
+                    $$et{FILE_TYPE} = 'JPEG';
+                    my $success = $et->WriteJPEG(\%jpegInfo);
+                    $$et{FILE_TYPE} = 'X3F';
+                    SetByteOrder('II');
+                    return 'Error writing X3F JpgFromRaw' unless $success and $newData;
+                    return -1 if $success < 0;
+                    # (this shouldn't happen unless someone tries to delete the EXIF...)
+                    return 'EXIF segment must come first in X3F JpgFromRaw' unless $newData =~ /^\xff\xd8\xff\xe1/;
+                    # trim off any extra null bytes (since section length includes padding -- silly Sigma)
+                    $newData =~ s/\0+$//;
+                    # write new data if anything changed, otherwise copy old image
+                    my $outPt = $$et{CHANGED} ? \$newData : \$buff;
+                    Write($outfile, $$outPt) or return -1;
+                    # set $len to the total subsection data length
+                    $len = length($$outPt);
+                    $didContain = 1;
+                } else {
+                    Write($outfile, $buff) or return -1;
+                }
             } else {
                 # copy original image data
                 Image::ExifTool::CopyBlock($raf, $outfile, $len) or return 'Corrupted X3F image';
-                $len += 28;
             }
+            $len += 28;     # add back header length
         } else {
             # copy data for this subsection
             Image::ExifTool::CopyBlock($raf, $outfile, $len) or return 'Corrupted X3F directory';
         }
-        # add directory entry and update output file position
-        $outDir .= pack('V2a4', $outPos, $len, $tag);
-        $outPos += $len;
         # pad data to an even 4-byte boundary
+        # (stored length includes padding! ref Sigma engineer Yuki Miyahara)
         if ($len & 0x03) {
             my $pad = 4 - ($len & 0x03);
             Write($outfile, "\0" x $pad) or return -1;
-            $outPos += $pad;
+            $len += $pad;
         }
+        # update footer entry with new offset/size
+        substr($dir, $pos, 8) = pack('V2', $outPos, $len);
+        $outPos += $len;
     }
     # warn if we couldn't add metadata to this image (should only be SD9 or SD10)
     $didContain or $et->Warn("Can't yet write SD9 or SD10 X3F images");
     # write out the directory and the directory pointer, and we are done
-    Write($outfile, $outDir, pack('V', $outPos)) or return -1;
+    Write($outfile, $hdr, $dir, pack('V', $outPos)) or return -1;
     return undef;
 }
 
@@ -514,18 +545,26 @@ sub ProcessX3FDirectory($$$)
         if  ($$tagInfo{Name} eq 'PreviewImage') {
             # check image header to see if this is a JPEG preview image
             $raf->Read($buff, 28) == 28 or return 'Error reading PreviewImage header';
+            $offset += 28;
+            $len -= 28;
             # ignore all image data but JPEG compressed (version 2.0, type 2, format 18)
-            next unless $buff =~ /^SECi\0\0\x02\0\x02\0\0\0\x12\0\0\0/;
-            # check preview image size and extract full-sized preview as JpgFromRaw
-            if ($$et{ImageWidth} == unpack('x16V', $buff)) {
+            unless ($buff =~ /^SECi\0\0\x02\0\x02\0\0\0\x12\0\0\0/) {
+                # do hash on non-preview data if requested
+                if ($$et{ImageDataHash} and substr($buff,8,1) ne "\x02") {
+                    $et->ImageDataHash($raf, $len, 'SigmaRaw IMAG');
+                }
+                next;
+            }
+            $raf->Read($buff, $len) == $len or return "Error reading PreviewImage data";
+            # check fore EXIF segment, and extract this image as the JpgFromRaw
+            if ($buff =~ /^\xff\xd8\xff\xe1/) {
                 $$et{IsJpgFromRaw} = 1;
                 $tagInfo = $et->GetTagInfo($tagTablePtr, $tag);
                 delete $$et{IsJpgFromRaw};
             }
-            $offset += 28;
-            $len -= 28;
+        } else {
+            $raf->Read($buff, $len) == $len or return "Error reading $$tagInfo{Name} data";
         }
-        $raf->Read($buff, $len) == $len or return "Error reading $$tagInfo{Name} data";
         my $subdir = $$tagInfo{SubDirectory};
         if ($subdir) {
             my %dirInfo = ( DataPt => \$buff );
@@ -536,7 +575,7 @@ sub ProcessX3FDirectory($$$)
             if ($$tagInfo{Name} eq 'JpgFromRaw') {
                 my %dirInfo = (
                     Parent => 'X3F',
-                    RAF    => new File::RandomAccess(\$buff),
+                    RAF    => File::RandomAccess->new(\$buff),
                 );
                 $$et{BASE} += $offset;
                 $et->ProcessJPEG(\%dirInfo);
@@ -591,8 +630,6 @@ sub ProcessX3F($$)
         $buff .= $buf2;
     }
     my ($widPos, $hdrType) = $ver < 4 ? (28, 'Header') : (40, 'Header4');
-    # extract ImageWidth for later
-    $$et{ImageWidth} = Get32u(\$buff, $widPos);
     # process header information
     my $tagTablePtr = GetTagTable('Image::ExifTool::SigmaRaw::Main');
     unless ($outfile) {
@@ -643,7 +680,7 @@ Sigma and Foveon X3F images.
 
 =head1 AUTHOR
 
-Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2026, Phil Harvey (philharvey66 at gmail.com)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

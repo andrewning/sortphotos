@@ -16,7 +16,7 @@ use strict;
 use vars qw($VERSION);
 use Image::ExifTool qw(:DataAccess :Utils);
 
-$VERSION = '1.09';
+$VERSION = '1.11';
 
 #------------------------------------------------------------------------------
 # Read or write information in a PPM/PGM/PBM image
@@ -29,7 +29,7 @@ sub ProcessPPM($$)
     my $outfile = $$dirInfo{OutFile};
     my $verbose = $et->Options('Verbose');
     my $out = $et->Options('TextOut');
-    my ($buff, $num, $type, %info);
+    my ($buff, $num, $type, %info, $seal);
 #
 # read as much of the image as necessary to extract the header and comments
 #
@@ -48,19 +48,19 @@ sub ProcessPPM($$)
         # note: may contain comments starting with '#'
         if ($buff =~ /\G#/gc) {
             # must read more if we are in the middle of a comment
-            next unless $buff =~ /\G ?(.*\n(#.*\n)*)\s*/g;
+            next unless $buff =~ /\G ?(.*[\n\r]+(#.*[\n\r]+)*)\s*/g;
             $info{Comment} = $1;
             next if $buff =~ /\G#/gc;
         } else {
             delete $info{Comment};
         }
-        next unless $buff =~ /\G(\S+)\s+(\S+)\s/g;
+        next unless $buff =~ /\G(\S+)\s+(\S+)\s+/g;
         $info{ImageWidth} = $1;
         $info{ImageHeight} = $2;
         $type = [qw{PPM PBM PGM}]->[$num % 3];
         last if $type eq 'PBM'; # (no MaxVal for PBM images)
         if ($buff =~ /\G\s*#/gc) {
-            next unless $buff =~ /\G ?(.*\n(#.*\n)*)\s*/g;
+            next unless $buff =~ /\G ?(.*[\n\r]+(#.*[\n\r]+)*)\s*/g;
             $info{Comment} = '' unless exists $info{Comment};
             $info{Comment} .= $1;
             next if $buff =~ /\G#/gc;
@@ -76,7 +76,8 @@ sub ProcessPPM($$)
     }
     if (defined $info{Comment}) {
         $info{Comment} =~ s/^# ?//mg;   # remove "# " at the start of each line
-        $info{Comment} =~ s/\n$//;      # remove trailing newline
+        $info{Comment} =~ s/[\n\r]+$//; # remove trailing newline
+        $seal = 1 if $info{Comment} =~ /^<seal seal=/;
     }
     $et->SetFileType($type);
     my $len = pos($buff);
@@ -91,6 +92,10 @@ sub ProcessPPM($$)
             ++$$et{CHANGED};
             $et->VerboseValue('- Comment', $oldComment) if defined $oldComment;
             $et->VerboseValue('+ Comment', $newComment) if defined $newComment;
+        } elsif ($seal and $$et{DEL_GROUP}{SEAL}) {
+            # delete SEAL comment
+            $et->VerboseValue('- Comment', $oldComment);
+            ++$$et{CHANGED};
         } else {
             $newComment = $oldComment;  # use existing comment
         }
@@ -115,6 +120,10 @@ sub ProcessPPM($$)
     if ($verbose > 2) {
         print $out "$type header ($len bytes):\n";
         $et->VerboseDump(\$buff, Len => $len);
+    }
+    if ($seal) {
+        $et->ProcessDirectory({ DataPt => \$info{Comment} }, GetTagTable('Image::ExifTool::XMP::SEAL'));
+        delete $info{Comment};
     }
     my $tag;
     foreach $tag (qw{Comment ImageWidth ImageHeight MaxVal}) {
@@ -143,7 +152,7 @@ BitMap) images.
 
 =head1 AUTHOR
 
-Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2026, Phil Harvey (philharvey66 at gmail.com)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

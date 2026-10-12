@@ -5,6 +5,7 @@
 #
 # Revisions:    2010/10/01 - P. Harvey Created
 #               2011/10/05 - PH Added ProcessXtra()
+#               2021/02/23 - PH Added abiltity to write Xtra tags
 #
 # References:   1) http://research.microsoft.com/en-us/um/redmond/groups/ivm/hdview/hdmetadataspec.htm
 #------------------------------------------------------------------------------
@@ -12,13 +13,172 @@
 package Image::ExifTool::Microsoft;
 
 use strict;
-use vars qw($VERSION);
+use vars qw($VERSION %codePage);
 use Image::ExifTool qw(:DataAccess :Utils);
 use Image::ExifTool::XMP;
 
-$VERSION = '1.20';
+$VERSION = '1.24';
 
 sub ProcessXtra($$$);
+sub WriteXtra($$$);
+sub CheckXtra($$$);
+
+# list of code pages used by Microsoft
+# (ref http://msdn.microsoft.com/en-us/library/dd317756(VS.85).aspx)
+%codePage = (
+     37 => 'IBM EBCDIC US-Canada',
+    437 => 'DOS United States',
+    500 => 'IBM EBCDIC International',
+    708 => 'Arabic (ASMO 708)',
+    709 => 'Arabic (ASMO-449+, BCON V4)',
+    710 => 'Arabic - Transparent Arabic',
+    720 => 'DOS Arabic (Transparent ASMO)',
+    737 => 'DOS Greek (formerly 437G)',
+    775 => 'DOS Baltic',
+    850 => 'DOS Latin 1 (Western European)',
+    852 => 'DOS Latin 2 (Central European)',
+    855 => 'DOS Cyrillic (primarily Russian)',
+    857 => 'DOS Turkish',
+    858 => 'DOS Multilingual Latin 1 with Euro',
+    860 => 'DOS Portuguese',
+    861 => 'DOS Icelandic',
+    862 => 'DOS Hebrew',
+    863 => 'DOS French Canadian',
+    864 => 'DOS Arabic',
+    865 => 'DOS Nordic',
+    866 => 'DOS Russian (Cyrillic)',
+    869 => 'DOS Modern Greek',
+    870 => 'IBM EBCDIC Multilingual/ROECE (Latin 2)',
+    874 => 'Windows Thai (same as 28605, ISO 8859-15)',
+    875 => 'IBM EBCDIC Greek Modern',
+    932 => 'Windows Japanese (Shift-JIS)',
+    936 => 'Windows Simplified Chinese (PRC, Singapore)',
+    949 => 'Windows Korean (Unified Hangul Code)',
+    950 => 'Windows Traditional Chinese (Taiwan)',
+    1026 => 'IBM EBCDIC Turkish (Latin 5)',
+    1047 => 'IBM EBCDIC Latin 1/Open System',
+    1140 => 'IBM EBCDIC US-Canada with Euro',
+    1141 => 'IBM EBCDIC Germany with Euro',
+    1142 => 'IBM EBCDIC Denmark-Norway with Euro',
+    1143 => 'IBM EBCDIC Finland-Sweden with Euro',
+    1144 => 'IBM EBCDIC Italy with Euro',
+    1145 => 'IBM EBCDIC Latin America-Spain with Euro',
+    1146 => 'IBM EBCDIC United Kingdom with Euro',
+    1147 => 'IBM EBCDIC France with Euro',
+    1148 => 'IBM EBCDIC International with Euro',
+    1149 => 'IBM EBCDIC Icelandic with Euro',
+    1200 => 'Unicode UTF-16, little endian',
+    1201 => 'Unicode UTF-16, big endian',
+    1250 => 'Windows Latin 2 (Central European)',
+    1251 => 'Windows Cyrillic',
+    1252 => 'Windows Latin 1 (Western European)',
+    1253 => 'Windows Greek',
+    1254 => 'Windows Turkish',
+    1255 => 'Windows Hebrew',
+    1256 => 'Windows Arabic',
+    1257 => 'Windows Baltic',
+    1258 => 'Windows Vietnamese',
+    1361 => 'Korean (Johab)',
+    10000 => 'Mac Roman (Western European)',
+    10001 => 'Mac Japanese',
+    10002 => 'Mac Traditional Chinese',
+    10003 => 'Mac Korean',
+    10004 => 'Mac Arabic',
+    10005 => 'Mac Hebrew',
+    10006 => 'Mac Greek',
+    10007 => 'Mac Cyrillic',
+    10008 => 'Mac Simplified Chinese',
+    10010 => 'Mac Romanian',
+    10017 => 'Mac Ukrainian',
+    10021 => 'Mac Thai',
+    10029 => 'Mac Latin 2 (Central European)',
+    10079 => 'Mac Icelandic',
+    10081 => 'Mac Turkish',
+    10082 => 'Mac Croatian',
+    12000 => 'Unicode UTF-32, little endian',
+    12001 => 'Unicode UTF-32, big endian',
+    20000 => 'CNS Taiwan',
+    20001 => 'TCA Taiwan',
+    20002 => 'Eten Taiwan',
+    20003 => 'IBM5550 Taiwan',
+    20004 => 'TeleText Taiwan',
+    20005 => 'Wang Taiwan',
+    20105 => 'IA5 (IRV International Alphabet No. 5, 7-bit)',
+    20106 => 'IA5 German (7-bit)',
+    20107 => 'IA5 Swedish (7-bit)',
+    20108 => 'IA5 Norwegian (7-bit)',
+    20127 => 'US-ASCII (7-bit)',
+    20261 => 'T.61',
+    20269 => 'ISO 6937 Non-Spacing Accent',
+    20273 => 'IBM EBCDIC Germany',
+    20277 => 'IBM EBCDIC Denmark-Norway',
+    20278 => 'IBM EBCDIC Finland-Sweden',
+    20280 => 'IBM EBCDIC Italy',
+    20284 => 'IBM EBCDIC Latin America-Spain',
+    20285 => 'IBM EBCDIC United Kingdom',
+    20290 => 'IBM EBCDIC Japanese Katakana Extended',
+    20297 => 'IBM EBCDIC France',
+    20420 => 'IBM EBCDIC Arabic',
+    20423 => 'IBM EBCDIC Greek',
+    20424 => 'IBM EBCDIC Hebrew',
+    20833 => 'IBM EBCDIC Korean Extended',
+    20838 => 'IBM EBCDIC Thai',
+    20866 => 'Russian/Cyrillic (KOI8-R)',
+    20871 => 'IBM EBCDIC Icelandic',
+    20880 => 'IBM EBCDIC Cyrillic Russian',
+    20905 => 'IBM EBCDIC Turkish',
+    20924 => 'IBM EBCDIC Latin 1/Open System with Euro',
+    20932 => 'Japanese (JIS 0208-1990 and 0121-1990)',
+    20936 => 'Simplified Chinese (GB2312)',
+    20949 => 'Korean Wansung',
+    21025 => 'IBM EBCDIC Cyrillic Serbian-Bulgarian',
+    21027 => 'Extended Alpha Lowercase (deprecated)',
+    21866 => 'Ukrainian/Cyrillic (KOI8-U)',
+    28591 => 'ISO 8859-1 Latin 1 (Western European)',
+    28592 => 'ISO 8859-2 (Central European)',
+    28593 => 'ISO 8859-3 Latin 3',
+    28594 => 'ISO 8859-4 Baltic',
+    28595 => 'ISO 8859-5 Cyrillic',
+    28596 => 'ISO 8859-6 Arabic',
+    28597 => 'ISO 8859-7 Greek',
+    28598 => 'ISO 8859-8 Hebrew (Visual)',
+    28599 => 'ISO 8859-9 Turkish',
+    28603 => 'ISO 8859-13 Estonian',
+    28605 => 'ISO 8859-15 Latin 9',
+    29001 => 'Europa 3',
+    38598 => 'ISO 8859-8 Hebrew (Logical)',
+    50220 => 'ISO 2022 Japanese with no halfwidth Katakana (JIS)',
+    50221 => 'ISO 2022 Japanese with halfwidth Katakana (JIS-Allow 1 byte Kana)',
+    50222 => 'ISO 2022 Japanese JIS X 0201-1989 (JIS-Allow 1 byte Kana - SO/SI)',
+    50225 => 'ISO 2022 Korean',
+    50227 => 'ISO 2022 Simplified Chinese',
+    50229 => 'ISO 2022 Traditional Chinese',
+    50930 => 'EBCDIC Japanese (Katakana) Extended',
+    50931 => 'EBCDIC US-Canada and Japanese',
+    50933 => 'EBCDIC Korean Extended and Korean',
+    50935 => 'EBCDIC Simplified Chinese Extended and Simplified Chinese',
+    50936 => 'EBCDIC Simplified Chinese',
+    50937 => 'EBCDIC US-Canada and Traditional Chinese',
+    50939 => 'EBCDIC Japanese (Latin) Extended and Japanese',
+    51932 => 'EUC Japanese',
+    51936 => 'EUC Simplified Chinese',
+    51949 => 'EUC Korean',
+    51950 => 'EUC Traditional Chinese',
+    52936 => 'HZ-GB2312 Simplified Chinese',
+    54936 => 'Windows XP and later: GB18030 Simplified Chinese (4 byte)',
+    57002 => 'ISCII Devanagari',
+    57003 => 'ISCII Bengali',
+    57004 => 'ISCII Tamil',
+    57005 => 'ISCII Telugu',
+    57006 => 'ISCII Assamese',
+    57007 => 'ISCII Oriya',
+    57008 => 'ISCII Kannada',
+    57009 => 'ISCII Malayalam',
+    57010 => 'ISCII Gujarati',
+    57011 => 'ISCII Punjabi',
+    65000 => 'Unicode (UTF-7)',
+    65001 => 'Unicode (UTF-8)',
+);
 
 # tags written by Microsoft HDView (ref 1)
 %Image::ExifTool::Microsoft::Stitch = (
@@ -70,7 +230,7 @@ sub ProcessXtra($$$);
     GROUPS => { 0 => 'XMP', 1 => 'XMP-microsoft', 2 => 'Image' },
     NAMESPACE => 'MicrosoftPhoto',
     TABLE_DESC => 'XMP Microsoft',
-    VARS => { NO_ID => 1 },
+    VARS => { ID_FMT => 'none' },
     NOTES => q{
         Microsoft Photo 1.0 schema XMP tags.  This is likely not a complete list,
         but represents tags which have been observed in sample images.  The actual
@@ -103,7 +263,7 @@ sub ProcessXtra($$$);
     GROUPS => { 0 => 'XMP', 1 => 'XMP-MP1', 2 => 'Image' },
     NAMESPACE => 'MP1',
     TABLE_DESC => 'XMP Microsoft Photo',
-    VARS => { NO_ID => 1 },
+    VARS => { ID_FMT => 'none' },
     NOTES => q{
         Microsoft Photo 1.1 schema XMP tags which have been observed.
     },
@@ -152,7 +312,7 @@ my %sRegions = (
     Rectangle         => { },
     PersonDisplayName => { },
     PersonEmailDigest => { },
-    PersonLiveIdCID   => { },  # (see http://130.15.24.88/exiftool/forum/index.php?topic=4274.msg20368#msg20368)
+    PersonLiveIdCID   => { },  # (see https://exiftool.org/forum/index.php?topic=4274.msg20368#msg20368)
     PersonSourceID    => { },
 );
 %Image::ExifTool::Microsoft::MP = (
@@ -160,7 +320,7 @@ my %sRegions = (
     GROUPS => { 0 => 'XMP', 1 => 'XMP-MP', 2 => 'Image' },
     NAMESPACE => 'MP',
     TABLE_DESC => 'XMP Microsoft Photo',
-    VARS => { NO_ID => 1 },
+    VARS => { ID_FMT => 'none' },
     NOTES => q{
         Microsoft Photo 1.2 schema XMP tags which have been observed.
     },
@@ -196,11 +356,20 @@ my %sRegions = (
 #       and Image::ExifTool::WTV::Metadata
 %Image::ExifTool::Microsoft::Xtra = (
     PROCESS_PROC => \&ProcessXtra,
+    WRITE_PROC => \&WriteXtra,
+    CHECK_PROC => \&CheckXtra,
+    WRITE_GROUP => 'Microsoft',
+    AVOID => 1,
     GROUPS => { 0 => 'QuickTime', 2 => 'Video' },
-    VARS => { NO_ID => 1 },
+    VARS => { ID_FMT => 'none' },
     NOTES => q{
-        Tags extracted from the Microsoft "Xtra" atom of QuickTime videos.  Tag ID's
-        are not shown because some are unruly GUID's.
+        Tags found in the Microsoft "Xtra" atom of QuickTime videos.  Tag ID's are
+        not shown because some are unruly GUID's.  Currently most of these tags are
+        not writable because the Microsoft documentation is poor and samples were
+        not available, but more tags may be made writable in the future if samples
+        are provided.  Note that writable tags in this table are are flagged to
+        "Avoid", which means that other more common tags will be written instead if
+        possible unless the Microsoft group is specified explicitly.
     },
     Abstract                    => { },
     AcquisitionTime             => { Groups => { 2 => 'Time' } },
@@ -233,7 +402,7 @@ my %sRegions = (
     Copyright                   => { Groups => { 2 => 'Author' } },
     Count                       => { },
     CurrentBitrate              => { },
-    Description                 => { },
+    Description                 => { Writable => 'Unicode', Avoid => 1 },
     DisplayArtist               => { },
     DLNAServerUDN               => { },
     DLNASourceURI               => { },
@@ -327,30 +496,34 @@ my %sRegions = (
     UserServiceRating           => { },
     VideoBitrate                => { },
     VideoFormat                 => { },
-    'WM/AlbumArtist'            => 'AlbumArtist',
-    'WM/AlbumCoverURL'          => 'AlbumCoverURL',
-    'WM/AlbumTitle'             => 'AlbumTitle',
+    'WM/AlbumArtist'            => { Name => 'AlbumArtist', Writable => 'Unicode' }, # (NC)
+    'WM/AlbumCoverURL'          => { Name => 'AlbumCoverURL', Writable => 'Unicode' }, # (NC)
+    'WM/AlbumTitle'             => { Name => 'AlbumTitle',  Writable => 'Unicode' }, # (NC)
     'WM/BeatsPerMinute'         => 'BeatsPerMinute',
-    'WM/Category'               => 'Category',
-    'WM/Composer'               => 'Composer',
-    'WM/Conductor'              => 'Conductor',
-    'WM/ContentDistributor'     => 'ContentDistributor',
+    'WM/Category'               => { Name => 'Category',    Writable => 'Unicode', List => 1 },
+    'WM/Composer'               => { Name => 'Composer',    Writable => 'Unicode' }, # (NC)
+    'WM/Conductor'              => { Name => 'Conductor',   Writable => 'Unicode', List => 1 },
+    'WM/ContentDistributor'     => { Name => 'ContentDistributor', Writable => 'Unicode' },
     'WM/ContentDistributorType' => 'ContentDistributorType',
     'WM/ContentGroupDescription'=> 'ContentGroupDescription',
-    'WM/Director'               => 'Director',
+    'WM/Director'               => { Name => 'Director',    Writable => 'Unicode', List => 1 },
     'WM/EncodingTime'           => {
         Name => 'EncodingTime',
         Groups => { 2 => 'Time' },
+        Shift => 'Time',
+        Writable => 'date',
         PrintConv => '$self->ConvertDateTime($val)',
+        PrintConvInv => '$self->InverseDateTime($val)',
     },
     'WM/Genre'                  => 'Genre',
     'WM/GenreID'                => 'GenreID',
-    'WM/InitialKey'             => 'InitialKey',
+    'WM/InitialKey'             => { Name => 'InitialKey',  Writable => 'Unicode' },
     'WM/Language'               => 'Language',
     'WM/Lyrics'                 => 'Lyrics',
     'WM/MCDI'                   => 'MCDI',
     'WM/MediaClassPrimaryID'    => {
         Name => 'MediaClassPrimaryID',
+        Writable => 'GUID',
         PrintConv => { #http://msdn.microsoft.com/en-us/library/windows/desktop/dd757960(v=vs.85).aspx
             'D1607DBC-E323-4BE2-86A1-48A42A28441E' => 'Music',
             'DB9830BD-3AB3-4FAB-8A37-1A995F7FF74B' => 'Video',
@@ -360,6 +533,7 @@ my %sRegions = (
     },
     'WM/MediaClassSecondaryID' => {
         Name => 'MediaClassSecondaryID',
+        Writable => 'GUID',
         PrintConv => { #http://msdn.microsoft.com/en-us/library/windows/desktop/dd757960(v=vs.85).aspx
             'E0236BEB-C281-4EDE-A36D-7AF76A3D45B5' => 'Audio Book',
             '3A172A13-2BD9-4831-835B-114F6A95943F' => 'Spoken Word',
@@ -385,22 +559,22 @@ my %sRegions = (
     },
     'WM/MediaOriginalChannel'   => 'MediaOriginalChannel',
     'WM/MediaStationName'       => 'MediaStationName',
-    'WM/Mood'                   => 'Mood',
-    'WM/OriginalAlbumTitle'     => 'OriginalAlbumTitle',
-    'WM/OriginalArtist'         => 'OriginalArtist',
-    'WM/OriginalLyricist'       => 'OriginalLyricist',
-    'WM/ParentalRating'         => 'ParentalRating',
+    'WM/Mood'                   => { Name => 'Mood',        Writable => 'Unicode' },
+    'WM/OriginalAlbumTitle'     => { Name => 'OriginalAlbumTitle',  Writable => 'Unicode' }, # (NC)
+    'WM/OriginalArtist'         => { Name => 'OriginalArtist',      Writable => 'Unicode' }, # (NC)
+    'WM/OriginalLyricist'       => { Name => 'OriginalLyricist',    Writable => 'Unicode' }, # (NC)
+    'WM/ParentalRating'         => { Name => 'ParentalRating',      Writable => 'Unicode' },
     'WM/PartOfSet'              => 'PartOfSet',
-    'WM/Period'                 => 'Period',
-    'WM/Producer'               => 'Producer',
+    'WM/Period'                 => { Name => 'Period',      Writable => 'Unicode' },
+    'WM/Producer'               => { Name => 'Producer',    Writable => 'Unicode', List => 1 },
     'WM/ProtectionType'         => 'ProtectionType',
-    'WM/Provider'               => 'Provider',
+    'WM/Provider'               => { Name => 'Provider',    Writable => 'Unicode' }, # (NC)
     'WM/ProviderRating'         => 'ProviderRating',
     'WM/ProviderStyle'          => 'ProviderStyle',
-    'WM/Publisher'              => 'Publisher',
-    'WM/SharedUserRating'       => 'SharedUserRating',
+    'WM/Publisher'              => { Name => 'Publisher',   Writable => 'Unicode' }, # (multiple entries separated by semicolon)
+    'WM/SharedUserRating'       => { Name => 'SharedUserRating', Writable => 'int64u' },
     'WM/SubscriptionContentID'  => 'SubscriptionContentID',
-    'WM/SubTitle'               => 'Subtitle',
+    'WM/SubTitle'               => { Name => 'Subtitle',    Writable => 'Unicode' },
     'WM/SubTitleDescription'    => 'SubtitleDescription',
     'WM/TrackNumber'            => 'TrackNumber',
     'WM/UniqueFileIdentifier'   => 'UniqueFileIdentifier',
@@ -412,8 +586,11 @@ my %sRegions = (
     'WM/WMContentID'            => 'WMContentID',
     'WM/WMShadowFileSourceDRMType' => 'WMShadowFileSourceDRMType',
     'WM/WMShadowFileSourceFileType' => 'WMShadowFileSourceFileType',
-    'WM/Writer'                 => 'Writer',
-    'WM/Year'                   => { Name => 'Year', Groups => { 2 => 'Time' } },
+    'WM/Writer'                 => { Name => 'Writer',  Groups => { 2 => 'Author' }, Writable => 'Unicode' }, # (NC)
+    'WM/Year'                   => { Name => 'Year',    Groups => { 2 => 'Time' } },
+    'WM/PromotionURL'           => { Name => 'PromotionURL',Writable => 'Unicode' },
+    'WM/AuthorURL'              => { Name => 'AuthorURL', Groups => { 2 => 'Author' }, Writable => 'Unicode' },
+    'WM/EncodedBy',             => { Name => 'EncodedBy',   Writable => 'Unicode' },
 
     # I can't find documentation for the following tags in videos,
     # but the tag ID's correspond to Microsoft property GUID+ID's
@@ -422,9 +599,12 @@ my %sRegions = (
     #  http://multi-rename-script.googlecode.com/svn-history/r4/trunk/plugins/ShellDetails/ShellDetails.ini
     # I have observed only 1 so far:
     '{2CBAA8F5-D81F-47CA-B17A-F8D822300131} 100' => {
-        Name => 'DateAcquired',
+        Name => 'DateAcquired', # (seems to be when videos are downloaded from the camera)
         Groups => { 2 => 'Time' },
+        Shift => 'Time',
+        Writable => 'vt_filetime',
         PrintConv => '$self->ConvertDateTime($val)',
+        PrintConvInv => '$self->InverseDateTime($val,undef)',
     },
     # the following have not yet been observed...
     '{B725F130-47EF-101A-A5F1-02608C9EEBAC} 10'    => 'Name',
@@ -765,6 +945,245 @@ my %sRegions = (
 );
 
 #------------------------------------------------------------------------------
+# check new value for Xtra tag
+# Inputs: 0) ExifTool object ref, 1) tagInfo hash ref, 2) raw value ref
+# Returns: error string, or undef on success
+sub CheckXtra($$$)
+{
+    my ($et, $tagInfo, $valPt) = @_;
+    my $format = $$tagInfo{Writable};
+    return 'Unknown format' unless $format;
+    if ($format =~ /^int/) {
+        return 'Not an integer' unless Image::ExifTool::IsInt($$valPt);
+    } elsif ($format ne 'Unicode') {
+        my @vals = ($$valPt);
+        return 'Invalid format' unless WriteXtraValue($et, $tagInfo, \@vals);
+    }
+    return undef;
+}
+
+#------------------------------------------------------------------------------
+# Decode value(s) in Microsoft Xtra tag
+# Inputs: 0) ExifTool object ref, 1) value data
+# Returns: Scalar context: decoded value, List context: 0) decoded value, 1) format string
+sub ReadXtraValue($$)
+{
+    my ($et, $data) = @_;
+    my ($format, $i, @vals);
+
+    return undef if length($data) < 10;
+
+    # (version flags according to the reference, but looks more like a count - PH)
+    my $count = Get32u(\$data, 0);
+    # point to start of first value (after 4-byte count, 4-byte length and 2-byte type)
+    my $valPos = 10;
+    for ($i=0; ;) {
+        # (stored value includes size of $valLen and $valType, so subtract 6)
+        my $valLen = Get32u(\$data, $valPos - 6) - 6;
+        last if $valPos + $valLen > length($data);
+        my $valType = Get16u(\$data, $valPos - 2);
+        my $val = substr($data, $valPos, $valLen);
+        # Note: all dumb Microsoft values are little-endian inside a big-endian-format file
+        SetByteOrder('II');
+        if ($valType == 8) {
+            $format = 'Unicode';
+            $val = $et->Decode($val, 'UTF16');
+        } elsif ($valType == 19 and $valLen == 8) {
+            $format = 'int64u';
+            $val = Get64u(\$val, 0);
+        } elsif ($valType == 21 and $valLen == 8) {
+            $format = 'date';
+            $val = Get64u(\$val, 0);
+            # convert time from 100 ns intervals since Jan 1, 1601
+            $val = $val * 1e-7 - 11644473600 if $val;
+            # (the Nikon S100 uses UTC timezone, same as ASF - PH)
+            $val = Image::ExifTool::ConvertUnixTime($val, 1);
+        } elsif ($valType == 72 and $valLen == 16) {
+            $format = 'GUID';
+            $val = uc unpack('H*',pack('NnnNN',unpack('VvvNN',$val)));
+            $val =~ s/(.{8})(.{4})(.{4})(.{4})/$1-$2-$3-$4-/;
+        } elsif ($valType == 65 and $valLen > 4) { #PH (empirical)
+            $format = 'variant';
+            require Image::ExifTool::FlashPix;
+            my $vPos = 0; # (necessary because ReadFPXValue updates this)
+            # read entry as a VT_VARIANT (use FlashPix module for this)
+            $val = Image::ExifTool::FlashPix::ReadFPXValue($et, \$val, $vPos,
+                   Image::ExifTool::FlashPix::VT_VARIANT(), $valLen, 1);
+        } else {
+            $format = "Unknown($valType)";
+        }
+        SetByteOrder('MM'); # back to native QuickTime byte ordering
+        push @vals, $val;
+        last if ++$i >= $count;
+        $valPos += $valLen + 6; # step to next value
+        last if $valPos > length($data);
+    }
+    return wantarray ? (\@vals, $format) : \@vals;
+}
+
+#------------------------------------------------------------------------------
+# Write a Microsoft Xtra value
+# Inputs: 0) ExifTool object ref, 1) tagInfo ref, 2) reference to list of values
+# Returns: new value binary data (or empty string)
+sub WriteXtraValue($$$)
+{
+    my ($et, $tagInfo, $vals) = @_;
+    my $format = $$tagInfo{Writable};
+    my $buff = '';
+    my $count = 0;
+    my $val;
+    foreach $val (@$vals) {
+        SetByteOrder('II');
+        my ($type, $dat);
+        if ($format eq 'Unicode') {
+            $dat = $et->Encode($val,'UTF16','II') . "\0\0";  # (must be null terminated)
+            $type = 8;
+        } elsif ($format eq 'int64u') {
+            if (Image::ExifTool::IsInt($val)) {
+                $dat = Set64u($val);
+                $type = 19;
+            }
+        } elsif ($format eq 'date') {
+            $dat = Image::ExifTool::GetUnixTime($val, 1);   # (convert to UTC, NC)
+            if ($dat) {
+                # 100ns intervals since Jan 1, 1601
+                $dat = Set64u(($dat + 11644473600) * 1e7);
+                $type = 21;
+            }
+        } elsif ($format eq 'vt_filetime') { # 'date' value inside a VT_VARIANT
+            $dat = Image::ExifTool::GetUnixTime($val);  # (leave as local time, NC)
+            if ($dat) {
+                # 100ns intervals since Jan 1, 1601
+                $dat = Set32u(64) . Set64u(($dat + 11644473600) * 1e7);
+                $type = 65;
+            }
+        } elsif ($format eq 'GUID') {
+            ($dat = $val) =~ tr/-//d;
+            if (length($dat) == 32) {
+                $dat = pack('VvvNN',unpack('NnnNN',pack('H*', $dat)));
+                $type = 72;
+            }
+        } else {
+            $et->Warn("Error converting value for Microsoft:$$tagInfo{Name}");
+        }
+        SetByteOrder('MM');
+        if (defined $type) {
+            ++$count;
+            $buff .= Set32u(length($dat)+6) . Set16u($type) . $dat;
+        }
+    }
+    return $count ? Set32u($count) . $buff : '';
+}
+
+#------------------------------------------------------------------------------
+# Add new values to list
+# Inputs: 0) ExifTool ref, 1) new value list ref, 2) nvHash ref
+# Returns: true if something was added
+sub AddNewValues($$$)
+{
+    my ($et, $vals, $nvHash) = @_;
+    my @newVals = $et->GetNewValue($nvHash) or return undef;
+    if ($$et{OPTIONS}{Verbose} > 1) {
+        $et->VPrint(1, "  + Microsoft:$$nvHash{TagInfo}{Name} = $_\n") foreach @newVals;
+    }
+    push @$vals, @newVals;
+    return 1;
+}
+
+#------------------------------------------------------------------------------
+# Write tags to a Microsoft Xtra MP4 atom
+# Inputs: 0) ExifTool object ref, 1) source dirInfo ref, 2) tag table ref
+# Returns: Microsoft Xtra data block (may be empty if no Xtra data) or undef on error
+sub WriteXtra($$$)
+{
+    my ($et, $dirInfo, $tagTablePtr) = @_;
+    $et or return 1;      # allow dummy access
+
+    my $delGroup = ($$et{DEL_GROUP} and $$et{DEL_GROUP}{Microsoft});
+    my $newTags = $et->GetNewTagInfoHash($tagTablePtr);
+
+    return undef unless $delGroup or %$newTags;  # don't rewrite if nothing to do
+
+    my $dataPt = $$dirInfo{DataPt};
+    my $dataLen = length $$dataPt;
+    my $newData = '';
+    my $pos = 0;
+    my ($err, %done, $changed, $tag);
+
+    if ($delGroup) {
+        $changed = 1 if $dataLen;
+        my $empty = '';
+        $dataPt = $empty;
+        $dataLen = 0;
+    }
+    for (;;) {
+        last if $pos + 4 > $dataLen;
+        my $size = Get32u($dataPt, $pos); # (includes $size word)
+        ($size < 8 or $pos + $size > $dataLen) and $err=1, last;
+        my $tagLen = Get32u($dataPt, $pos + 4);
+        $tagLen + 18 > $size and $err=1, last;
+        $tag = substr($$dataPt, $pos + 8, $tagLen);
+        my @newVals;
+        while ($$newTags{$tag}) {
+            my $nvHash = $et->GetNewValueHash($$newTags{$tag});
+            $$nvHash{CreateOnly} and delete($$newTags{$tag}), last; # don't edit this tag
+            my $valPos = $pos + 8 + $tagLen;
+            my $valLen = $size - 8 - $tagLen;
+            my $val = ReadXtraValue($et, substr($$dataPt, $valPos, $valLen));
+            foreach $val (@$val) {
+                my $overwrite = $et->IsOverwriting($nvHash, $val);
+                $overwrite or push(@newVals, $val), next;
+                $et->VPrint(1, "  - Microsoft:$$newTags{$tag}{Name} = $val\n");
+                next if $done{$tag};
+                $done{$tag} = 1;
+                AddNewValues($et, \@newVals, $nvHash);
+            }
+            # add to the end of the list if this was a List-type tag and we didn't delete anything
+            if (not $done{$tag} and $$newTags{$tag}{List}) {
+                AddNewValues($et, \@newVals, $nvHash) or last;
+                $done{$tag} = 1;
+            }
+            last;   # (it was a cheap goto)
+        }
+        if ($done{$tag}) {
+            $changed = 1;
+            # write changed values
+            my $buff = WriteXtraValue($et, $$newTags{$tag}, \@newVals);
+            if (length $buff) {
+                $newData .= Set32u(8+length($tag)+length($buff)) . Set32u(length($tag)) . $tag . $buff;
+            }
+        } else {
+            # nothing changed; just copy over
+            $newData .= substr($$dataPt, $pos, $size);
+        }
+        $pos += $size;  # step to next entry
+    }
+    if ($err) {
+        $et->Warn('Microsoft Xtra format error');
+        return undef;
+    }
+    # add any new tags
+    foreach $tag (sort keys %$newTags) {
+        next if $done{$tag};
+        my $nvHash = $et->GetNewValueHash($$newTags{$tag});
+        next unless $$nvHash{IsCreating} and not $$nvHash{EditOnly};
+        my @newVals;
+        AddNewValues($et, \@newVals, $nvHash) or next;
+        my $buff = WriteXtraValue($et, $$newTags{$tag}, \@newVals);
+        if (length $buff) {
+            $newData .= Set32u(8+length($tag)+length($buff)) . Set32u(length($tag)) . $tag . $buff;
+            $changed = 1;
+        }
+    }
+    if ($changed) {
+        ++$$et{CHANGED};
+    } else {
+        undef $newData;
+    }
+    return $newData;
+}
+
+#------------------------------------------------------------------------------
 # Extract information from Xtra MP4 atom
 # Inputs: 0) ExifTool object ref, 1) dirInfo ref, 2) tag table ref
 # Returns: 1 on success
@@ -783,61 +1202,13 @@ sub ProcessXtra($$$)
         last if $size < 8 or $pos + $size > $dataLen;
         my $tagLen = Get32u($dataPt, $pos + 4);
         last if $tagLen + 18 > $size;
-        my $tag = substr($$dataPt, $pos + 8, $tagLen);
-        # (version flags according to the reference, but looks more like a count - PH)
-        my $count = Get32u($dataPt, $pos + $tagLen + 8);
-        my ($i, $valPos, $valLen, $valType, $val, $format, @vals);
-        # point to start of first value (after 4-byte length and 2-byte type)
-        $valPos = $pos + $tagLen + 18;
-        for ($i=0; ;) {
-            # (stored value includes size of $valLen and $valType, so subtract 6)
-            $valLen  = Get32u($dataPt, $valPos - 6) - 6;
-            my $more = $pos + $size - $valPos - $valLen;
-            last if $more < 0;
-            $valType = Get16u($dataPt, $valPos - 2);
-            $val = substr($$dataPt, $valPos, $valLen);
-            # Note: all dumb Microsoft values are little-endian inside a big-endian-format file
-            SetByteOrder('II');
-            if ($valType == 8) {
-                $format = 'Unicode';
-                $val = $et->Decode($val, 'UCS2');
-            } elsif ($valType == 19 and $valLen == 8) {
-                $format = 'int64u';
-                $val = Get64u(\$val, 0);
-            } elsif ($valType == 21 and $valLen == 8) {
-                $format = 'date';
-                $val = Get64u(\$val, 0);
-                # convert time from 100 ns intervals since Jan 1, 1601
-                $val = $val * 1e-7 - 11644473600 if $val;
-                # (the Nikon S100 uses UTC timezone, same as ASF - PH)
-                $val = Image::ExifTool::ConvertUnixTime($val) . 'Z';
-            } elsif ($valType == 72 and $valLen == 16) {
-                $format = 'GUID';
-                $val = uc unpack('H*',pack('NnnNN',unpack('VvvNN',$val)));
-                $val =~ s/(.{8})(.{4})(.{4})(.{4})/$1-$2-$3-$4-/;
-            } elsif ($valType == 65 && $valLen > 4) { #PH (empirical)
-                $format = 'variant';
-                require Image::ExifTool::FlashPix;
-                my $vPos = $valPos; # (necessary because ReadFPXValue updates this)
-                # read entry as a VT_VARIANT (use FlashPix module for this)
-                $val = Image::ExifTool::FlashPix::ReadFPXValue($et, $dataPt, $vPos,
-                       Image::ExifTool::FlashPix::VT_VARIANT(), $valPos+$valLen, 1);
-            } else {
-                $format = "Unknown($valType)";
-            }
-            SetByteOrder('MM'); # back to native QuickTime byte ordering
-            last if ++$i >= $count or $more < 6;
-            push @vals, $val;
-            undef $val;
-            $valPos += $valLen + 6; # step to next value
-        }
-        if (@vals) {
-            push @vals, $val if defined $val;
-            $val = \@vals;
-            $valPos = $pos + $tagLen + 18;
-            $valLen = $size - 18 - $tagLen;
-        }
+        my $valLen = $size - 8 - $tagLen;
         if ($tagLen > 0 and $valLen > 0) {
+            my $tag = substr($$dataPt, $pos + 8, $tagLen);
+            my $valPos = $pos + 8 + $tagLen;
+            my ($val, $format) = ReadXtraValue($et, substr($$dataPt, $valPos, $valLen));
+            last unless defined $val;
+            $val = $$val[0] if @$val == 1;
             my $tagInfo = $et->GetTagInfo($tagTablePtr, $tag);
             unless ($tagInfo) {
                 # generate tag information for unrecognized tags
@@ -850,6 +1221,7 @@ sub ProcessXtra($$$)
                     $et->VPrint(0, $$et{INDENT}, "[adding Microsoft:$tag]\n");
                 }
             }
+            my $count = ref $val ? scalar @$val : 1;
             $et->HandleTag($tagTablePtr, $tag, $val,
                 TagInfo => $tagInfo,
                 DataPt  => $dataPt,
@@ -857,7 +1229,7 @@ sub ProcessXtra($$$)
                 Start   => $valPos,
                 Size    => $valLen,
                 Format  => $format,
-                Extra   => " count=$count type=$valType",
+                Extra   => " count=$count",
             );
         }
         $pos += $size;  # step to next entry
@@ -880,11 +1252,12 @@ This module is used by Image::ExifTool
 =head1 DESCRIPTION
 
 This module contains definitions required by Image::ExifTool to interpret
-Microsoft-specific EXIF and XMP tags.
+Microsoft-specific EXIF and XMP tags, and routines to read/write Microsoft
+Xtra tags in videos.
 
 =head1 AUTHOR
 
-Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2026, Phil Harvey (philharvey66 at gmail.com)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

@@ -18,7 +18,7 @@ use strict;
 use vars qw($VERSION);
 use Image::ExifTool qw(:DataAccess :Utils);
 
-$VERSION = '1.16';
+$VERSION = '1.17';
 
 %Image::ExifTool::MPEG::Audio = (
     GROUPS => { 2 => 'Audio' },
@@ -322,7 +322,7 @@ $VERSION = '1.16';
 
 %Image::ExifTool::MPEG::Xing = (
     GROUPS => { 2 => 'Audio' },
-    VARS => { NO_ID => 1 },
+    VARS => { ID_FMT => 'none' },
     NOTES => 'These tags are extracted from the Xing/Info frame.',
     1 => { Name => 'VBRFrames' },
     2 => { Name => 'VBRBytes' },
@@ -599,7 +599,7 @@ sub ProcessMPEGVideo($$)
         return 0;
     }
     # set file type if not done already
-    $et->SetFileType('MPEG') unless $$et{VALUE}{FileType};
+    $et->SetFileType('MPEG') unless $$et{FileType};
 
     my $tagTablePtr = GetTagTable('Image::ExifTool::MPEG::Video');
     ProcessFrameHeader($et, $tagTablePtr, $w1, $w2);
@@ -704,7 +704,7 @@ based on unofficial sources which may be incomplete, inaccurate or outdated.
 
 =head1 AUTHOR
 
-Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2026, Phil Harvey (philharvey66 at gmail.com)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

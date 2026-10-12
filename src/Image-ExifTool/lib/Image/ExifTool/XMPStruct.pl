@@ -14,40 +14,54 @@ use vars qw(%specialStruct %stdXlatNS);
 use Image::ExifTool qw(:Utils);
 use Image::ExifTool::XMP;
 
-sub SerializeStruct($;$);
-sub InflateStruct($;$);
+sub SerializeStruct($$;$);
+sub InflateStruct($$;$);
 sub DumpStruct($;$);
 sub CheckStruct($$$);
 sub AddNewStruct($$$$$$);
 sub ConvertStruct($$$$;$);
+sub EscapeJSON($;$);
+
+# lookups for JSON characters that we escape specially
+my %jsonChar = ( '"'=>'"', '\\'=>'\\', "\b"=>'b', "\f"=>'f', "\n"=>'n', "\r"=>'r', "\t"=>'t' );
+my %jsonEsc  = ( '"'=>'"', '\\'=>'\\', 'b'=>"\b", 'f'=>"\f", 'n'=>"\n", 'r'=>"\r", 't'=>"\t" );
 
 #------------------------------------------------------------------------------
 # Serialize a structure (or other object) into a simple string
-# Inputs: 0) HASH ref, ARRAY ref, or SCALAR, 1) closing bracket (or undef)
-# Returns: serialized structure string
+# Inputs: 0) ExifTool ref, 1) HASH ref, ARRAY ref, or SCALAR, 2) closing bracket (or undef)
+# Returns: serialized structure string (in format specified by StructFormat option)
 # eg) "{field=text with {braces|}|, and a comma, field2=val2,field3={field4=[a,b]}}"
-sub SerializeStruct($;$)
+sub SerializeStruct($$;$)
 {
-    my ($obj, $ket) = @_;
+    my ($et, $obj, $ket) = @_;
     my ($key, $val, @vals, $rtnVal);
+    my $sfmt = $et->Options('StructFormat');
 
     if (ref $obj eq 'HASH') {
-        foreach $key (sort keys %$obj) {
-            push @vals, $key . '=' . SerializeStruct($$obj{$key}, '}');
+        # support hashes with ordered keys
+        foreach $key (Image::ExifTool::OrderedKeys($obj)) {
+            my $hdr = $sfmt ? EscapeJSON($key) . ':' : $key . '=';
+            push @vals, $hdr . SerializeStruct($et, $$obj{$key}, '}');
         }
         $rtnVal = '{' . join(',', @vals) . '}';
     } elsif (ref $obj eq 'ARRAY') {
         foreach $val (@$obj) {
-            push @vals, SerializeStruct($val, ']');
+            push @vals, SerializeStruct($et, $val, ']');
         }
         $rtnVal = '[' . join(',', @vals) . ']';
     } elsif (defined $obj) {
         $obj = $$obj if ref $obj eq 'SCALAR';
         # escape necessary characters in string (closing bracket plus "," and "|")
-        my $pat = $ket ? "\\$ket|,|\\|" : ',|\\|';
-        ($rtnVal = $obj) =~  s/($pat)/|$1/g;
-        # also must escape opening bracket or whitespace at start of string
-        $rtnVal =~ s/^([\s\[\{])/|$1/;
+        if ($sfmt) {
+            $rtnVal = EscapeJSON($obj, $sfmt eq 'JSONQ');
+        } else {
+            my $pat = $ket ? "\\$ket|,|\\|" : ',|\\|';
+            ($rtnVal = $obj) =~  s/($pat)/|$1/g;
+            # also must escape opening bracket or whitespace at start of string
+            $rtnVal =~ s/^([\s\[\{])/|$1/;
+        }
+    } elsif ($sfmt) {
+        $rtnVal = 'null';
     } else {
         $rtnVal = '';   # allow undefined list items
     }
@@ -56,21 +70,25 @@ sub SerializeStruct($;$)
 
 #------------------------------------------------------------------------------
 # Inflate structure (or other object) from a serialized string
-# Inputs: 0) reference to object in string form (serialized using the '|' escape)
-#         1) extra delimiter for scalar values delimiters
+# Inputs: 0) ExifTool ref, 1) reference to object in string form
+#           (serialized using the '|' escape, or JSON)
+#         2) extra delimiter for scalar values delimiters
 # Returns: 0) object as a SCALAR, HASH ref, or ARRAY ref (or undef on error),
 #          1) warning string (or undef)
 # Notes: modifies input string to remove parsed objects
-sub InflateStruct($;$)
+sub InflateStruct($$;$)
 {
-    my ($obj, $delim) = @_;
+    my ($et, $obj, $delim) = @_;
     my ($val, $warn, $part);
+    my $sfmt = $et->Options('StructFormat');
 
     if ($$obj =~ s/^\s*\{//) {
         my %struct;
-        while ($$obj =~ s/^\s*([-\w:]+#?)\s*=//s) {
+        for (;;) {
+            last unless $sfmt ? $$obj =~ s/^\s*"(.*?)"\s*://s :
+                                $$obj =~ s/^\s*([-\w:.]+#?)\s*=//s;
             my $tag = $1;
-            my ($v, $w) = InflateStruct($obj, '}');
+            my ($v, $w) = InflateStruct($et, $obj, '}');
             $warn = $w if $w and not $warn;
             return(undef, $warn) unless defined $v;
             $struct{$tag} = $v;
@@ -92,7 +110,7 @@ sub InflateStruct($;$)
     } elsif ($$obj =~ s/^\s*\[//) {
         my @list;
         for (;;) {
-            my ($v, $w) = InflateStruct($obj, ']');
+            my ($v, $w) = InflateStruct($et, $obj, ']');
             $warn = $w if $w and not $warn;
             return(undef, $warn) unless defined $v;
             push @list, $v;
@@ -103,17 +121,69 @@ sub InflateStruct($;$)
         $val = \@list;
     } else {
         $$obj =~ s/^\s+//s; # remove leading whitespace
-        # read scalar up to specified delimiter (or "," if not defined)
-        $val = '';
-        $delim = $delim ? "\\$delim|,|\\||\$" : ',|\\||$';
-        for (;;) {
-            $$obj =~ s/^(.*?)($delim)//s and $val .= $1;
-            last unless $2;
-            $2 eq '|' or $$obj = $2 . $$obj, last;
-            $$obj =~ s/^(.)//s and $val .= $1;  # add escaped character
+        if ($sfmt) {
+            if ($$obj =~ s/^"//) {
+                $val = '';
+                while ($$obj =~ s/(.*?)"//) {
+                    $val .= $1;
+                    last unless $val =~ /([\\]+)$/ and length($1) & 0x01;
+                    substr($val, -1, 1) = '"';  # (was an escaped quote)
+                }
+                if ($val =~ s/^base64://) {
+                    $val = DecodeBase64($val);
+                } else {
+                    # un-escape characters in JSON string
+                    $val =~ s/\\(.)/$jsonEsc{$1}||'\\'.$1/egs;
+                }
+            } elsif ($$obj =~ s/^(true|false)\b//) {
+                $val = '"' . ucfirst($1) . '"';
+            } elsif ($$obj =~ s/^([+-]?(?=\d|\.\d)\d*(\.\d*)?([Ee]([+-]?\d+))?)//) {
+                $val = $1;
+            } else {
+                $warn or $warn = 'Unknown JSON object';
+                $val = '""';
+            }
+        } else {
+            # read scalar up to specified delimiter (or "," if not defined)
+            $delim = $delim ? "\\$delim|,|\\||\$" : ',|\\||$';
+            $val = '';
+            for (;;) {
+                $$obj =~ s/^(.*?)($delim)//s or last;
+                $val .= $1;
+                last unless $2;
+                $2 eq '|' or $$obj = $2 . $$obj, last;
+                $$obj =~ s/^(.)//s and $val .= $1;  # add escaped character
+            }
         }
     }
     return($val, $warn);
+}
+
+#------------------------------------------------------------------------------
+# Escape string for JSON
+# Inputs: 0) string, 1) flag to force numbers to be quoted too
+# Returns: Escaped string (quoted if necessary)
+sub EscapeJSON($;$)
+{
+    my ($str, $quote) = @_;
+    unless ($quote) {
+        return 'null' unless defined $str;
+        # JSON boolean (true or false)
+        return lc($str) if $str =~ /^(true|false)$/i;
+        # JSON number (see json.org for numerical format)
+        # return $str if $str =~ /^-?(\d|[1-9]\d+)(\.\d+)?(e[-+]?\d+)?$/i;
+        # (these big numbers caused problems for some JSON parsers, so be more conservative)
+        return $str if $str =~ /^-?(\d|[1-9]\d{1,14})(\.\d{1,16})?(e[-+]?\d{1,3})?$/i;
+    }
+    return '""' unless defined $str;
+    # encode JSON string in base64 if necessary
+    return '"base64:' . EncodeBase64($str, 1) . '"' if Image::ExifTool::IsUTF8(\$str) < 0;
+    # escape special characters
+    $str =~ s/(["\t\n\r\\])/\\$jsonChar{$1}/sg;
+    $str =~ tr/\0//d;   # remove all nulls
+    # escape other control characters with \u
+    $str =~ s/([\0-\x1f])/sprintf("\\u%.4X",ord $1)/sge;
+    return '"' . $str . '"';    # return the quoted string
 }
 
 #------------------------------------------------------------------------------
@@ -147,7 +217,7 @@ sub DumpStruct($;$)
     $indent or $indent = '';
     if (ref $obj eq 'HASH') {
         print "{\n";
-        foreach (sort keys %$obj) {
+        foreach (Image::ExifTool::OrderedKeys($obj)) {
             print "$indent  $_ = ";
             DumpStruct($$obj{$_}, "$indent  ");
         }
@@ -182,8 +252,10 @@ sub CheckStruct($$$)
     ref $struct eq 'HASH' or return wantarray ? (undef, "Expecting $strName structure") : undef;
 
     my ($key, $err, $warn, %copy, $rtnVal, $val);
+    # copy the ordered keys if they exist
+    $copy{_ordered_keys_} = [ ] if $$struct{_ordered_keys_};
 Key:
-    foreach $key (keys %$struct) {
+    foreach $key (Image::ExifTool::OrderedKeys($struct)) {
         my $tag = $key;
         # allow trailing '#' to disable print conversion on a per-field basis
         my ($type, $fieldInfo);
@@ -232,7 +304,7 @@ Key:
                 # create new structure field if necessary
                 $fieldInfo or $fieldInfo = $$strTable{$tag} = {
                     %$tagInfo, # (also copies the necessary TagID and PropertyPath)
-                    Namespace => $$tagInfo{Table}{NAMESPACE},
+                    Namespace => $$tagInfo{Namespace} || $$tagInfo{Table}{NAMESPACE},
                     LangCode  => $langCode,
                 };
                 # delete stuff we don't need (shouldn't cause harm, but better safe than sorry)
@@ -306,6 +378,7 @@ Key:
             $copy{$tag} = \@copy;
         } elsif ($$fieldInfo{Struct}) {
             $warn = "Improperly formed structure in $strName $tag";
+            next;
         } else {
             $et->Sanitize(\$$struct{$key});
             ($val,$err) = $et->ConvInv($$struct{$key},$fieldInfo,$tag,$strName,$type,'');
@@ -316,6 +389,7 @@ Key:
             # turn this into a list if necessary
             $copy{$tag} = $$fieldInfo{List} ? [ $val ] : $val;
         }
+        push @{$copy{_ordered_keys_}}, $tag if $copy{_ordered_keys_}; # save ordered keys
     }
     if (%copy or not $warn) {
         $rtnVal = \%copy;
@@ -397,7 +471,11 @@ sub DeleteStruct($$$$$)
         my $verbose = $et->Options('Verbose');
         @delPaths = sort @delPaths if $verbose > 1;
         foreach $p (@delPaths) {
-            $et->VerboseValue("- XMP-$p", $$capture{$p}[0]) if $verbose > 1;
+            if ($verbose > 1) {
+                my $p2 = $p;
+                $p2 =~ s/^(\w+)/$stdXlatNS{$1} || $1/e;
+                $et->VerboseValue("- XMP-$p2", $$capture{$p}[0]);
+            }
             delete $$capture{$p};
             $deleted = 1;
             ++$$changed;
@@ -461,7 +539,9 @@ sub AddNewTag($$$$$$)
     $$capture{$path} = [ $val, \%attrs ];
     # print verbose message
     if ($et and $et->Options('Verbose') > 1) {
-        $et->VerboseValue("+ XMP-$path", $val);
+        my $p = $path;
+        $p =~ s/^(\w+)/$stdXlatNS{$1} || $1/e;
+        $et->VerboseValue("+ XMP-$p", $val);
     }
 }
 
@@ -485,7 +565,7 @@ sub AddNewStruct($$$$$$)
     # after all valid structure fields, which is necessary when serializing the XMP later)
     %$struct or $$struct{'~dummy~'} = '';
 
-    foreach $tag (sort keys %$struct) {
+    foreach $tag (Image::ExifTool::OrderedKeys($struct)) {
         my $fieldInfo = $$strTable{$tag};
         unless ($fieldInfo) {
             next unless $tag eq '~dummy~'; # check for dummy field
@@ -512,6 +592,7 @@ sub AddNewStruct($$$$$$)
             next unless $$fieldInfo{List};
             my $i = 0;
             my ($item, $p);
+            my $level = scalar(() = ($propPath =~ / \d+/g));
             # loop through all list items (note: can't yet write multi-dimensional lists)
             foreach $item (@{$val}) {
                 if ($i) {
@@ -526,7 +607,8 @@ sub AddNewStruct($$$$$$)
                 if (ref $item eq 'HASH') {
                     my $subStruct = $$fieldInfo{Struct} or next;
                     AddNewStruct($et, $tagInfo, $capture, $p, $item, $subStruct) or next;
-                } elsif (length $item) { # don't write empty items in list
+                # don't write empty items in upper-level list
+                } elsif (length $item or (defined $item and $level == 1)) {
                     AddNewTag($et, $fieldInfo, $capture, $p, \$item, \%langIdx);
                     $addedTag = 1;
                 }
@@ -550,7 +632,11 @@ sub AddNewStruct($$$$$$)
         my $path = $basePath . '/' . ConformPathToNamespace($et, "rdf:type");
         unless ($$capture{$path}) {
             $$capture{$path} = [ '', { 'rdf:resource' => $$strTable{TYPE} } ];
-            $et->VerboseValue("+ XMP-$path", $$strTable{TYPE}) if $verbose > 1;
+            if ($verbose > 1) {
+                my $p = $path;
+                $p =~ s/^(\w+)/$stdXlatNS{$1} || $1/e;
+                $et->VerboseValue("+ XMP-$p", $$strTable{TYPE});
+            }
         }
     }
     return $changed;
@@ -569,7 +655,8 @@ sub ConvertStruct($$$$;$)
         my (%struct, $key);
         my $table = $$tagInfo{Table};
         $parentID = $$tagInfo{TagID} unless $parentID;
-        foreach $key (keys %$value) {
+        $struct{_ordered_keys_} = [ ] if $$value{_ordered_keys_};
+        foreach $key (Image::ExifTool::OrderedKeys($value)) {
             my $tagID = $parentID . ucfirst($key);
             my $flatInfo = $$table{$tagID};
             unless ($flatInfo) {
@@ -586,7 +673,11 @@ sub ConvertStruct($$$$;$)
             } else {
                 $v = $et->GetValue($flatInfo, $type, $v);
             }
-            $struct{$key} = $v if defined $v;  # save the converted value
+            if (defined $v) {
+                $struct{$key} = $v;  # save the converted value
+                # maintain ordered keys if necessary
+                push @{$struct{_ordered_keys_}}, $key if $struct{_ordered_keys_};
+            }
         }
         return \%struct;
     } elsif (ref $value eq 'ARRAY') {
@@ -619,14 +710,13 @@ sub RestoreStruct($;$)
     local $_;
     my ($et, $keepFlat) = @_;
     my ($key, %structs, %var, %lists, $si, %listKeys, @siList);
-    my $ex = $$et{TAG_EXTRA};
     my $valueHash = $$et{VALUE};
+    my $fileOrder = $$et{FILE_ORDER};
     my $tagExtra = $$et{TAG_EXTRA};
     foreach $key (keys %{$$et{TAG_INFO}}) {
-        $$ex{$key} or next;
-        my $structProps = $$ex{$key}{Struct} or next;
-        delete $$ex{$key}{Struct}; # (don't re-use)
-        my $tagInfo = $$et{TAG_INFO}{$key};   # tagInfo for flattened tag
+        my $structProps = $$tagExtra{$key}{Struct} or next;
+        delete $$tagExtra{$key}{Struct};    # (don't re-use)
+        my $tagInfo = $$et{TAG_INFO}{$key}; # tagInfo for flattened tag
         my $table = $$tagInfo{Table};
         my $prop = shift @$structProps;
         my $tag = $$prop[0];
@@ -764,7 +854,13 @@ sub RestoreStruct($;$)
                 # everything else, and this is really what we care about)
                 my $k = $listKeys{$oldStruct};
                 if ($k) {   # ($k will be undef for an empty structure)
-                    $k lt $key and $et->DeleteTag($key), next;
+                    if ($k lt $key) {
+                        # keep lowest file order
+                        $$fileOrder{$k} = $$fileOrder{$key} if $$fileOrder{$k} > $$fileOrder{$key};
+                        $et->DeleteTag($key);
+                        next;
+                    }
+                    $$fileOrder{$key} = $$fileOrder{$k} if $$fileOrder{$key} > $$fileOrder{$k};
                     $et->DeleteTag($k);   # remove tag with greater copy number
                 }
             }
@@ -775,15 +871,15 @@ sub RestoreStruct($;$)
             # save strInfo ref and file order
             if ($var{$strInfo}) {
                 # set file order to just before the first associated flattened tag
-                if ($var{$strInfo}[1] > $$et{FILE_ORDER}{$key}) {
-                    $var{$strInfo}[1] = $$et{FILE_ORDER}{$key} - 0.5;
+                if ($var{$strInfo}[1] > $$fileOrder{$key}) {
+                    $var{$strInfo}[1] = $$fileOrder{$key} - 0.5;
                 }
             } else {
-                $var{$strInfo} = [ $strInfo, $$et{FILE_ORDER}{$key} - 0.5 ];
+                $var{$strInfo} = [ $strInfo, $$fileOrder{$key} - 0.5 ];
             }
             # preserve original flattened tags if requested
             if ($keepFlat) {
-                my $extra = $$tagExtra{$key} or next;
+                my $extra = $$tagExtra{$key};
                 # restore list behaviour of this flattened tag
                 if ($$extra{NoList}) {
                     $$valueHash{$key} = $$extra{NoList};
@@ -807,9 +903,24 @@ sub RestoreStruct($;$)
     $var{$_} and push @siList, $_ foreach keys %structs;
     # save new structures in the same order they were read from file
     foreach $si (sort { $var{$a}[1] <=> $var{$b}[1] } @siList) {
-        $key = $et->FoundTag($var{$si}[0], '');
-        $$valueHash{$key} = $structs{$si};
-        $$et{FILE_ORDER}{$key} = $var{$si}[1];
+        # test to see if a tag for this structure has already been generated
+        # (this could happen only if one of the structures in a list was empty)
+        $key = $var{$si}[0]{Name};
+        my $found;
+        if ($$valueHash{$key}) {
+            my @keys = grep /^$key( \(\d+\))?$/, keys %$valueHash;
+            foreach $key (@keys) {
+                next unless $$valueHash{$key} eq $structs{$si};
+                $found = 1;
+                last;
+            }
+        }
+        unless ($found) {
+            # otherwise, generate a new tag for this structure
+            $key = $et->FoundTag($var{$si}[0], '');
+            $$valueHash{$key} = $structs{$si};
+        }
+        $$fileOrder{$key} = $var{$si}[1];
     }
 }
 
@@ -833,7 +944,7 @@ information.
 
 =head1 AUTHOR
 
-Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2026, Phil Harvey (philharvey66 at gmail.com)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

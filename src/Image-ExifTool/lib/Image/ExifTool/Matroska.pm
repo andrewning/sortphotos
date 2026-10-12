@@ -6,6 +6,7 @@
 # Revisions:    05/26/2010 - P. Harvey Created
 #
 # References:   1) http://www.matroska.org/technical/specs/index.html
+#               2) https://www.matroska.org/technical/tagging.html
 #------------------------------------------------------------------------------
 
 package Image::ExifTool::Matroska;
@@ -14,9 +15,25 @@ use strict;
 use vars qw($VERSION);
 use Image::ExifTool qw(:DataAccess :Utils);
 
-$VERSION = '1.09';
+$VERSION = '1.20';
+
+sub HandleStruct($$;$$$$);
 
 my %noYes = ( 0 => 'No', 1 => 'Yes' );
+
+my %dateInfo = (
+    Groups => { 2 => 'Time' },
+    # the spec says to use "-" as a date separator, but my only sample uses ":", so
+    # convert to ":" if necessary, and avoid translating all "-" in case someone wants
+    # to include a negative time zone (although the spec doesn't mention time zones)
+    ValueConv => '$val =~ s/^(\d{4})-(\d{2})-/$1:$2:/; $val',
+    PrintConv => '$self->ConvertDateTime($val)',
+);
+
+my %uidInfo = (
+    Format => 'string',
+    ValueConv => 'unpack("H*",$val)'
+);
 
 # Matroska tags
 # Note: The tag ID's in the Matroska documentation include the length designation
@@ -25,10 +42,13 @@ my %noYes = ( 0 => 'No', 1 => 'Yes' );
     GROUPS => { 2 => 'Video' },
     VARS => { NO_LOOKUP => 1 }, # omit tags from lookup
     NOTES => q{
-        The following tags are extracted from Matroska multimedia container files. 
-        This container format is used by file types such as MKA, MKV, MKS and WEBM. 
-        For speed, ExifTool extracts tags only up to the first Cluster unless the
-        Verbose (-v) or Unknown = 2 (-U) option is used.  See
+        The following tags are extracted from Matroska multimedia container files.
+        This container format is used by file types such as MKA, MKV, MKS and WEBM.
+        For speed, by default ExifTool extracts tags only up to the first Cluster
+        unless a Seek element specifies the position of a Tags element after this.
+        However, the L<Verbose|../ExifTool.html#Verbose> (-v) and L<Unknown|../ExifTool.html#Unknown> = 2 (-U) options force processing of
+        Cluster data, and the L<ExtractEmbedded|../ExifTool.html#ExtractEmbedded> (-ee) option skips over Clusters to
+        read subsequent tags.  See
         L<http://www.matroska.org/technical/specs/index.html> for the official
         Matroska specification.
     },
@@ -56,7 +76,7 @@ my %noYes = ( 0 => 'No', 1 => 'Yes' );
 #
 # General
 #
-    0x3f  => { Name => 'CRC-32',            Binary => 1, Unknown => 1 },
+    0x3f  => { Name => 'CRC-32',            Format => 'unsigned', Unknown => 1 },
     0x6c  => { Name => 'Void',              NoSave => 1, Unknown => 1 },
 #
 # Signature
@@ -93,8 +113,25 @@ my %noYes = ( 0 => 'No', 1 => 'Yes' );
         Name => 'Seek',
         SubDirectory => { TagTable => 'Image::ExifTool::Matroska::Main' },
     },
-    0x13ab => { Name => 'SeekID',           Binary => 1, Unknown => 1 },
-    0x13ac => { Name => 'SeekPosition',     Format => 'unsigned', Unknown => 1 },
+    0x13ab => {
+        Name => 'SeekID',
+        Unknown => 1,
+        SeekInfo => 'ID',       # save seek ID's
+        # (note: converted from VInt internally)
+        PrintConv => q{
+            my $tagInfo = $Image::ExifTool::Matroska::Main{$val};
+            $val = sprintf('0x%x', $val);
+            $val .= " ($$tagInfo{Name})" if ref $tagInfo eq 'HASH' and $$tagInfo{Name};
+            return $val;
+        },
+    },
+    0x13ac => {
+        Name => 'SeekPosition',
+        Format => 'unsigned',
+        Unknown => 1,
+        SeekInfo => 'Position', # save seek positions
+        RawConv => '$val + $$self{SeekHeadOffset}',
+    },
 #
 # Segment Info
 #
@@ -102,18 +139,18 @@ my %noYes = ( 0 => 'No', 1 => 'Yes' );
         Name => 'Info',
         SubDirectory => { TagTable => 'Image::ExifTool::Matroska::Main' },
     },
-    0x33a4 => { Name => 'SegmentUID',       Binary => 1, Unknown => 1 },
+    0x33a4 => { Name => 'SegmentUID',       %uidInfo, Unknown => 1 },
     0x3384 => { Name => 'SegmentFileName',  Format => 'utf8' },
-    0x1cb923 => { Name => 'PrevUID',        Binary => 1, Unknown => 1 },
+    0x1cb923 => { Name => 'PrevUID',        %uidInfo, Unknown => 1 },
     0x1c83ab => { Name => 'PrevFileName',   Format => 'utf8' },
-    0x1eb923 => { Name => 'NextUID',        Binary => 1, Unknown => 1 },
+    0x1eb923 => { Name => 'NextUID',        %uidInfo, Unknown => 1 },
     0x1e83bb => { Name => 'NextFileName',   Format => 'utf8' },
     0x0444 => { Name => 'SegmentFamily',    Binary => 1, Unknown => 1 },
     0x2924 => {
         Name => 'ChapterTranslate',
         SubDirectory => { TagTable => 'Image::ExifTool::Matroska::Main' },
     },
-    0x29fc => { Name => 'ChapterTranslateEditionUID',Format => 'unsigned', Unknown => 1 },
+    0x29fc => { Name => 'ChapterTranslateEditionUID', %uidInfo, Unknown => 1 },
     0x29bf => {
         Name => 'ChapterTranslateCodec',
         Format => 'unsigned',
@@ -130,7 +167,7 @@ my %noYes = ( 0 => 'No', 1 => 'Yes' );
     0x489 => {
         Name => 'Duration',
         Format => 'float',
-        ValueConv => '$$self{TimecodeScale} ? $val * $$self{TimecodeScale} / 1e9 : $val',
+        ValueConv => '$$self{TimecodeScale} ? $val * $$self{TimecodeScale} / 1e9 : $val / 1000',
         PrintConv => '$$self{TimecodeScale} ? ConvertDuration($val) : $val',
     },
     0x461 => {
@@ -221,10 +258,12 @@ my %noYes = ( 0 => 'No', 1 => 'Yes' );
     },
     0x2e => {
         Name => 'TrackEntry',
+        # reset TrackType member at the start of each track
+        Condition => 'delete $$self{TrackType}; 1',
         SubDirectory => { TagTable => 'Image::ExifTool::Matroska::Main' },
     },
     0x57   => { Name => 'TrackNumber',      Format => 'unsigned' },
-    0x33c5 => { Name => 'TrackUID',         Format => 'unsigned', Unknown => 1 },
+    0x33c5 => { Name => 'TrackUID',         %uidInfo },
     0x03 => {
         Name => 'TrackType',
         Format => 'unsigned',
@@ -267,10 +306,11 @@ my %noYes = ( 0 => 'No', 1 => 'Yes' );
         }
     ],
     0x3314f => { Name => 'TrackTimecodeScale',Format => 'float' },
-    0x137f  => { Name => 'TrackOffset',     Format => 'signed', Unknown => 1 },
+    0x137f  => { Name => 'TrackOffset',       Format => 'signed', Unknown => 1 },
     0x15ee  => { Name => 'MaxBlockAdditionID',Format => 'unsigned', Unknown => 1 },
-    0x136e  => { Name => 'TrackName',       Format => 'utf8' },
-    0x2b59c => { Name => 'TrackLanguage',   Format => 'string' },
+    0x136e  => { Name => 'TrackName',         Format => 'utf8' },
+    0x2b59c => { Name => 'TrackLanguage',     Format => 'string' },
+    0x2b59d => { Name => 'TrackLanguageIETF', Format => 'string' },
     0x06 => [
         {
             Name => 'VideoCodecID',
@@ -300,7 +340,7 @@ my %noYes = ( 0 => 'No', 1 => 'Yes' );
             Format => 'utf8',
         }
     ],
-    0x3446 => { Name => 'TrackAttachmentUID',Format => 'unsigned' },
+    0x3446 => { Name => 'TrackAttachmentUID',%uidInfo },
     0x1a9697=>{ Name => 'CodecSettings',    Format => 'utf8' },
     0x1b4040=>{ Name => 'CodecInfoURL',     Format => 'string' },
     0x6b240 =>{ Name => 'CodecDownloadURL', Format => 'string' },
@@ -310,7 +350,7 @@ my %noYes = ( 0 => 'No', 1 => 'Yes' );
         Name => 'TrackTranslate',
         SubDirectory => { TagTable => 'Image::ExifTool::Matroska::Main' },
     },
-    0x26fc => { Name => 'TrackTranslateEditionUID',Format => 'unsigned', Unknown => 1 },
+    0x26fc => { Name => 'TrackTranslateEditionUID', %uidInfo, Unknown => 1 },
     0x26bf => {
         Name => 'TrackTranslateCodec',
         Format => 'unsigned',
@@ -328,8 +368,9 @@ my %noYes = ( 0 => 'No', 1 => 'Yes' );
         Name => 'VideoScanType',
         Format => 'unsigned',
         PrintConv => {
-            0 => 'Progressive',
+            0 => 'Undetermined',
             1 => 'Interlaced',
+            2 => 'Progressive',
         },
     },
     0x13b8 => {
@@ -357,6 +398,8 @@ my %noYes = ( 0 => 'No', 1 => 'Yes' );
             0 => 'Pixels',
             1 => 'cm',
             2 => 'inches',
+            3 => 'Display Aspect Ratio',
+            4 => 'Unknown',
         },
     },
     0x14b3 => {
@@ -512,7 +555,7 @@ my %noYes = ( 0 => 'No', 1 => 'Yes' );
     0x66e => { Name => 'AttachedFileName',      Format => 'utf8' },
     0x660 => { Name => 'AttachedFileMIMEType',  Format => 'string' },
     0x65c => { Name => 'AttachedFileData',      Binary => 1 },
-    0x6ae => { Name => 'AttachedFileUID',       Format => 'unsigned' },
+    0x6ae => { Name => 'AttachedFileUID',       %uidInfo },
     0x675 => { Name => 'AttachedFileReferral',  Binary => 1, Unknown => 1 },
 #
 # Chapters
@@ -525,7 +568,7 @@ my %noYes = ( 0 => 'No', 1 => 'Yes' );
         Name => 'EditionEntry',
         SubDirectory => { TagTable => 'Image::ExifTool::Matroska::Main' },
     },
-    0x5bc => { Name => 'EditionUID',        Format => 'unsigned', Unknown => 1 },
+    0x5bc => { Name => 'EditionUID',        %uidInfo, Unknown => 1 },
     0x5bd => { Name => 'EditionFlagHidden', Format => 'unsigned', Unknown => 1 },
     0x5db => { Name => 'EditionFlagDefault',Format => 'unsigned', Unknown => 1 },
     0x5dd => { Name => 'EditionFlagOrdered',Format => 'unsigned', Unknown => 1 },
@@ -533,7 +576,7 @@ my %noYes = ( 0 => 'No', 1 => 'Yes' );
         Name => 'ChapterAtom',
         SubDirectory => { TagTable => 'Image::ExifTool::Matroska::Main' },
     },
-    0x33c4 => { Name => 'ChapterUID',       Format => 'unsigned', Unknown => 1 },
+    0x33c4 => { Name => 'ChapterUID', %uidInfo, Unknown => 1 },
     0x11 => {
         Name => 'ChapterTimeStart',
         Groups => { 1 => 'Chapter#' },
@@ -549,8 +592,8 @@ my %noYes = ( 0 => 'No', 1 => 'Yes' );
     },
     0x18  => { Name => 'ChapterFlagHidden', Format => 'unsigned', Unknown => 1 },
     0x598 => { Name => 'ChapterFlagEnabled',Format => 'unsigned', Unknown => 1 },
-    0x2e67=> { Name => 'ChapterSegmentUID', Binary => 1, Unknown => 1 },
-    0x2ebc=> { Name => 'ChapterSegmentEditionUID', Binary => 1, Unknown => 1 },
+    0x2e67=> { Name => 'ChapterSegmentUID', %uidInfo,  Unknown => 1 },
+    0x2ebc=> { Name => 'ChapterSegmentEditionUID', %uidInfo, Unknown => 1 },
     0x23c3 => {
         Name => 'ChapterPhysicalEquivalent',
         Format => 'unsigned',
@@ -617,27 +660,50 @@ my %noYes = ( 0 => 'No', 1 => 'Yes' );
         Name => 'Targets',
         SubDirectory => { TagTable => 'Image::ExifTool::Matroska::Main' },
     },
-    0x28ca => { Name => 'TargetTypeValue',  Format => 'unsigned' },
-    0x23ca => { Name => 'TargetType',       Format => 'string' },
-    0x23c5 => { Name => 'TagTrackUID',      Format => 'unsigned', Unknown => 1 },
-    0x23c9 => { Name => 'TagEditionUID',    Format => 'unsigned', Unknown => 1 },
-    0x23c4 => { Name => 'TagChapterUID',    Format => 'unsigned', Unknown => 1 },
-    0x23c6 => { Name => 'TagAttachmentUID', Format => 'unsigned', Unknown => 1 },
+        # Targets elements
+        0x28ca => {
+            Name => 'TargetTypeValue',
+            Format => 'unsigned',
+            PrintConv => {
+                10 => 'Shot',
+                20 => 'Scene/Subtrack',
+                30 => 'Chapter/Track',
+                40 => 'Session',
+                50 => 'Movie/Album',
+                60 => 'Season/Edition',
+                70 => 'Collection',
+            },
+        },
+        0x23ca => { Name => 'TargetType',       Format => 'string' },
+        0x23c5 => { Name => 'TagTrackUID',      %uidInfo },
+        0x23c9 => { Name => 'TagEditionUID',    %uidInfo },
+        0x23c4 => { Name => 'TagChapterUID',    %uidInfo },
+        0x23c6 => { Name => 'TagAttachmentUID', %uidInfo },
     0x27c8 => {
         Name => 'SimpleTag',
         SubDirectory => { TagTable => 'Image::ExifTool::Matroska::Main' },
     },
-    0x5a3 => { Name => 'TagName',           Format => 'utf8' },
-    0x47a => { Name => 'TagLanguage',       Format => 'string' },
-    0x484 => { Name => 'TagDefault',        Format => 'unsigned', PrintConv => \%noYes },
-    0x487 => { Name => 'TagString',         Format => 'utf8' },
-    0x485 => { Name => 'TagBinary',         Binary => 1 },
+        # SimpleTag elements
+        0x5a3 => { Name => 'TagName',           Format => 'utf8' },
+        0x47a => { Name => 'TagLanguage',       Format => 'string' },
+        0x47a => { Name => 'TagLanguageBCP47',  Format => 'string' },
+        0x484 => { Name => 'TagDefault',        Format => 'unsigned', PrintConv => \%noYes },
+        0x487 => { Name => 'TagString',         Format => 'utf8' },
+        0x485 => { Name => 'TagBinary',         Binary => 1 },
 #
 # Spherical Video V2 (untested)
 #
     0x7670 => {
         Name => 'Projection',
         SubDirectory => { TagTable => 'Image::ExifTool::Matroska::Projection' },
+    },
+#
+# other
+#
+    0x5345414c => { # ('SEAL' in hex)
+        Name => 'SEAL',
+        NotEBML => 1,   # don't process SubDirectory as EBML elements
+        SubDirectory => { TagTable => 'Image::ExifTool::XMP::SEAL' },
     },
 );
 
@@ -662,6 +728,7 @@ my %noYes = ( 0 => 'No', 1 => 'Yes' );
             3 => 'Mesh',
         },
     },
+    # ProjectionPrivate in the spec
     0x7672 => [{
         Name => 'EquirectangularProj',
         Condition => '$$self{ProjectionType} == 1',
@@ -670,17 +737,222 @@ my %noYes = ( 0 => 'No', 1 => 'Yes' );
         Name => 'CubemapProj',
         Condition => '$$self{ProjectionType} == 2',
         SubDirectory => { TagTable => 'Image::ExifTool::QuickTime::cbmp' },
+    },{ # (don't decode 3 because it is a PITA)
+        Name => 'ProjectionPrivate',
+        Binary => 1,
     }],
-    0x7673 => { Name => 'ProjectionPosYaw',   Format => 'float' },
-    0x7674 => { Name => 'ProjectionPosPitch', Format => 'float' },
-    0x7675 => { Name => 'ProjectionPosRoll',  Format => 'float' },
+    0x7673 => { Name => 'ProjectionPoseYaw',   Format => 'float' },
+    0x7674 => { Name => 'ProjectionPosePitch', Format => 'float' },
+    0x7675 => { Name => 'ProjectionPoseRoll',  Format => 'float' },
 );
+
+# standardized tag names (ref 2)
+%Image::ExifTool::Matroska::StdTag = (
+    GROUPS => { 2 => 'Video' },
+    PRIORITY => 0, # (don't want named tags to override numbered tags, eg. "DURATION")
+    VARS => { LONG_TAGS => 3 },
+    NOTES => q{
+        Standardized Matroska tags, stored in a SimpleTag structure (see
+        L<https://www.matroska.org/technical/tagging.html>).
+    },
+    ORIGINAL    => 'Original',  # struct
+    SAMPLE      => 'Sample',    # struct
+    COUNTRY     => 'Country',   # struct (should deal with this properly!)
+    TOTAL_PARTS => 'TotalParts',
+    PART_NUMBER => 'PartNumber',
+    PART_OFFSET => 'PartOffset',
+    TITLE       => 'Title',
+    SUBTITLE    => 'Subtitle',
+    URL         => 'URL',       # nested
+    SORT_WITH   => 'SortWith',  # nested
+    INSTRUMENTS => {            # nested
+        Name => 'Instruments',
+        IsList => 1,
+        ValueConv => 'my @a = split /,\s?/, $val; \@a',
+    },
+    EMAIL       => 'Email',     # nested
+    ADDRESS     => 'Address',   # nested
+    FAX         => 'FAX',       # nested
+    PHONE       => 'Phone',     # nested
+    ARTIST      => 'Artist',
+    LEAD_PERFORMER => 'LeadPerformer',
+    ACCOMPANIMENT => 'Accompaniment',
+    COMPOSER    => 'Composer',
+    ARRANGER    => 'Arranger',
+    LYRICS      => 'Lyrics',
+    LYRICIST    => 'Lyricist',
+    CONDUCTOR   => 'Conductor',
+    DIRECTOR    => 'Director',
+    ASSISTANT_DIRECTOR      => 'AssistantDirector',
+    DIRECTOR_OF_PHOTOGRAPHY => 'DirectorOfPhotography',
+    SOUND_ENGINEER          => 'SoundEngineer',
+    ART_DIRECTOR            => 'ArtDirector',
+    PRODUCTION_DESIGNER     => 'ProductionDesigner',
+    CHOREGRAPHER            => 'Choregrapher',
+    COSTUME_DESIGNER        => 'CostumeDesigner',
+    ACTOR       => 'Actor',
+    CHARACTER   => 'Character',
+    WRITTEN_BY  => 'WrittenBy',
+    SCREENPLAY_BY => 'ScreenplayBy',
+    EDITED_BY   => 'EditedBy',
+    PRODUCER    => 'Producer',
+    COPRODUCER  => 'Coproducer',
+    EXECUTIVE_PRODUCER  => 'ExecutiveProducer',
+    DISTRIBUTED_BY      => 'DistributedBy',
+    MASTERED_BY         => 'MasteredBy',
+    ENCODED_BY  => 'EncodedBy',
+    MIXED_BY    => 'MixedBy',
+    REMIXED_BY  => 'RemixedBy',
+    PRODUCTION_STUDIO => 'ProductionStudio',
+    THANKS_TO   => 'ThanksTo',
+    PUBLISHER   => 'Publisher',
+    LABEL       => 'Label',
+    GENRE       => 'Genre',
+    MOOD        => 'Mood',
+    ORIGINAL_MEDIA_TYPE => 'OriginalMediaType',
+    CONTENT_TYPE => 'ContentType',
+    SUBJECT     => 'Subject',
+    DESCRIPTION => 'Description',
+    KEYWORDS    => {
+        Name => 'Keywords',
+        IsList => 1,
+        ValueConv => 'my @a = split /,\s?/, $val; \@a',
+    },
+    SUMMARY     => 'Summary',
+    SYNOPSIS    => 'Synopsis',
+    INITIAL_KEY => 'InitialKey',
+    PERIOD      => 'Period',
+    LAW_RATING  => 'LawRating',
+    DATE_RELEASED   => { Name => 'DateReleased',     %dateInfo },
+    DATE_RECORDED   => { Name => 'DateTimeOriginal', %dateInfo, Description => 'Date/Time Original' },
+    DATE_ENCODED    => { Name => 'DateEncoded',      %dateInfo },
+    DATE_TAGGED     => { Name => 'DateTagged',       %dateInfo },
+    DATE_DIGITIZED  => { Name => 'CreateDate',       %dateInfo },
+    DATE_WRITTEN    => { Name => 'DateWritten',      %dateInfo },
+    DATE_PURCHASED  => { Name => 'DatePurchased',    %dateInfo },
+    RECORDING_LOCATION   => 'RecordingLocation',
+    COMPOSITION_LOCATION => 'CompositionLocation',
+    COMPOSER_NATIONALITY => 'ComposerNationality',
+    COMMENT     => 'Comment',
+    PLAY_COUNTER => 'PlayCounter',
+    RATING      => 'Rating',
+    ENCODER     => 'Encoder',
+    ENCODER_SETTINGS => 'EncoderSettings',
+    BPS         => 'BPS',
+    FPS         => 'FPS',
+    BPM         => 'BPM',
+    MEASURE     => 'Measure',
+    TUNING      => 'Tuning',
+    REPLAYGAIN_GAIN => 'ReplaygainGain',
+    REPLAYGAIN_PEAK => 'ReplaygainPeak',
+    ISRC        => 'ISRC',
+    MCDI        => 'MCDI',
+    ISBN        => 'ISBN',
+    BARCODE     => 'Barcode',
+    CATALOG_NUMBER => 'CatalogNumber',
+    LABEL_CODE  => 'LabelCode',
+    LCCN        => 'Lccn',
+    IMDB        => 'IMDB',
+    TMDB        => 'TMDB',
+    TVDB        => 'TVDB',
+    PURCHASE_ITEM   => 'PurchaseItem',
+    PURCHASE_INFO   => 'PurchaseInfo',
+    PURCHASE_OWNER  => 'PurchaseOwner',
+    PURCHASE_PRICE  => 'PurchasePrice',
+    PURCHASE_CURRENCY => 'PurchaseCurrency',
+    COPYRIGHT   => 'Copyright',
+    PRODUCTION_COPYRIGHT => 'ProductionCopyright',
+    LICENSE     => 'License',
+    TERMS_OF_USE => 'TermsOfUse',
+    # (the following are untested)
+    'spherical-video' => { #https://github.com/google/spatial-media/blob/master/docs/spherical-video-rfc.md
+        Name => 'SphericalVideoXML',
+        SubDirectory => {
+            TagTable => 'Image::ExifTool::XMP::Main',
+            ProcessProc => 'Image::ExifTool::XMP::ProcessGSpherical',
+        },
+    },
+    'SPHERICAL-VIDEO' => { #https://github.com/google/spatial-media/blob/master/docs/spherical-video-rfc.md
+        Name => 'SphericalVideoXML',
+        SubDirectory => {
+            TagTable => 'Image::ExifTool::XMP::Main',
+            ProcessProc => 'Image::ExifTool::XMP::ProcessGSpherical',
+        },
+    },
+#
+# other tags seen
+#
+    _STATISTICS_WRITING_DATE_UTC => { Name => 'StatisticsWritingDateUTC', %dateInfo },
+    _STATISTICS_WRITING_APP => 'StatisticsWritingApp',
+    _STATISTICS_TAGS => 'StatisticsTags',
+    DURATION => 'Duration',
+    NUMBER_OF_FRAMES => 'NumberOfFrames',
+    NUMBER_OF_BYTES => 'NumberOfBytes',
+);
+
+#------------------------------------------------------------------------------
+# Handle MKV SimpleTag structure
+# Inputs: 0) ExifTool ref, 1) structure ref, 2) parent tag ID, 3) parent tag Name,
+#         4) language code, 5) country code
+sub HandleStruct($$;$$$$)
+{
+    local $_;
+    my ($et, $struct, $pid, $pname, $lang, $ctry) = @_;
+    my $tagTbl = GetTagTable('Image::ExifTool::Matroska::StdTag');
+    my $tag = $$struct{TagName};
+    my $tagInfo = $$tagTbl{$tag};
+    # create tag if necessary
+    unless (ref $tagInfo eq 'HASH') {
+        my $name = ucfirst lc $tag;
+        $name =~ tr/0-9a-zA-Z_//dc;
+        $name =~ s/_([a-z])/\U$1/g;
+        $name = "Tag_$name" if length $name < 2;
+        $et->VPrint(0, "  [adding $tag = $name]\n");
+        $tagInfo = AddTagToTable($tagTbl, $tag, { Name => $name });
+    }
+    my ($id, $nm);
+    if ($pid) {
+        $id = "$pid/$tag";
+        $nm = "$pname/$$tagInfo{Name}";
+        unless ($$tagTbl{$id}) {
+            my %copy = %$tagInfo;
+            $copy{Name} = $nm;
+            $et->VPrint(0, "  [adding $id = $nm]\n");
+            $tagInfo = AddTagToTable($tagTbl, $id, \%copy);
+        }
+    } else {
+        ($id, $nm) = ($tag, $$tagInfo{Name});
+    }
+    if (defined $$struct{TagString} or defined $$struct{TagBinary}) {
+        my $val = defined $$struct{TagString} ? $$struct{TagString} : \$$struct{TagBinary};
+        $lang = $$struct{TagLanguageBCP47} || $$struct{TagLanguage} || $lang;
+        # (Note: not currently handling TagDefault attribute)
+        my $code = $lang;
+        $code = $lang ? "${lang}-${ctry}" : "eng-${ctry}" if $ctry; # ('eng' is default lang)
+        if ($code) {
+            $tagInfo = Image::ExifTool::GetLangInfo($tagInfo, $code);
+            $et->HandleTag($tagTbl, $$tagInfo{TagID}, $val);
+        } else {
+            $et->HandleTag($tagTbl, $id, $val);
+        }
+        # COUNTRY is handled as an attribute for contained tags
+        if ($tag eq 'COUNTRY') {
+            $ctry = $val;
+            ($id, $nm) = ($pid, $pname);
+        }
+    }
+    if ($$struct{struct}) {
+        # step into each contained structure
+        HandleStruct($et, $_, $id, $nm, $lang, $ctry) foreach @{$$struct{struct}};
+    }
+}
 
 #------------------------------------------------------------------------------
 # Get variable-length Matroska integer
 # Inputs: 0) data buffer, 1) position in data
 # Returns: integer value and updates position, -1 for unknown/reserved value,
 #          or undef if no data left
+# Notes: Increments position pointer
 sub GetVInt($$)
 {
     return undef if $_[1] >= length $_[0];
@@ -717,7 +989,8 @@ sub ProcessMKV($$)
 {
     my ($et, $dirInfo) = @_;
     my $raf = $$dirInfo{RAF};
-    my ($buff, $buf2, @dirEnd, $trackIndent, %trackTypes);
+    my ($buff, $buf2, @dirEnd, $trackIndent, %trackTypes, %trackNum,
+        $struct, %seekInfo, %seek);
 
     $raf->Read($buff, 4) == 4 or return 0;
     return 0 unless $buff =~ /^\x1a\x45\xdf\xa3/;
@@ -737,18 +1010,50 @@ sub ProcessMKV($$)
 
     # set flag to process entire file (otherwise we stop at the first Cluster)
     my $verbose = $et->Options('Verbose');
-    my $processAll = ($verbose or $et->Options('Unknown') > 1);
+    my $processAll = ($verbose or $et->Options('Unknown') > 1) ? 2 : 0;
+    ++$processAll if $et->Options('ExtractEmbedded');
     $$et{TrackTypes} = \%trackTypes;  # store Track types reference
+    $$et{SeekHeadOffset} = 0;
     my $oldIndent = $$et{INDENT};
     my $chapterNum = 0;
+    my $dirName = 'MKV';
 
     # loop over all Matroska elements
     for (;;) {
-        while (@dirEnd and $pos + $dataPos >= $dirEnd[-1][0]) {
-            pop @dirEnd;
-            # use INDENT to decide whether or not we are done this Track element
-            delete $$et{SET_GROUP1} if $trackIndent and $trackIndent eq $$et{INDENT};
-            $$et{INDENT} = substr($$et{INDENT}, 0, -2);
+        while (@dirEnd) {
+            if ($pos + $dataPos >= $dirEnd[-1][0]) {
+                if ($dirEnd[-1][1] eq 'Seek') {
+                    # save seek info
+                    if (defined $seekInfo{ID} and defined $seekInfo{Position}) {
+                        my $seekTag = $$tagTablePtr{$seekInfo{ID}};
+                        if (ref $seekTag eq 'HASH' and $$seekTag{Name}) {
+                            $seek{$$seekTag{Name}} = $seekInfo{Position} + $$et{SeekHeadOffset};
+                        }
+                    }
+                    undef %seekInfo;
+                }
+                pop @dirEnd;
+                if ($struct) {
+                    if (@dirEnd and $dirEnd[-1][2]) {
+                        # save this nested structure
+                        $dirEnd[-1][2]{struct} or $dirEnd[-1][2]{struct} = [ ];
+                        push @{$dirEnd[-1][2]{struct}}, $struct;
+                        $struct = $dirEnd[-1][2];
+                    } else {
+                        # handle completed structures now
+                        HandleStruct($et, $struct);
+                        undef $struct;
+                    }
+                }
+                $dirName = @dirEnd ? $dirEnd[-1][1] : 'MKV';
+                # use INDENT to decide whether or not we are done this Track element
+                delete $$et{SET_GROUP1} if $trackIndent and $trackIndent eq $$et{INDENT};
+                $$et{INDENT} = substr($$et{INDENT}, 0, -2);
+                pop @{$$et{PATH}};
+            } else {
+                $dirName = $dirEnd[-1][1];
+                last;
+            }
         }
         # read more if we are getting close to the end of our buffer
         # (24 more bytes should be enough to read this element header)
@@ -761,9 +1066,10 @@ sub ProcessMKV($$)
         }
         my $tag = GetVInt($buff, $pos);
         last unless defined $tag and $tag >= 0;
+        $$et{SeekHeadOffset} = $pos if $tag == 0x14d9b74;   # save offset of seek head
         my $size = GetVInt($buff, $pos);
         last unless defined $size;
-        my $unknownSize;
+        my ($unknownSize, $seekInfoOnly, $tagName);
         $size < 0 and $unknownSize = 1, $size = 1e20;
         if (@dirEnd and $pos + $dataPos + $size > $dirEnd[-1][0]) {
             $et->Warn("Invalid or corrupted $dirEnd[-1][1] master element");
@@ -778,18 +1084,48 @@ sub ProcessMKV($$)
             next;
         }
         my $tagInfo = $et->GetTagInfo($tagTablePtr, $tag);
-        # just fall through into the contained EBML elements
-        if ($tagInfo and $$tagInfo{SubDirectory}) {
-            # stop processing at first cluster unless we are in verbose mode
-            last if $$tagInfo{Name} eq 'Cluster' and not $processAll;
-            $$et{INDENT} .= '| ';
-            $et->VerboseDir($$tagTablePtr{$tag}{Name}, undef, $size);
-            push @dirEnd, [ $pos + $dataPos + $size, $$tagInfo{Name} ];
-            if ($$tagInfo{Name} eq 'ChapterAtom') {
-                $$et{SET_GROUP1} = 'Chapter' . (++$chapterNum);
-                $trackIndent = $$et{INDENT};
+        if (not $tagInfo and ref $$tagTablePtr{$tag} eq 'HASH' and $$tagTablePtr{$tag}{SeekInfo}) {
+            $tagInfo = $$tagTablePtr{$tag};
+            $seekInfoOnly = 1;
+        }
+        if ($tagInfo) {
+            $tagName = $$tagInfo{Name};
+            if ($$tagInfo{SubDirectory} and not $$tagInfo{NotEBML}) {
+                # stop processing at first cluster unless we are using -v -U or -ee
+                # or there are Tags after this
+                if ($tagName eq 'Cluster' and $processAll < 2) {
+                    # jump to Tags if possible
+                    unless ($processAll) {
+                        if ($seek{Tags} and $seek{Tags} > $pos + $dataPos and $raf->Seek($seek{Tags},0)) {
+                            $buff = '';
+                            $dataPos = $seek{Tags};
+                            $pos = $dataLen = 0;
+                            next;
+                        }
+                        last;
+                    }
+                    undef $tagInfo; # just skip the Cluster when -ee is used
+                } else {
+                    # just fall through into the contained EBML elements
+                    $$et{INDENT} .= '| ';
+                    $dirName = $tagName;
+                    $et->VerboseDir($dirName, undef, $size);
+                    push @{$$et{PATH}}, $dirName;
+                    push @dirEnd, [ $pos + $dataPos + $size, $dirName, $struct ];
+                    $struct = { } if $dirName eq 'SimpleTag';   # keep track of SimpleTag elements
+                    # set Chapter# and Info family 1 group names
+                    if ($tagName eq 'ChapterAtom') {
+                        $$et{SET_GROUP1} = 'Chapter' . (++$chapterNum);
+                        $trackIndent = $$et{INDENT};
+                    } elsif ($tagName eq 'Info' and not $$et{SET_GROUP1}) {
+                        $$et{SET_GROUP1} = 'Info';
+                        $trackIndent = $$et{INDENT};
+                    }
+                    next;
+                }
             }
-            next;
+        } elsif ($verbose) {
+            $et->VPrint(0,sprintf("$$et{INDENT}- Tag 0x%x (Unknown, %d bytes)\n", $tag, $size));
         }
         last if $unknownSize;
         if ($pos + $size > $dataLen) {
@@ -798,7 +1134,12 @@ sub ProcessMKV($$)
             # just skip unknown and large data blocks
             if (not $tagInfo or $more > 10000000) {
                 # don't try to skip very large blocks unless LargeFileSupport is enabled
-                last if $more > 0x80000000 and not $et->Options('LargeFileSupport');
+                if ($more >= 0x80000000) {
+                    last unless $et->Options('LargeFileSupport');
+                    if ($et->Options('LargeFileSupport') eq '2') {
+                        $et->Warn('Processing large block (LargeFileSupport is 2)');
+                    }
+                }
                 $raf->Seek($more, 1) or last;
                 $buff = '';
                 $dataPos += $dataLen + $more;
@@ -851,20 +1192,27 @@ sub ProcessMKV($$)
                     # convert dates (nanoseconds since 2001:01:01)
                     if ($fmt eq 'date') {
                         my $t = $val / 1e9;
-                        my $f = $t - int($t);   # fractional seconds
-                        $f =~ s/^\d+//;         # remove leading zero
                         # (8 leap days between 1970 and 2001)
                         $t += (((2001-1970)*365+8)*24*3600);
-                        $val = Image::ExifTool::ConvertUnixTime($t) . $f . 'Z';
+                        $val = Image::ExifTool::ConvertUnixTime($t, undef, -9) . 'Z';
                     }
                 } else { # must be unsigned
                     $val = $val * 256 + $_ foreach @vals;
                 }
             }
-            # set group1 to Track/Chapter number
-            if ($$tagInfo{Name} eq 'TrackNumber') {
+            if ($tagName eq 'TrackNumber') {
+                # set Track# family 1 group name for tags directly in the track
                 $$et{SET_GROUP1} = 'Track' . $val;
                 $trackIndent = $$et{INDENT};
+            } elsif ($tagName eq 'TrackUID' and $$et{SET_GROUP1}) {
+                # save the Track# group associated with this TrackUID
+                $trackNum{$val} = $$et{SET_GROUP1};
+            } elsif ($tagName eq 'TagTrackUID' and $trackNum{$val}) {
+                # set Track# group for associated SimpleTags tags
+                $$et{SET_GROUP1} = $trackNum{$val};
+                # we're already one deeper than the level where we want to
+                # reset the group name, so trigger at one indent level higher
+                $trackIndent = substr($$et{INDENT}, 0, -2);
             }
         }
         my %parms = (
@@ -873,8 +1221,14 @@ sub ProcessMKV($$)
             Start   => $pos,
             Size    => $size,
         );
-        if ($$tagInfo{NoSave}) {
+        if ($$tagInfo{NoSave} or $struct) {
             $et->VerboseInfo($tag, $tagInfo, Value => $val, %parms) if $verbose;
+            $$struct{$tagName} = $val if $struct;
+        } elsif ($$tagInfo{SeekInfo}) {
+            my $p = $pos;
+            $val = GetVInt($buff, $p) unless defined $val;
+            $seekInfo{$$tagInfo{SeekInfo}} = $val;
+            $et->HandleTag($tagTablePtr, $tag, $val, %parms) unless $seekInfoOnly;
         } else {
             $et->HandleTag($tagTablePtr, $tag, $val, %parms);
         }
@@ -912,7 +1266,7 @@ information from Matroska multimedia files (MKA, MKV, MKS and WEBM).
 
 =head1 AUTHOR
 
-Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2026, Phil Harvey (philharvey66 at gmail.com)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.
@@ -922,6 +1276,8 @@ under the same terms as Perl itself.
 =over 4
 
 =item L<http://www.matroska.org/technical/specs/index.html>
+
+=item L<https://www.matroska.org/technical/tagging.html>
 
 =back
 

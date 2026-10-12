@@ -15,7 +15,7 @@ use strict;
 use vars qw($VERSION);
 use Image::ExifTool qw(:DataAccess :Utils);
 
-$VERSION = '1.05';
+$VERSION = '1.07';
 
 # APE metadata blocks
 %Image::ExifTool::APE::Main = (
@@ -133,7 +133,7 @@ sub ProcessAPE($$)
 
     # check APE signature and process audio information
     # unless this is some other type of file
-    unless ($$et{VALUE}{FileType}) {
+    unless ($$et{FileType}) {
         $raf->Read($buff, 32) == 32 or return 0;
         $buff =~ /^(MAC |APETAGEX)/ or return 0;
         $et->SetFileType();
@@ -166,7 +166,7 @@ sub ProcessAPE($$)
         # look for the APE trailer footer...
         my $footPos = -32;
         # (...but before the ID3v1 trailer if it exists)
-        $footPos -= 128 if $$et{DoneID3} == 2;
+        $footPos -= $$et{DoneID3} if $$et{DoneID3} > 1;
         $raf->Seek($footPos, 2)     or return 1;
         $raf->Read($buff, 32) == 32 or return 1;
         $buff =~ /^APETAGEX/        or return 1;
@@ -217,7 +217,7 @@ sub ProcessAPE($$)
             $val = \$buf2;
             # extract cover art description separately (hackitty hack)
             if ($tag =~ /^Cover Art/) {
-                $buf2 =~ s/^([\x20-\x7f]*)\0//;
+                $buf2 =~ s/^([\x20-\x7e]*)\0//;
                 if ($1) {
                     my $t = "$tag Desc";
                     my $v = $1;
@@ -263,7 +263,7 @@ Currently doesn't parse MAC header unless it is at the start of the file.
 
 =head1 AUTHOR
 
-Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2026, Phil Harvey (philharvey66 at gmail.com)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

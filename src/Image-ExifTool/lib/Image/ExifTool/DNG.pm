@@ -17,7 +17,7 @@ use Image::ExifTool::Exif;
 use Image::ExifTool::MakerNotes;
 use Image::ExifTool::CanonRaw;
 
-$VERSION = '1.23';
+$VERSION = '1.25';
 
 sub ProcessOriginalRaw($$$);
 sub ProcessAdobeData($$$);
@@ -118,6 +118,25 @@ sub WriteAdobeStuff($$$);
             ProcessProc => \&ProcessAdobeIFD,
         },
     },
+);
+
+# (DNG 1.7)
+%Image::ExifTool::DNG::ImageSeq = (
+    PROCESS_PROC => \&Image::ExifTool::ProcessBinaryData,
+    0 => { Name => 'SeqID',         Format => 'var_string' },
+    1 => { Name => 'SeqType',       Format => 'var_string' },
+    2 => { Name => 'SeqFrameInfo',  Format => 'var_string' },
+    3 => { Name => 'SeqIndex',      Format => 'int32u' },
+    7 => { Name => 'SeqCount',      Format => 'int32u' },
+    11 => { Name => 'SeqFinal',     Format => 'int8u', PrintConv => { 0 => 'No', 1 => 'Yes' } },
+);
+
+# (DNG 1.7)
+%Image::ExifTool::DNG::ProfileDynamicRange = (
+    PROCESS_PROC => \&Image::ExifTool::ProcessBinaryData,
+    0 => { Name => 'PDRVersion',    Format => 'int16u' },
+    2 => { Name => 'DynamicRange',  Format => 'int16u', PrintConv => { 0 => 'Standard', 1 => 'High' } },
+    4 => { Name => 'HintMaxOutputValue', Format => 'float' },
 );
 
 # fill in maker notes
@@ -497,7 +516,7 @@ sub ProcessAdobeMRW($$$)
     my $buff = "\0MRM" . pack('N', $dirLen - 4);
     # ignore leading byte order and directory count words
     $buff .= substr($$dataPt, $dirStart + 4, $dirLen - 4);
-    my $raf = new File::RandomAccess(\$buff);
+    my $raf = File::RandomAccess->new(\$buff);
     my %dirInfo = ( RAF => $raf, OutFile => $outfile );
     my $rtnVal = Image::ExifTool::MinoltaRaw::ProcessMRW($et, \%dirInfo);
     if ($outfile and defined $$outfile and length $$outfile) {
@@ -529,7 +548,7 @@ sub ProcessAdobeRAF($$$)
     }
     $et->VerboseDir($dirInfo);
     # make fake RAF object for processing (same acronym, different meaning)
-    my $raf = new File::RandomAccess($dataPt);
+    my $raf = File::RandomAccess->new($dataPt);
     my $num = '';
     # loop through all records in Adobe RAF data:
     # 0 - RAF table (not processed)
@@ -616,7 +635,7 @@ sub ProcessAdobeIFD($$$)
 
     # parse the mutilated IFD.  This is similar to a TIFF IFD, except:
     # - data follows directly after Count entry in IFD
-    # - byte order of IFD entires is always big-endian, but byte order of data changes
+    # - byte order of IFD entries is always big-endian, but byte order of data changes
     SetByteOrder('MM');     # IFD structure is always big-endian
     my $entries = Get16u($dataPt, $pos + 2);
     $et->VerboseDir($dirInfo, $entries);
@@ -680,8 +699,14 @@ sub ProcessAdobeMakN($$$)
     my $dataPos = $$dirInfo{DataPos};
     my $hdrLen = 6;
 
-    # hack for extra 12 bytes in MakN header of JPEG converted to DNG by Adobe Camera Raw
-    # (4 bytes "00 00 00 01" followed by 8 unknown bytes)
+    # 2018-09-27: hack for extra 12 bytes in MakN header of JPEG converted to DNG
+    # by Adobe Camera Raw (4 bytes "00 00 00 01" followed by 8 unknown bytes)
+    # - this is because CameraRaw copies the maker notes from the wrong location
+    #   in a JPG image (off by 12 bytes presumably due to the JPEG headers)
+    # - this hack won't work in most cases because the extra bytes are not consistent
+    #   since they are just the data that existed in the JPG before the maker notes
+    # - also, the last 12 bytes of the maker notes will be missing
+    # - 2022-04-26: this bug still exists in Camera Raw 14.3
     $hdrLen += 12 if $len >= 18 and substr($$dataPt, $start+6, 4) eq "\0\0\0\x01";
 
     my $dirStart = $start + $hdrLen;    # pointer to maker note directory
@@ -727,7 +752,7 @@ sub ProcessAdobeMakN($$$)
     }
     if ($outfile) {
         # rewrite the maker notes directory
-        my $fixup = $subdirInfo{Fixup} = new Image::ExifTool::Fixup;
+        my $fixup = $subdirInfo{Fixup} = Image::ExifTool::Fixup->new;
         my $oldChanged = $$et{CHANGED};
         my $buff = $et->WriteDirectory(\%subdirInfo, $subTable);
         # nothing to do if error writing directory or nothing changed
@@ -780,7 +805,11 @@ sub ProcessAdobeMakN($$$)
                 return 1 unless $$tagInfo{Writable};
             }
             $val = substr($$dataPt, 20) unless defined $val;
-            $et->FoundTag($tagInfo, $val);
+            my $key = $et->FoundTag($tagInfo, $val);
+            if ($$et{MAKER_NOTE_FIXUP}) {
+                $$et{TAG_EXTRA}{$key}{Fixup} = $$et{MAKER_NOTE_FIXUP};
+                delete $$et{MAKER_NOTE_FIXUP};
+            }
         }
     }
     return 1;
@@ -820,7 +849,7 @@ information in DNG (Digital Negative) images.
 
 =head1 AUTHOR
 
-Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2026, Phil Harvey (philharvey66 at gmail.com)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

@@ -11,7 +11,7 @@ package Image::ExifTool::Lang::it;
 use strict;
 use vars qw($VERSION);
 
-$VERSION = '1.13';
+$VERSION = '1.14';
 
 %Image::ExifTool::Lang::it::Translate = (
    'A100DataOffset' => 'Offset dati A100',
@@ -1249,6 +1249,7 @@ $VERSION = '1.13';
         'Off' => 'Spento',
       },
     },
+   'ColorBalanceVersion' => 'Versione Bilanciamento Colore',
    'ColorBooster' => {
       PrintConv => {
         'Off' => 'Spento',
@@ -2394,6 +2395,7 @@ $VERSION = '1.13';
       PrintConv => {
         'Aperture Priority' => 'Priorità diaframma',
         'Aperture-priority AE' => 'Priorità diaframma',
+        'Auto' => 'Esposizione automatica',
         'Auto bracket' => 'A forcella automatica',
         'Fireworks' => 'Fuochi artificiali',
         'Landscape' => 'Orizzontale',
@@ -3611,10 +3613,10 @@ $VERSION = '1.13';
         'Off' => 'Spento',
       },
     },
-   'ISOAutoParameters' => {
+   'ISOAutoMinSpeed' => {
       Description => 'Parametri ISO auto',
       PrintConv => {
-        'Fast' => 'Veloce',
+        'Auto Fast' => 'Auto veloce',
       },
     },
    'ISODisplay' => {
@@ -4846,6 +4848,7 @@ $VERSION = '1.13';
       },
     },
    'ObjectTypeReference' => 'Riferimento Tipo Oggetto',
+   'OffsetSchema' => 'Schema Offset',
    'OldSubfileType' => {
       Description => 'Vecchio tipo sotto-file',
       PrintConv => {
@@ -6421,7 +6424,6 @@ $VERSION = '1.13';
       Description => 'Rotazione',
       PrintConv => {
         'Horizontal' => 'Orizzontale',
-        'Horizontal (Normal)' => 'Orizzontale (normale)',
         'Horizontal (normal)' => 'Orizzontale (normale)',
         'Rotate 180' => 'Ruota di 180°',
         'Rotate 270 CW' => 'Ruota di 270° in senso orario',
@@ -7057,7 +7059,7 @@ $VERSION = '1.13';
    'SubfileType' => {
       Description => 'Tipo sotto-file',
       PrintConv => {
-        'Full-resolution Image' => 'Immagine con risoluzione originale',
+        'Full-resolution image' => 'Immagine con risoluzione originale',
         'Reduced-resolution image' => 'Immagine a risoluzione ridotta',
         'Single page of multi-page image' => 'Singola pagina di un\'immagine multi-pagina',
         'Single page of multi-page reduced-resolution image' => 'Singola pagina di un\'immagine multi-pagina a risoluzione ridotta',
@@ -7711,9 +7713,9 @@ $VERSION = '1.13';
     },
    'WBAdjLighting' => {
       PrintConv => {
+        'Daylight (cloudy)' => 'Luce del giorno (2)',
         'Daylight (direct sunlight)' => 'Luce del giorno (0)',
         'Daylight (shade)' => 'Luce del giorno (1)',
-        'Daylight (cloudy)' => 'Luce del giorno (2)',
         'None' => 'Nessuno',
       },
     },
@@ -7900,7 +7902,7 @@ and values.
 
 =head1 AUTHOR
 
-Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2026, Phil Harvey (philharvey66 at gmail.com)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

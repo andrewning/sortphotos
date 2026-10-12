@@ -230,6 +230,9 @@ class ExifTool:
         fd = self.process.stdout.fileno()
         while not output.rstrip(' \t\n\r').endswith(self.sentinel):
             increment = os.read(fd, 4096)
+            if not increment:
+                returncode = self.process.wait()
+                raise RuntimeError(f'ExifTool exited unexpectedly (exit code {returncode})')
             logger.debug(increment.decode('utf-8'))
             output += increment.decode('utf-8')
         return output.rstrip(' \t\n\r')[:-len(self.sentinel)]

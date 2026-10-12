@@ -21,7 +21,7 @@ use Image::ExifTool qw(:DataAccess :Utils);
 use Image::ExifTool::Exif;
 use Image::ExifTool::Canon;
 
-$VERSION = '1.58';
+$VERSION = '1.62';
 
 sub WriteCRW($$);
 sub ProcessCanonRaw($$$);
@@ -562,7 +562,7 @@ sub BuildMakerNotes($$$$$$);
     3 => {
         Name => 'Rotation',
         Format => 'int32s',
-        Writable => 'int32s',
+        Writable => 1,
     },
     4 => 'ComponentBitDepth', #3
     5 => 'ColorBitDepth', #3
@@ -595,7 +595,9 @@ sub BuildMakerNotes($$$$$$);
     3 => 'WhiteSampleLeftBorder',
     4 => 'WhiteSampleTopBorder',
     5 => 'WhiteSampleBits',
-    # this is followed by the encrypted white sample values (ref 1)
+    # (followed by the encrypted white sample values, ref 1)
+    # BlackLevels seem valid for D30 and D60, but not sure about PowerShot models
+    0x37 => { Name => 'BlackLevels', Format => 'int16u[4]' }, #github387
 );
 
 #------------------------------------------------------------------------------
@@ -625,6 +627,13 @@ sub ProcessCanonRaw($$$)
     $raf->Seek($blockStart+$blockSize-4, 0) or return 0;
     $raf->Read($buff, 4) == 4 or return 0;
     my $dirOffset = Get32u(\$buff,0) + $blockStart;
+    # avoid infinite recursion
+    $$et{ProcessedCanonRaw} or $$et{ProcessedCanonRaw} = { };
+    if ($$et{ProcessedCanonRaw}{$dirOffset}) {
+        $et->Warn("Not processing double-referenced $$dirInfo{DirName} directory");
+        return 0;
+    }
+    $$et{ProcessedCanonRaw}{$dirOffset} = 1;
     $raf->Seek($dirOffset, 0) or return 0;
     $raf->Read($buff, 2) == 2 or return 0;
     my $entries = Get16u(\$buff,0);         # get number of entries in directory
@@ -683,7 +692,7 @@ sub ProcessCanonRaw($$$)
         my ($value, $delRawConv);
         if ($valueInDir) {  # is the value data in the directory?
             # this type of tag stores the value in the 'size' and 'ptr' fields
-            $valueDataPos = $dirOffset + $pt + 4;
+            $valueDataPos = $dirOffset + $pt + 4; # (remember, +2 for the entry count)
             $size = 8;
             $value = substr($buff, $pt+2, $size);
             # set count to 1 by default for normal values in directory
@@ -691,6 +700,10 @@ sub ProcessCanonRaw($$$)
                           $format ne 'string' and not $subdir;
         } else {
             $valueDataPos = $ptr;
+            # do hash of image data if requested
+            if ($$et{ImageDataHash} and $tagID == 0x2005) {
+                $raf->Seek($ptr, 0) and $et->ImageDataHash($raf, $size, 'raw');
+            }
             if ($size <= 512 or ($verbose > 2 and $size <= 65536)
                 or ($tagInfo and ($$tagInfo{SubDirectory}
                 or grep(/^$$tagInfo{Name}$/i, $et->GetRequestedTags()) )))
@@ -843,7 +856,7 @@ sub ProcessCRW($$)
 
     # process trailers if they exist in CRW file (not in CIFF information!)
     if ($$et{FILE_TYPE} eq 'CRW') {
-        my $trailInfo = Image::ExifTool::IdentifyTrailer($raf);
+        my $trailInfo = $et->IdentifyTrailer($raf);
         $et->ProcessTrailers($trailInfo) if $trailInfo;
     }
 
@@ -877,7 +890,7 @@ tags.)
 
 =head1 AUTHOR
 
-Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2026, Phil Harvey (philharvey66 at gmail.com)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.
@@ -892,7 +905,7 @@ under the same terms as Perl itself.
 
 =item L<http://xyrion.org/ciff/>
 
-=item L<http://owl.phy.queensu.ca/~phil/exiftool/canon_raw.html>
+=item L<https://exiftool.org/canon_raw.html>
 
 =back
 

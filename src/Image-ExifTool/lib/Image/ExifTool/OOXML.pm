@@ -14,18 +14,20 @@ use Image::ExifTool qw(:DataAccess :Utils);
 use Image::ExifTool::XMP;
 use Image::ExifTool::ZIP;
 
-$VERSION = '1.07';
+$VERSION = '1.10';
 
 # test for recognized OOXML document extensions
 my %isOOXML = (
     DOCX => 1,  DOCM => 1,
     DOTX => 1,  DOTM => 1,
     POTX => 1,  POTM => 1,
+    PPAX => 1,  PPAM => 1,
     PPSX => 1,  PPSM => 1,
     PPTX => 1,  PPTM => 1,  THMX => 1,
     XLAM => 1,
     XLSX => 1,  XLSM => 1,  XLSB => 1,
     XLTX => 1,  XLTM => 1,
+    VSDX => 1,
 );
 
 # generate reverse lookup for file type based on MIME
@@ -53,10 +55,10 @@ my @vectorVals;
 %Image::ExifTool::OOXML::Main = (
     GROUPS => { 0 => 'XML', 1 => 'XML', 2 => 'Document' },
     PROCESS_PROC => \&Image::ExifTool::XMP::ProcessXMP,
-    VARS => { NO_ID => 1 },
+    VARS => { ID_FMT => 'none' },
     NOTES => q{
         The Office Open XML (OOXML) format was introduced with Microsoft Office 2007
-        and is used by file types such as DOCX, PPTX and XLSX.  These are
+        and is used by file types such as DOCX, PPTX, XLSX and VSDX.  These are
         essentially ZIP archives containing XML files.  The table below lists some
         tags which have been observed in OOXML documents, but ExifTool will extract
         any tags found from XML files of the OOXML document properties ("docProps")
@@ -359,12 +361,12 @@ sub ProcessDOCX($$)
         }
         # process XML files (docProps/app.xml, docProps/core.xml, docProps/custom.xml)
         my %dirInfo = (
-            DataPt => \$buff,
-            DirLen => length $buff,
-            DataLen => length $buff,
-            XMPParseOpts => {
-                FoundProc => \&FoundTag,
-            },
+            DataPt   => \$buff,
+            DirLen   => length $buff,
+            # (skip over XML header if it exists)
+            DirStart => ($buff =~ /<\?xml\s+.*?\?>/g ? pos($buff) : 0),
+            DataLen  => length $buff,
+            XMPParseOpts => { FoundProc => \&FoundTag },
         );
         $et->ProcessDirectory(\%dirInfo, $tagTablePtr);
         undef $buff;    # (free memory now)
@@ -394,7 +396,7 @@ archives of XML files.
 
 =head1 AUTHOR
 
-Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2026, Phil Harvey (philharvey66 at gmail.com)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

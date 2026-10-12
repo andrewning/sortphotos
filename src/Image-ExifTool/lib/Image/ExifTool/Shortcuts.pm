@@ -19,7 +19,7 @@ package Image::ExifTool::Shortcuts;
 use strict;
 use vars qw($VERSION);
 
-$VERSION = '1.60';
+$VERSION = '1.69';
 
 # this is a special table used to define command-line shortcuts
 # (documentation Notes may be added for these via %shortcutNotes in BuildTagLookup.pm)
@@ -118,10 +118,12 @@ $VERSION = '1.60';
         'MakerNoteCasio',
         'MakerNoteCasio2',
         'MakerNoteDJI',
+        'MakerNoteDJIInfo',
         'MakerNoteFLIR',
         'MakerNoteFujiFilm',
         'MakerNoteGE',
         'MakerNoteGE2',
+        'MakerNoteGoogle',
         'MakerNoteHasselblad',
         'MakerNoteHP',
         'MakerNoteHP2',
@@ -158,6 +160,7 @@ $VERSION = '1.60';
         'MakerNoteNintendo',
         'MakerNoteOlympus',
         'MakerNoteOlympus2',
+        'MakerNoteOlympus3',
         'MakerNoteLeica',
         'MakerNoteLeica2',
         'MakerNoteLeica3',
@@ -167,6 +170,7 @@ $VERSION = '1.60';
         'MakerNoteLeica7',
         'MakerNoteLeica8',
         'MakerNoteLeica9',
+        'MakerNoteLeica10',
         'MakerNotePanasonic',
         'MakerNotePanasonic2',
         'MakerNotePanasonic3',
@@ -177,8 +181,12 @@ $VERSION = '1.60';
         'MakerNotePentax5',
         'MakerNotePentax6',
         'MakerNotePhaseOne',
-        'MakerNoteReconyx',
-        'MakerNoteReconyx2',
+        'MakerNoteReconyxHyperFire',
+        'MakerNoteReconyxUltraFire',
+        'MakerNoteReconyxHyperFire2',
+        'MakerNoteReconyxMicroFire',
+        'MakerNoteReconyxHyperFire4K',
+        'MakerNoteRicohPentax',
         'MakerNoteRicoh',
         'MakerNoteRicoh2',
         'MakerNoteRicohText',
@@ -262,6 +270,16 @@ $VERSION = '1.60';
         'XMP',
         'ZoomedPreviewImage',
     ],
+    'ls-l' => [
+        'FilePermissions',
+        'FileHardLinks',
+        'FileUserID',
+        'FileGroupID',
+        'FileSize#',
+        'FileModifyDate',
+        'FileName',
+    ],
+    ImageDataMD5 => [ 'ImageDataHash' ], # (for backward compatibilty)
 );
 
 #------------------------------------------------------------------------------
@@ -329,7 +347,7 @@ name prefix.
 
 =head1 AUTHOR
 
-Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2026, Phil Harvey (philharvey66 at gmail.com)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

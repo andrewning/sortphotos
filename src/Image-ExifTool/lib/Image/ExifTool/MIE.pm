@@ -14,7 +14,7 @@ use Image::ExifTool qw(:DataAccess :Utils);
 use Image::ExifTool::Exif;
 use Image::ExifTool::GPS;
 
-$VERSION = '1.47';
+$VERSION = '1.57';
 
 sub ProcessMIE($$);
 sub ProcessMIEGroup($$$);
@@ -152,11 +152,11 @@ my %offOn = ( 0 => 'Off', 1 => 'On' );
         (eg. C<55(mi/h)>).  If no units are specified, the default units are
         written.
 
-        4) ExifTool writes compressed metadata to MIE files if the Compress (-z)
+        4) ExifTool writes compressed metadata to MIE files if the L<Compress|../ExifTool.html#Compress> (-z)
         option is used and Compress::Zlib is available.
 
-        See L<http://owl.phy.queensu.ca/~phil/exiftool/MIE1.1-20070121.pdf> for the
-        official MIE specification.
+        See L<https://exiftool.org/MIE1.1-20070121.pdf> for the official MIE
+        specification.
     },
    '0Type' => {
         Name => 'SubfileType',
@@ -391,9 +391,9 @@ my %offOn = ( 0 => 'Off', 1 => 'On' );
             -30", "-40.5", "40 30 0.00 S"
         },
         ValueConv    => 'Image::ExifTool::GPS::ToDegrees($val, 1)',
-        ValueConvInv => 'Image::ExifTool::GPS::ToDMS($self, $val, 0)',
+        ValueConvInv => 'Image::ExifTool::GPS::ToDMS($self, $val, 3)',
         PrintConv    => 'Image::ExifTool::GPS::ToDMS($self, $val, 1, "N")',
-        PrintConvInv => 'Image::ExifTool::GPS::ToDegrees($val, 1)',
+        PrintConvInv => 'Image::ExifTool::GPS::ToDegrees($val, 1, "lat")',
     },
     Longitude => {
         Name => 'GPSLongitude',
@@ -404,9 +404,9 @@ my %offOn = ( 0 => 'Off', 1 => 'On' );
             negative, but may be entered as positive numbers with a trailing 'W'
         },
         ValueConv    => 'Image::ExifTool::GPS::ToDegrees($val, 1)',
-        ValueConvInv => 'Image::ExifTool::GPS::ToDMS($self, $val, 0)',
+        ValueConvInv => 'Image::ExifTool::GPS::ToDMS($self, $val, 3)',
         PrintConv    => 'Image::ExifTool::GPS::ToDMS($self, $val, 1, "E")',
-        PrintConvInv => 'Image::ExifTool::GPS::ToDegrees($val, 1)',
+        PrintConvInv => 'Image::ExifTool::GPS::ToDegrees($val, 1, "lon")',
     },
     MeasureMode => {
         Name => 'GPSMeasureMode',
@@ -448,6 +448,13 @@ my %offOn = ( 0 => 'Off', 1 => 'On' );
         Notes => 'string composed of R, G, B, Y, Cb and Cr',
     },
     Compression     => { Name => 'CompressionRatio', Writable => 'rational32u' },
+    OriginalImageSize => { # PH added 2022-09-28
+        Writable => 'int16u',
+        Count => -1,
+        Notes => 'size of original image before cropping',
+        PrintConv => '$val=~tr/ /x/;$val',
+        PrintConvInv => '$val=~tr/x/ /;$val',
+    },
     ImageSize       => {
         Writable => 'int16u',
         Count => -1,
@@ -1001,10 +1008,10 @@ sub WriteMIEGroup($$$)
                 }
             }
             # don't rewrite free bytes or information in deleted groups
-            if ($format eq 0x80 or ($delGroup and $tagLen and ($format & 0xf0) != 0x10)) {
+            if ($format == 0x80 or ($delGroup and $tagLen and ($format & 0xf0) != 0x10)) {
                 $raf->Seek($valLen, 1) or $msg = 'Seek error', last;
                 if ($verbose > 1) {
-                    my $free = ($format eq 0x80) ? ' free' : '';
+                    my $free = ($format == 0x80) ? ' free' : '';
                     print $out "    - $grp1:$tag ($valLen$free bytes)\n";
                 }
                 ++$$et{CHANGED} if $delGroup;
@@ -1023,6 +1030,7 @@ sub WriteMIEGroup($$$)
             # we are writing the new tag now
             my ($newVal, $writable, $oldVal, $newFormat, $compress);
             my $newTag = shift @editTags;
+            length($newTag) > 255 and $et->Warn('Tag name too long'), next; # (just to be safe)
             my $newInfo = $$editDirs{$newTag};
             if ($newInfo) {
                 # create the new subdirectory or rewrite existing non-MIE directory
@@ -1069,7 +1077,7 @@ sub WriteMIEGroup($$$)
                         $newVal = '';
                         %subdirInfo = (
                             OutFile => \$newVal,
-                            RAF => new File::RandomAccess(\$oldVal),
+                            RAF => File::RandomAccess->new(\$oldVal),
                         );
                     } elsif ($optCompress and not $$dirInfo{IsCompressed}) {
                         # write to memory so we can compress the new MIE group
@@ -1242,8 +1250,7 @@ sub WriteMIEGroup($$$)
                     # write new value if creating, or if List and list existed, or
                     # if tag was previously deleted
                     next unless $$nvHash{IsCreating} or
-                        (($newTag eq $lastTag and ($$newInfo{List} or $deletedTag eq $lastTag)
-                        and not $$nvHash{EditOnly}));
+                        ($newTag eq $lastTag and ($$newInfo{List} or $deletedTag eq $lastTag));
                 }
                 # get the new value to write (undef to delete)
                 push @newVals, $et->GetNewValue($nvHash);
@@ -1253,12 +1260,11 @@ sub WriteMIEGroup($$$)
                     # join multiple values into a single string
                     $newVal = join "\0", @newVals;
                     # write string as UTF-8,16 or 32 if value contains valid UTF-8 codes
-                    require Image::ExifTool::XMP;
-                    my $isUTF8 = Image::ExifTool::XMP::IsUTF8(\$newVal);
+                    my $isUTF8 = Image::ExifTool::IsUTF8(\$newVal);
                     if ($isUTF8 > 0) {
                         $writable = 'utf8';
                         # write UTF-16 or UTF-32 if it is more compact
-                        my $to = $isUTF8 > 1 ? 'UCS4' : 'UCS2';
+                        my $to = $isUTF8 > 1 ? 'UCS4' : 'UTF16';
                         my $tmp = Image::ExifTool::Decode(undef,$newVal,'UTF8',undef,$to);
                         if (length $tmp < length $newVal) {
                             $newVal = $tmp;
@@ -1340,7 +1346,7 @@ sub WriteMIEGroup($$$)
                     $extLen = Set32u($len);
                     $len = 254;
                 } else {
-                    $et->Warn("Can't write $newTag (DataLength > 2GB not yet suppported)");
+                    $et->Warn("Can't write $newTag (DataLength > 2GB not yet supported)");
                     last; # don't write this tag
                 }
                 # write this element (with leading MIE group element if not done already)
@@ -1370,8 +1376,9 @@ sub WriteMIEGroup($$$)
                 my $term = "~\0\0\0";
                 unless ($$dirInfo{Parent}) {
                     # write extended terminator for file-level group
-                    my $len = ref $outfile eq 'SCALAR' ? length($$outfile) : tell $outfile;
-                    $len += 10; # include length of terminator itself
+                    my $len = ref $outfile eq 'SCALAR' ? length($$outfile) || 0 : tell $outfile;
+                    # include length of terminator itself minus original $outfile position
+                    $len += 10 - ($$dirInfo{OutPos} || 0);
                     if ($len and $len <= 0x7fffffff) {
                         $term = "~\0\0\x06" . Set32u($len) . MIEGroupFormat(1) . "\x04";
                     }
@@ -1530,7 +1537,7 @@ sub ProcessMIEGroup($$$)
             $tagInfo = {
                 Name => $tag,
                 Writable => 0,
-                PrintConv => 'length($val) > 60 ? substr($val,0,55) . "[...]" : $val',
+                PrintConv => \&Image::ExifTool::LimitLongValues,
             };
             AddTagToTable($tagTablePtr, $tag, $tagInfo);
             last;
@@ -1579,7 +1586,7 @@ sub ProcessMIEGroup($$$)
                 WasCompressed => $wasCompressed,
             );
             # read from uncompressed data instead if necessary
-            $subdirInfo{RAF} = new File::RandomAccess(\$value) if $valLen;
+            $subdirInfo{RAF} = File::RandomAccess->new(\$value) if $valLen;
 
             my $oldOrder = GetByteOrder();
             SetByteOrder($format & 0x08 ? 'II' : 'MM');
@@ -1590,9 +1597,10 @@ sub ProcessMIEGroup($$$)
         } else {
             # process MIE data format types
             if ($tagInfo) {
-                my $rational;
+                my ($rational, $binVal);
                 # extract tag value
                 my $val = ReadMIEValue(\$value, 0, $formatStr, undef, $valLen, \$rational);
+                $binVal = substr($value, 0, $valLen) if $$et{OPTIONS}{SaveBin};
                 unless (defined $val) {
                     $et->Warn("Error reading $tag value");
                     $val = '<err>';
@@ -1655,7 +1663,12 @@ sub ProcessMIEGroup($$$)
                         $val .= "($units)" if defined $units;
                     }
                     my $key = $et->FoundTag($tagInfo, $val);
-                    $$et{RATIONAL}{$key} = $rational if defined $rational and defined $key;
+                    if (defined $key) {
+                        my $ex = $$et{TAG_EXTRA}{$key};
+                        $$ex{Rational} = $rational if defined $rational;
+                        $$ex{BinVal} = $binVal if defined $binVal;
+                        $$ex{G6} = $formatStr if $$et{OPTIONS}{SaveFormat};
+                    }
                 }
             } else {
                 # skip over unknown information or free bytes
@@ -1790,6 +1803,8 @@ sub ProcessMIE($$)
             # don't define Parent so WriteMIEGroup() writes extended terminator
         );
         if ($outfile) {
+            # save start position in $outfile
+            $subdirInfo{OutPos} = ref $outfile eq 'SCALAR' ? length($$outfile) || 0 : tell $outfile;
             # generate lookup for MIE format codes if not done already
             unless (%mieCode) {
                 foreach (keys %mieFormat) {
@@ -2545,7 +2560,7 @@ tag name.  For example:
 
 =head1 AUTHOR
 
-Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2026, Phil Harvey (philharvey66 at gmail.com)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.  The MIE format itself is also
@@ -2555,7 +2570,7 @@ copyright Phil Harvey, and is covered by the same free-use license.
 
 =over 4
 
-=item L<http://owl.phy.queensu.ca/~phil/exiftool/MIE1.1-20070121.pdf>
+=item L<https://exiftool.org/MIE1.1-20070121.pdf>
 
 =back
 

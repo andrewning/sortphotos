@@ -15,14 +15,14 @@ use vars qw($VERSION);
 use Image::ExifTool qw(:DataAccess :Utils);
 use Image::ExifTool::Import;
 
-$VERSION = '1.03';
+$VERSION = '1.04';
 
 sub ExtractTags($$$);
 
 # Lytro LFP tags (ref PH)
 %Image::ExifTool::Lytro::Main = (
     GROUPS => { 2 => 'Camera' },
-    VARS => { NO_ID => 1 },
+    VARS => { ID_FMT => 'none' },
     NOTES => q{
         Tag definitions for Lytro Light Field Picture (LFP) files.  ExifTool
         extracts the full JSON metadata blocks, as well as breaking them down into
@@ -50,6 +50,7 @@ sub ExtractTags($$$);
     DevicesAccelerometerSampleArrayZ    => { Name => 'AccelerometerZ'},
     DevicesClockZuluTime => {
         Name => 'DateTimeOriginal',
+        Description => 'Date/Time Original',
         Groups => { 2 => 'Time' },
         ValueConv => 'require Image::ExifTool::XMP; Image::ExifTool::XMP::ConvertXMPDate($val)',
         PrintConv => '$self->ConvertDateTime($val)',
@@ -105,7 +106,7 @@ sub ExtractTags($$$)
     my ($et, $meta, $parent) = @_;
     ref $meta eq 'HASH' or $et->Warn('Invalid LFP metadata'), return;
     my ($key, $val, $name, $tagTablePtr);
-    foreach $key (sort keys %$meta) {
+    foreach $key (Image::ExifTool::OrderedKeys($meta)) {
         my $tag = $parent . ucfirst($key);
         foreach $val (ref $$meta{$key} eq 'ARRAY' ? @{$$meta{$key}} : $$meta{$key}) {
             ref $val eq 'HASH' and ExtractTags($et, $val, $tag), next;
@@ -191,7 +192,7 @@ from Lytro Light Field Picture (LFP) files.
 
 =head1 AUTHOR
 
-Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2026, Phil Harvey (philharvey66 at gmail.com)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

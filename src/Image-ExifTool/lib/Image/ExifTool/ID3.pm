@@ -1,13 +1,15 @@
 #------------------------------------------------------------------------------
 # File:         ID3.pm
 #
-# Description:  Read ID3 meta information
+# Description:  Read ID3 and Lyrics3 meta information
 #
 # Revisions:    09/12/2005 - P. Harvey Created
+#               09/08/2020 - PH Added Lyrics3 support
 #
-# References:   1) http://www.id3.org/
+# References:   1) http://www.id3.org/ (now https://id3.org)
 #               2) http://www.mp3-tech.org/
 #               3) http://www.fortunecity.com/underworld/sonic/3/id3tag.html
+#               4) https://id3.org/Lyrics3
 #------------------------------------------------------------------------------
 
 package Image::ExifTool::ID3;
@@ -16,11 +18,13 @@ use strict;
 use vars qw($VERSION);
 use Image::ExifTool qw(:DataAccess :Utils);
 
-$VERSION = '1.51';
+$VERSION = '1.65';
 
 sub ProcessID3v2($$$);
 sub ProcessPrivate($$$);
 sub ProcessSynText($$$);
+sub ProcessID3Dir($$$);
+sub ProcessGEOB($$$);
 sub ConvertID3v1Text($$);
 sub ConvertTimeStamp($);
 
@@ -64,17 +68,24 @@ my %dateTimeConv = (
     PrintConv => '$self->ConvertDateTime($val)',
 );
 
+# patch for names of user-defined tags which don't automatically generate very well
+my %userTagName = (
+    ALBUMARTISTSORT => 'AlbumArtistSort',
+    ASIN => 'ASIN',
+);
+
 # This table is just for documentation purposes
 %Image::ExifTool::ID3::Main = (
-    VARS => { NO_ID => 1 },
+    VARS => { ID_FMT => 'none' },
+    PROCESS_PROC => \&ProcessID3Dir, # (used to process 'id3 ' chunk in WAV files)
     NOTES => q{
-        ExifTool extracts ID3 information from MP3, MPEG, AIFF, OGG, FLAC, APE, MPC
-        and RealAudio files.  ID3v2 tags which support multiple languages (eg.
-        Comment and Lyrics) are extracted by specifying the tag name, followed by a
-        dash ('-'), then a 3-character ISO 639-2 language code (eg. "Comment-spa").
-        See L<http://www.id3.org/> for the official ID3 specification and
-        L<http://www.loc.gov/standards/iso639-2/php/code_list.php> for a list of ISO
-        639-2 language codes.
+        ExifTool extracts ID3 and Lyrics3 information from MP3, MPEG, WAV, WV, AIFF,
+        OGG, FLAC, APE, DSF, MPC and RealAudio files.  ID3v2 tags which support
+        multiple languages (eg. Comment and Lyrics) are extracted by specifying the
+        tag name, followed by a dash ('-'), then a 3-character ISO 639-2 language
+        code (eg. "Comment-spa"). See L<https://id3.org/> for the official ID3
+        specification and L<http://www.loc.gov/standards/iso639-2/php/code_list.php>
+        for a list of ISO 639-2 language codes.
     },
     ID3v1 => {
         Name => 'ID3v1',
@@ -96,6 +107,24 @@ my %dateTimeConv = (
         Name => 'ID3v2_4',
         SubDirectory => { TagTable => 'Image::ExifTool::ID3::v2_4' },
     },
+);
+
+# Lyrics3 tags (ref 4)
+%Image::ExifTool::ID3::Lyrics3 = (
+    GROUPS => { 1 => 'Lyrics3', 2 => 'Audio' },
+    NOTES => q{
+        ExifTool extracts Lyrics3 version 1.00 and 2.00 tags from any file that
+        supports ID3.  See L<https://id3.org/Lyrics3> for the specification.
+    },
+    IND => 'Indications',
+    LYR => 'Lyrics',
+    INF => 'AdditionalInfo',
+    AUT => { Name => 'Author', Groups => { 2 => 'Author' } },
+    EAL => 'ExtendedAlbumName',
+    EAR => 'ExtendedArtistName',
+    ETT => 'ExtendedTrackTitle',
+    IMG => 'AssociatedImageFile',
+    CRC => 'CRC', #PH
 );
 
 # Mapping for ID3v1 Genre numbers
@@ -397,7 +426,7 @@ my %genre = (
 
 # Tags for ID2v2.2
 %Image::ExifTool::ID3::v2_2 = (
-    PROCESS_PROC => \&Image::ExifTool::ID3::ProcessID3v2,
+    PROCESS_PROC => \&ProcessID3v2,
     GROUPS => { 1 => 'ID3v2_2', 2 => 'Audio' },
     NOTES => q{
         ExifTool extracts mainly text-based tags from ID3v2 information.  The tags
@@ -489,6 +518,9 @@ my %genre = (
     TSC => 'ComposerSortOrder',
     ITU => { Name => 'iTunesU', Description => 'iTunes U', Binary => 1, Unknown => 1 },
     PCS => { Name => 'Podcast', Binary => 1, Unknown => 1 },
+    GP1 => 'Grouping', #github142 (NC)
+    MVN => 'MovementName', #github142 (NC)
+    MVI => 'MovementNumber', #github142 (NC)
 );
 
 # tags common to ID3v2.3 and ID3v2.4
@@ -512,7 +544,10 @@ my %id3v2_common = (
   # COMR => 'Commercial',
   # ENCR => 'EncryptionMethod',
   # ETCO => 'EventTimingCodes',
-  # GEOB => 'GeneralEncapsulatedObject',
+    GEOB => {
+        Name => 'GeneralEncapsulatedObject',
+        SubDirectory => { TagTable => 'Image::ExifTool::ID3::GEOB' },
+    },
   # GRID => 'GroupIdentification',
   # LINK => 'LinkedInformation',
     MCDI => { Name => 'MusicCDIdentifier', Binary => 1 },
@@ -613,11 +648,30 @@ my %id3v2_common = (
         Name => 'OlympusDSS',
         SubDirectory => { TagTable => 'Image::ExifTool::Olympus::DSS' },
     },
+    GRP1 => 'Grouping',
+    MVNM => 'MovementName', # (NC)
+    MVIN => 'MovementNumber', # (NC)
+);
+
+%Image::ExifTool::ID3::GEOB = (
+    GROUPS => { 1 => 'ID3v2_3', 2 => 'Other' },
+    PROCESS_PROC => \&ProcessGEOB,
+    'application/x-c2pa-manifest-store' => {
+        Name => 'JUMBF',
+        SubDirectory => {
+            TagTable => 'Image::ExifTool::Jpeg2000::Main',
+            ByteOrder => 'BigEndian',
+        },
+    },
+    'GEOB-Mime' => { },
+    'GEOB-File' => { },
+    'GEOB-Desc' => { },
+    'GEOB-Data' => { },
 );
 
 # Tags for ID3v2.3 (http://www.id3.org/id3v2.3.0)
 %Image::ExifTool::ID3::v2_3 = (
-    PROCESS_PROC => \&Image::ExifTool::ID3::ProcessID3v2,
+    PROCESS_PROC => \&ProcessID3v2,
     GROUPS => { 1 => 'ID3v2_3', 2 => 'Audio' },
     NOTES => q{
         ID3 version 2.3 tags.  Includes some non-standard tags written by other
@@ -637,7 +691,7 @@ my %id3v2_common = (
 
 # Tags for ID3v2.4 (http://www.id3.org/id3v2.4.0-frames)
 %Image::ExifTool::ID3::v2_4 = (
-    PROCESS_PROC => \&Image::ExifTool::ID3::ProcessID3v2,
+    PROCESS_PROC => \&ProcessID3v2,
     GROUPS => { 1 => 'ID3v2_4', 2 => 'Audio' },
     NOTES => q{
         ID3 version 2.4 tags.  Includes some non-standard tags written by other
@@ -666,7 +720,7 @@ my %id3v2_common = (
 # Synchronized lyrics/text
 %Image::ExifTool::ID3::SynLyrics = (
     GROUPS => { 1 => 'ID3', 2 => 'Audio' },
-    VARS => { NO_ID => 1 },
+    VARS => { ID_FMT => 'none' },
     PROCESS_PROC => \&ProcessSynText,
     NOTES => 'The following tags are extracted from synchronized lyrics/text frames.',
     desc => { Name => 'SynchronizedLyricsDescription' },
@@ -700,7 +754,7 @@ my %id3v2_common = (
 %Image::ExifTool::ID3::Private = (
     PROCESS_PROC => \&Image::ExifTool::ID3::ProcessPrivate,
     GROUPS => { 1 => 'ID3', 2 => 'Audio' },
-    VARS => { NO_ID => 1 },
+    VARS => { ID_FMT => 'none' },
     NOTES => q{
         ID3 private (PRIV) tags.  ExifTool will decode any private tags found, even
         if they do not appear in this table.
@@ -737,7 +791,7 @@ my %id3v2_common = (
         ValueConv => 'require Image::ExifTool::ASF; Image::ExifTool::ASF::GetGUID($val)',
     },
     WM_Provider => {
-        ValueConv => '$self->Decode($val,"UCS2","II")', #PH (NC)
+        ValueConv => '$self->Decode($val,"UTF16","II")', #PH (NC)
     },
     # there are lots more WM tags that could be decoded if I had samples or documentation - PH
     # WM/AlbumArtist
@@ -777,8 +831,8 @@ my %id3v2_common = (
 
 # lookup to check for existence of tags in other ID3 versions
 my %otherTable = (
-    \%Image::ExifTool::ID3::v2_4 => \%Image::ExifTool::ID3::v2_3,
-    \%Image::ExifTool::ID3::v2_3 => \%Image::ExifTool::ID3::v2_4,
+    \%Image::ExifTool::ID3::v2_4 => 'Image::ExifTool::ID3::v2_3',
+    \%Image::ExifTool::ID3::v2_3 => 'Image::ExifTool::ID3::v2_4',
 );
 
 # ID3 Composite tags
@@ -821,6 +875,19 @@ Image::ExifTool::AddCompositeTags('Image::ExifTool::ID3');
         $tagInfo{Groups} = { %$groups } if $groups;
         $Image::ExifTool::ID3::v2_4{$tag} = \%tagInfo;
     }
+}
+
+#------------------------------------------------------------------------------
+# Make tag name for user-defined tag
+# Inputs: 0) User defined tag description
+# Returns: Tag name
+sub MakeTagName($)
+{
+    my $name = shift;
+    return $userTagName{$name} if $userTagName{$name};
+    $name = ucfirst(lc $name) unless $name =~ /[a-z]/;  # convert all uppercase to mixed case
+    $name =~ s/([a-z])[_ ]([a-z])/$1\U$2/g;
+    return Image::ExifTool::MakeTagName($name);
 }
 
 #------------------------------------------------------------------------------
@@ -964,9 +1031,18 @@ sub PrintGenre($)
         $genre{$1} or $genre{$1} = "Unknown ($1)";
     }
     $val =~ s/\((\d+)\)/\($genre{$1}\)/g;
-    $val =~ s/(^|\/)(\d+)(?=\/|$)/$1$genre{$2}$3/g;
+    $val =~ s/(^|\/)(\d+)(?=\/|$)/$1$genre{$2}/g;
     $val =~ s/^\(([^)]+)\)\1?$/$1/; # clean up by removing brackets and duplicates
     return $val;
+}
+
+#------------------------------------------------------------------------------
+# Get Genre ID
+# Inputs: 0) Genre name
+# Returns: genre ID number, or undef
+sub GetGenreID($)
+{
+    return Image::ExifTool::ReverseLookup(shift, \%genre);
 }
 
 #------------------------------------------------------------------------------
@@ -1005,7 +1081,7 @@ sub DecodeString($$;$)
                 $val = '';
             }
             $bom = $1 if $v =~ s/^(\xfe\xff|\xff\xfe)//;
-            push @vals, $et->Decode($v, 'UCS2', $order{$bom});
+            push @vals, $et->Decode($v, 'UTF16', $order{$bom});
         }
     } else {
         $val =~ s/\0+$//;
@@ -1041,6 +1117,7 @@ sub ProcessID3v2($$$)
     my $vers    = $$dirInfo{Version};
     my $verbose = $et->Options('Verbose');
     my $len;    # frame data length
+    my $otherTable;
 
     $et->VerboseDir($tagTablePtr->{GROUPS}->{1}, 0, $size);
     $et->VerboseDump($dataPt, Len => $size, Start => $offset);
@@ -1067,7 +1144,11 @@ sub ProcessID3v2($$$)
                 my $oldLen = $len;
                 $len =  UnSyncSafe($len);
                 if (not defined $len or $offset + $len + 10 > $size) {
-                    $et->Warn('Invalid ID3 frame size');
+                    if ($offset + $len == $size) {
+                        $et->Warn('Missing ID3 terminating frame', 1);
+                    } else {
+                        $et->Warn('Invalid ID3 frame size');
+                    }
                     last;
                 }
                 # check next ID to see if it makes sense
@@ -1083,10 +1164,12 @@ sub ProcessID3v2($$$)
         last if $offset + $len > $size;
         my $tagInfo = $et->GetTagInfo($tagTablePtr, $id);
         unless ($tagInfo) {
-            my $otherTable = $otherTable{$tagTablePtr};
+            if (not $otherTable and $otherTable{$tagTablePtr}) {
+                $otherTable = GetTagTable($otherTable{$tagTablePtr});
+            }
             $tagInfo = $et->GetTagInfo($otherTable, $id) if $otherTable;
             if ($tagInfo) {
-                $et->WarnOnce("Frame '${id}' is not valid for this ID3 version", 1);
+                $et->Warn("Frame '${id}' is not valid for this ID3 version", 1);
             } else {
                 next unless $verbose or $et->Options('Unknown');
                 $id =~ tr/-A-Za-z0-9_//dc;
@@ -1115,7 +1198,7 @@ sub ProcessID3v2($$$)
             }
         }
         if ($flags{Encrypt}) {
-            $et->WarnOnce('Encrypted frames currently not supported');
+            $et->Warn('Encrypted frames currently not supported');
             next;
         }
         # extract the value
@@ -1149,7 +1232,7 @@ sub ProcessID3v2($$$)
                     next;
                 }
             } else {
-                $et->WarnOnce('Install Compress::Zlib to decode compressed frames');
+                $et->Warn('Install Compress::Zlib to decode compressed frames');
                 next;
             }
         }
@@ -1183,25 +1266,34 @@ sub ProcessID3v2($$$)
             # two encoded strings separated by a null
             my @vals = DecodeString($et, $val);
             foreach (0..1) { $vals[$_] = '' unless defined $vals[$_]; }
-            ($val = "($vals[0]) $vals[1]") =~ s/^\(\) //;
-        } elsif ($id =~ /^T/ or $id =~ /^(IPL|IPLS)$/) {
+            if (length $vals[0]) {
+                $id .= "_$vals[0]";
+                $tagInfo = $$tagTablePtr{$id} || AddTagToTable($tagTablePtr, $id, MakeTagName($vals[0]));
+            }
+            $val = $vals[1];
+        } elsif ($id =~ /^T/ or $id =~ /^(IPL|IPLS|GP1|MVI|MVN)$/) {
             $val = DecodeString($et, $val);
         } elsif ($id =~ /^(WXX|WXXX)$/) {
             # one encoded string and one Latin string separated by a null
             my $enc = unpack('C', $val);
-            my $url;
+            my ($tag, $url);
             if ($enc == 1 or $enc == 2) {
-                ($val, $url) = ($val =~ /^(.(?:..)*?)\0\0(.*)/s);
+                ($tag, $url) = ($val =~ /^(.(?:..)*?)\0\0(.*)/s);
             } else {
-                ($val, $url) = ($val =~ /^(..*?)\0(.*)/s);
+                ($tag, $url) = ($val =~ /^(..*?)\0(.*)/s);
             }
-            unless (defined $val and defined $url) {
+            unless (defined $tag and defined $url) {
                 $et->Warn("Invalid $id frame value");
                 next;
             }
-            $val = DecodeString($et, $val);
+            $tag = DecodeString($et, $tag);
+            if (length $tag) {
+                $id .= "_$tag";
+                $tag .= '_URL' unless $tag =~ /url/i;
+                $tagInfo = $$tagTablePtr{$id} || AddTagToTable($tagTablePtr, $id, MakeTagName($tag));
+            }
             $url =~ s/\0.*//s;
-            $val = length($val) ? "($val) $url" : $url;
+            $val = $et->Decode($url, 'Latin');
         } elsif ($id =~ /^W/) {
             $val =~ s/\0.*//s;  # truncate at null
         } elsif ($id =~ /^(COM|COMM|ULT|USLT)$/) {
@@ -1309,6 +1401,8 @@ sub ProcessID3v2($$$)
         } elsif ($$tagInfo{Format} or $$tagInfo{SubDirectory}) {
             $et->HandleTag($tagTablePtr, $id, undef, DataPt => \$val);
             next;
+        } elsif ($id eq 'GRP1' or $id eq 'MVNM' or $id eq 'MVIN') {
+            $val =~ s/(^\0+|\0+$)//g;   # (PH guess)
         } elsif (not $$tagInfo{Binary}) {
             $et->Warn("Don't know how to handle $id frame");
             next;
@@ -1333,7 +1427,7 @@ sub ProcessID3v2($$$)
 # Inputs: 0) ExifTool object reference, 1) dirInfo reference
 # Returns: 1 on success, 0 if this file didn't contain ID3 information
 # - also processes audio data if any ID3 information was found
-# - sets ExifTool DoneID3 to 1 when called, or to 2 if an ID3v1 trailer exists
+# - sets ExifTool DoneID3 to 1 when called, or to trailer size if an ID3v1 trailer exists
 sub ProcessID3($$)
 {
     my ($et, $dirInfo) = @_;
@@ -1342,7 +1436,8 @@ sub ProcessID3($$)
     $$et{DoneID3} = 1;
 
     # allow this to be called with either RAF or DataPt
-    my $raf = $$dirInfo{RAF} || new File::RandomAccess($$dirInfo{DataPt});
+    my $raf = $$dirInfo{RAF} || File::RandomAccess->new($$dirInfo{DataPt});
+    my $dataPos = $$dirInfo{DataPos} || 0;
     my ($buff, %id3Header, %id3Trailer, $hBuff, $tBuff, $eBuff, $tagTablePtr);
     my $rtnVal = 0;
     my $hdrEnd = 0;
@@ -1378,13 +1473,13 @@ sub ProcessID3($$)
         if ($flags & 0x40) {
             # skip the extended header
             $size >= 4 or $et->Warn('Bad ID3 extended header'), last;
-            my $len = unpack('N', $hBuff);
-            if ($len > length($hBuff) - 4) {
+            my $len = UnSyncSafe(unpack('N', $hBuff));
+            if ($len > length($hBuff)) {
                 $et->Warn('Truncated ID3 extended header');
                 last;
             }
-            $hBuff = substr($hBuff, $len + 4);
-            $pos += $len + 4;
+            $hBuff = substr($hBuff, $len);
+            $pos += $len;
         }
         if ($flags & 0x10) {
             # ignore v2.4 footer (10 bytes long)
@@ -1392,7 +1487,7 @@ sub ProcessID3($$)
         }
         %id3Header = (
             DataPt   => \$hBuff,
-            DataPos  => $pos,
+            DataPos  => $dataPos + $pos,
             DirStart => 0,
             DirLen   => length($hBuff),
             Version  => $vers,
@@ -1412,23 +1507,75 @@ sub ProcessID3($$)
 #
 # read ID3v1 trailer if it exists
 #
+    my $trailSize = 0;
     if ($raf->Seek(-128, 2) and $raf->Read($tBuff, 128) == 128 and $tBuff =~ /^TAG/) {
-        $$et{DoneID3} = 2;  # set to 2 as flag that trailer exists
+        $trailSize = 128;
         %id3Trailer = (
             DataPt   => \$tBuff,
-            DataPos  => $raf->Tell() - 128,
+            DataPos  => $dataPos + $raf->Tell() - 128,
             DirStart => 0,
             DirLen   => length($tBuff),
         );
         $id3Len += length($tBuff);
         $rtnVal = 1;
         # load 'Enhanced TAG' information if available
-        if ($raf->Seek(-355, 2) and $raf->Read($eBuff, 227) == 227 and $eBuff =~ /^TAG+/) {
+        my $eSize = 227;    # size of ID3 Enhanced TAG info
+        if ($raf->Seek(-$trailSize - $eSize, 2) and $raf->Read($eBuff, $eSize) == $eSize and $eBuff =~ /^TAG+/) {
             $id3Trailer{EnhancedTAG} = \$eBuff;
+            $trailSize += $eSize;
+        }
+        $$et{DoneID3} = $trailSize; # save trailer size
+    }
+#
+# read Lyrics3 trailer if it exists
+#
+    if ($raf->Seek(-$trailSize-15, 2) and $raf->Read($buff, 15) == 15 and $buff =~ /^(.{6})LYRICS(END|200)$/) {
+        my $ver = $2;   # Lyrics3 version ('END' for version 1)
+        my $len = ($ver eq 'END') ? 5100 : $1 + 15; # max Lyrics3 length
+        my $tbl = GetTagTable('Image::ExifTool::ID3::Lyrics3');
+        $len = $raf->Tell() if $len > $raf->Tell();
+        if ($raf->Seek(-$len, 1) and $raf->Read($buff, $len) == $len and $buff =~ /LYRICSBEGIN/g) {
+            my $pos = pos($buff);
+            $$et{DoneID3} = $trailSize + $len - $pos + 11;  # update trailer length
+            my $oldIndent = $$et{INDENT};
+            $$et{INDENT} .= '| ';
+            if ($et->Options('Verbose')) {
+                $et->VPrint(0, "Lyrics3:\n");
+                $et->VerboseDir('Lyrics3', undef, $len);
+                if ($pos > 11) {
+                    $buff = substr($buff, $pos - 11);
+                    $pos = 11;
+                }
+                $et->VerboseDump(\$buff);
+            }
+            if ($ver eq 'END') {
+                # Lyrics3 v1.00
+                my $val = substr($buff, $pos, $len - $pos - 9);
+                $et->HandleTag($tbl, 'LYR', $et->Decode($val, 'Latin'));
+            } else {
+                # Lyrics3 v2.00
+                for (;;) {
+                    # (note: the size field is 5 digits,, not 6 as per the documentation)
+                    last unless $buff =~ /\G(.{3})(\d{5})/g;
+                    my ($tag, $size) = ($1, $2);
+                    $pos += 8;
+                    last if $pos + $size > length($buff);
+                    unless ($$tbl{$tag}) {
+                        AddTagToTable($tbl, $tag, { Name => Image::ExifTool::MakeTagName("Lyrics3_$tag") });
+                    }
+                    $et->HandleTag($tbl, $tag, $et->Decode(substr($buff, $pos, $size), 'Latin'));
+                    $pos += $size;
+                    pos($buff) = $pos;
+                }
+                $pos == length($buff) - 15 or $et->Warn('Malformed Lyrics3 v2.00 block');
+            }
+            $$et{INDENT} = $oldIndent;
+        } else {
+            $et->Warn('Error reading Lyrics3 trailer');
         }
     }
 #
-# process the the information
+# process the information
 #
     if ($rtnVal) {
         # first process audio data if it exists
@@ -1482,6 +1629,52 @@ sub ProcessID3($$)
     # return file pointer to start of file to read audio data if necessary
     $raf->Seek(0, 0);
     return $rtnVal;
+}
+
+#------------------------------------------------------------------------------
+# Process ID3 directory
+# Inputs: 0) ExifTool object reference, 1) dirInfo reference, 2) dummy tag table ref
+sub ProcessID3Dir($$$)
+{
+    my ($et, $dirInfo, $tagTablePtr) = @_;
+    $et->VerboseDir('ID3', undef, length ${$$dirInfo{DataPt}});
+    return ProcessID3($et, $dirInfo);
+}
+
+#------------------------------------------------------------------------------
+# Process ID3 General Encapsulated Object
+# Inputs: 0) ExifTool ref, 1) dirInfo ref, 2) tag table ref
+# Returns: 1 on success
+sub ProcessGEOB($$$)
+{
+    my ($et, $dirInfo, $tagTablePtr) = @_;
+    $et->VerboseDir('GEOB', undef, length ${$$dirInfo{DataPt}});
+    my $dataPt = $$dirInfo{DataPt};
+    my $len = length $$dataPt;
+    $len >= 4 or $et->Warn("Short GEOB frame"), return 0;
+    my ($hdr, $attr);
+    my $enc = unpack('C', $$dataPt);
+    if ($enc == 1 or $enc == 2) {
+        $hdr = ".(.*?)\0((?:..)*?)\0\0((?:..)*?)\0\0";
+    } else {
+        $hdr = ".(.*?)\0(.*?)\0(.*?)\0";
+    }
+    # remove header (encoding, mime, filename, description)
+    $$dataPt =~ s/^$hdr//s or $et->Warn("Invalid GEOB frame"), return 0;
+    my ($mime, $file, $desc) = ($1, DecodeString($et, $2, $enc), DecodeString($et, $3, $enc));
+    $et->HandleTag($tagTablePtr, 'GEOB-Mime', $mime) if length $mime;
+    $et->HandleTag($tagTablePtr, 'GEOB-File', $file) if length $file;
+    $et->HandleTag($tagTablePtr, 'GEOB-Desc', $desc) if length $desc;
+    if ($$tagTablePtr{$mime}) {
+        $et->HandleTag($tagTablePtr, $mime, undef,
+            DataPt => $dataPt,
+            Start  => 0,
+            Size   => length($$dataPt),
+        );
+    } else {
+        $et->HandleTag($tagTablePtr, 'GEOB-Data', $dataPt);
+    }
+    return 1;
 }
 
 #------------------------------------------------------------------------------
@@ -1554,7 +1747,7 @@ other types of audio files.
 
 =head1 AUTHOR
 
-Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2026, Phil Harvey (philharvey66 at gmail.com)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.
@@ -1563,11 +1756,13 @@ under the same terms as Perl itself.
 
 =over 4
 
-=item L<http://www.id3.org/>
+=item L<https://id3.org/>
 
 =item L<http://www.mp3-tech.org/>
 
 =item L<http://www.fortunecity.com/underworld/sonic/3/id3tag.html>
+
+=item L<https://id3.org/Lyrics3>
 
 =back
 

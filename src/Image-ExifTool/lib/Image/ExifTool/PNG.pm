@@ -19,6 +19,15 @@
 #               decompress then decode the ASCII/hex profile information before
 #               you can edit it, then you have to ASCII/hex-encode, recompress
 #               and calculate a CRC before you can write it out again.  gaaaak.
+#
+#               Although XMP is allowed after the IDAT chunk according to the
+#               PNG specifiction, some apps (Apple Spotlight and Preview for
+#               OS X 10.8.5 and Adobe Photoshop CC 14.0) ignore it unless it
+#               comes before IDAT.  As of version 11.58, ExifTool uses a 2-pass
+#               writing algorithm to allow it to be compatible with XMP after
+#               IDAT while writing it before IDAT.  (PNG and EXIF are still
+#               written after IDAT.)  As of version 11.63, this strategy is
+#               applied to all text chunks (tEXt, zTXt and iTXt).
 #------------------------------------------------------------------------------
 
 package Image::ExifTool::PNG;
@@ -27,7 +36,7 @@ use strict;
 use vars qw($VERSION $AUTOLOAD %stdCase);
 use Image::ExifTool qw(:DataAccess :Utils);
 
-$VERSION = '1.46';
+$VERSION = '1.71';
 
 sub ProcessPNG_tEXt($$$);
 sub ProcessPNG_iTXt($$$);
@@ -71,12 +80,21 @@ my %pngMap = (
     ICC_Profile  => 'PNG',
     Photoshop    => 'PNG',
    'PNG-pHYs'    => 'PNG',
+    JUMBF        => 'PNG',
     IPTC         => 'Photoshop',
     MakerNotes   => 'ExifIFD',
 );
 
 # color type of current image
 $Image::ExifTool::PNG::colorType = -1;
+
+# data and text chunk types
+my %isDatChunk = ( IDAT => 1, JDAT => 1, JDAA => 1 );
+my %isTxtChunk = ( tEXt => 1, zTXt => 1, iTXt => 1, eXIf => 1 );
+
+# chunks that we shouldn't move other chunks across (ref 3)
+my %noLeapFrog = ( SAVE => 1, SEEK => 1, IHDR => 1, JHDR => 1, IEND => 1, MEND => 1,
+                   DHDR => 1, BASI => 1, CLON => 1, PAST => 1, SHOW => 1, MAGN => 1 );
 
 # PNG chunks
 %Image::ExifTool::PNG::Main = (
@@ -93,6 +111,19 @@ $Image::ExifTool::PNG::colorType = -1;
         it is specifically deleted with C<-Trailer:All=>.  When reading, a minor
         warning is issued if this trailer exists, and ExifTool will attempt to parse
         this data as additional PNG chunks.
+
+        Also according to the PNG specification, there is no restriction on the
+        location of text-type chunks (tEXt, zTXt and iTXt).  However, certain
+        utilities (including some Apple and Adobe utilities) won't read the XMP iTXt
+        chunk if it comes after the IDAT chunk, and at least one utility won't read
+        other text chunks here.  For this reason, when writing, ExifTool 11.63 and
+        later create new text chunks (including XMP) before IDAT, and move existing
+        text chunks to before IDAT.
+
+        The PNG format contains CRC checksums that are validated when reading with
+        either the L<Verbose|../ExifTool.html#Verbose> or L<Validate|../ExifTool.html#Validate> option.  When writing, these checksums are
+        validated by default, but the L<FastScan|../ExifTool.html#FastScan> option may be used to bypass this
+        check if speed is more of a concern.
     },
     bKGD => {
         Name => 'BackgroundColor',
@@ -112,11 +143,14 @@ $Image::ExifTool::PNG::colorType = -1;
     },
     gAMA => {
         Name => 'Gamma',
+        Writable => 1,
+        Protected => 1,
         Notes => q{
             ExifTool reports the gamma for decoding the image, which is consistent with
             the EXIF convention, but is the inverse of the stored encoding gamma
         },
         ValueConv => 'my $a=unpack("N",$val);$a ? int(1e9/$a+0.5)/1e4 : $val',
+        ValueConvInv => 'pack("N", int(1e5/$val+0.5))',
     },
     gIFg => {
         Name => 'GIFGraphicControlExtension',
@@ -136,7 +170,10 @@ $Image::ExifTool::PNG::colorType = -1;
     },
     iCCP => {
         Name => 'ICC_Profile',
-        Notes => 'this is where ExifTool will write a new ICC_Profile',
+        Notes => q{
+            this is where ExifTool will write a new ICC_Profile.  When creating a new
+            ICC_Profile, the SRGBRendering tag should be deleted if it exists
+        },
         SubDirectory => {
             TagTable => 'Image::ExifTool::ICC_Profile::Main',
             ProcessProc => \&ProcessPNG_Compressed,
@@ -144,7 +181,12 @@ $Image::ExifTool::PNG::colorType = -1;
     },
    'iCCP-name' => {
         Name => 'ProfileName',
-        Notes => 'not a real tag ID, this tag represents the iCCP profile name',
+        Writable => 1,
+        FakeTag => 1, # (not a real PNG tag, so don't try to write it)
+        Notes => q{
+            not a real tag ID, this tag represents the iCCP profile name, and may only
+            be written when the ICC_Profile is written
+        },
     },
 #   IDAT
 #   IEND
@@ -197,7 +239,11 @@ $Image::ExifTool::PNG::colorType = -1;
     },
     sRGB => {
         Name => 'SRGBRendering',
+        Writable => 1,
+        Protected => 1,
+        Notes => 'this chunk should not be present if an iCCP chunk exists',
         ValueConv => 'unpack("C",$val)',
+        ValueConvInv => 'pack("C",$val)',
         PrintConv => {
             0 => 'Perceptual',
             1 => 'Relative Colorimetric',
@@ -229,6 +275,7 @@ $Image::ExifTool::PNG::colorType = -1;
     },
     tRNS => {
         Name => 'Transparency',
+        # may have as many entries as the PLTE table, but who wants to see all that?
         ValueConv => q{
             return \$val if length($val) > 6;
             join(" ",unpack($Image::ExifTool::PNG::colorType == 3 ? "C*" : "n*", $val));
@@ -281,6 +328,60 @@ $Image::ExifTool::PNG::colorType = -1;
     },
     # fcTL - animation frame control for each frame
     # fdAT - animation data for each frame
+    iDOT => { # (ref NealKrawetz)
+        Name => 'AppleDataOffsets',
+        Binary => 1,
+        # Apple offsets into data relative to start of iDOT chunk:
+        #    int32u Divisor  [only ever seen 2]
+        #    int32u Unknown  [always 0]
+        #    int32u TotalDividedHeight  [image height from IDHR/Divisor]
+        #    int32u Size  [always 40 / 0x28; size of this chunk]
+        #    int32u DividedHeight1
+        #    int32u DividedHeight2
+        #    int32u IDAT_Offset2 [location of IDAT with start of DividedHeight2 segment]
+    },
+    caBX => { # C2PA metadata
+        Name => 'JUMBF',
+        Deletable => 1,
+        SubDirectory => { TagTable => 'Image::ExifTool::Jpeg2000::Main' },
+    },
+    cICP => {
+        Name => 'CICodePoints',
+        SubDirectory => {
+            TagTable => 'Image::ExifTool::PNG::CICodePoints',
+        },
+    },
+    cpIp => { # OLE information found in PNG Plus images written by Picture It!
+        Name => 'OLEInfo',
+        Condition => q{
+            # set FileType to "PNG Plus"
+            if ($$self{VALUE}{FileType} and $$self{VALUE}{FileType} eq "PNG") {
+                $$self{VALUE}{FileType} = 'PNG Plus';
+            }
+            return 1;
+        },
+        SubDirectory => {
+            TagTable => 'Image::ExifTool::FlashPix::Main',
+            ProcessProc => 'Image::ExifTool::FlashPix::ProcessFPX',
+        },
+    },
+    meTa => { # XML in UTF-16 BOM format written by Picture It!
+        SubDirectory => {
+            TagTable => 'Image::ExifTool::XMP::XML',
+            IgnoreProp => { meta => 1 }, # ignore 'meta' container
+        },
+    },
+    gdAT => {
+        Name => 'GainMapImage',
+        Groups => { 2 => 'Preview' },
+        Binary => 1,
+    },
+    # gmAP  - https://github.com/w3c/png/issues/380 does't correspond to my only sample
+    seAl => {
+        Name => 'SEAL',
+        SubDirectory => { TagTable => 'Image::ExifTool::XMP::SEAL' },
+    },
+    # mkBF,mkTS,mkBS,mkBT ? - written by Adobe FireWorks
 );
 
 # PNG IHDR chunk
@@ -340,6 +441,7 @@ $Image::ExifTool::PNG::colorType = -1;
 %Image::ExifTool::PNG::PhysicalPixel = (
     PROCESS_PROC => \&Image::ExifTool::ProcessBinaryData,
     WRITE_PROC => \&Image::ExifTool::WriteBinaryData,
+    CHECK_PROC => \&Image::ExifTool::CheckBinaryData,
     WRITABLE => 1,
     GROUPS => { 1 => 'PNG-pHYs', 2 => 'Image' },
     WRITE_GROUP => 'PNG-pHYs',
@@ -351,15 +453,91 @@ $Image::ExifTool::PNG::colorType = -1;
     0 => {
         Name => 'PixelsPerUnitX',
         Format => 'int32u',
+        Notes => 'default 2834',
     },
     4 => {
         Name => 'PixelsPerUnitY',
         Format => 'int32u',
+        Notes => 'default 2834',
     },
     8 => {
         Name => 'PixelUnits',
         PrintConv => { 0 => 'Unknown', 1 => 'meters' },
+        Notes => 'default meters',
     },
+);
+
+# PNG cICP chunk
+%Image::ExifTool::PNG::CICodePoints = (
+    PROCESS_PROC => \&Image::ExifTool::ProcessBinaryData,
+    GROUPS => { 1 => 'PNG-cICP', 2 => 'Image' },
+    NOTES => q{
+        These tags are found in the PNG cICP chunk and belong to the PNG-cICP family
+        1 group.
+    },
+    # (same as tags in QuickTime::ColorRep)
+    0 => {
+        Name => 'ColorPrimaries',
+        PrintConv => {
+            1 => 'BT.709',
+            2 => 'Unspecified',
+            4 => 'BT.470 System M (historical)',
+            5 => 'BT.470 System B, G (historical)',
+            6 => 'BT.601',
+            7 => 'SMPTE 240',
+            8 => 'Generic film (color filters using illuminant C)',
+            9 => 'BT.2020, BT.2100',
+            10 => 'SMPTE 428 (CIE 1921 XYZ)',
+            11 => 'SMPTE RP 431-2',
+            12 => 'SMPTE EG 432-1',
+            22 => 'EBU Tech. 3213-E',
+        },
+    },
+    1 => {
+        Name => 'TransferCharacteristics',
+        PrintConv => {
+            0 => 'For future use (0)',
+            1 => 'BT.709',
+            2 => 'Unspecified',
+            3 => 'For future use (3)',
+            4 => 'BT.470 System M (historical)',
+            5 => 'BT.470 System B, G (historical)',
+            6 => 'BT.601',
+            7 => 'SMPTE 240 M',
+            8 => 'Linear',
+            9 => 'Logarithmic (100 : 1 range)',
+            10 => 'Logarithmic (100 * Sqrt(10) : 1 range)',
+            11 => 'IEC 61966-2-4',
+            12 => 'BT.1361',
+            13 => 'sRGB or sYCC',
+            14 => 'BT.2020 10-bit systems',
+            15 => 'BT.2020 12-bit systems',
+            16 => 'SMPTE ST 2084, ITU BT.2100 PQ',
+            17 => 'SMPTE ST 428',
+            18 => 'BT.2100 HLG, ARIB STD-B67',
+        },
+    },
+    2 => {
+        Name => 'MatrixCoefficients',
+        PrintConv => {
+            0 => 'Identity matrix',
+            1 => 'BT.709',
+            2 => 'Unspecified',
+            3 => 'For future use (3)',
+            4 => 'US FCC 73.628',
+            5 => 'BT.470 System B, G (historical)',
+            6 => 'BT.601',
+            7 => 'SMPTE 240 M',
+            8 => 'YCgCo',
+            9 => 'BT.2020 non-constant luminance, BT.2100 YCbCr',
+            10 => 'BT.2020 constant luminance',
+            11 => 'SMPTE ST 2085 YDzDx',
+            12 => 'Chromaticity-derived non-constant luminance',
+            13 => 'Chromaticity-derived constant luminance',
+            14 => 'BT.2100 ICtCp',
+        },
+    },
+    3 => 'VideoFullRangeFlag',
 );
 
 # PNG sCAL chunk
@@ -427,12 +605,14 @@ my %unreg = ( Notes => 'unregistered' );
 
         These tags may be stored as tEXt, zTXt or iTXt chunks in the PNG image.  By
         default ExifTool writes new string-value tags as as uncompressed tEXt, or
-        compressed zTXt if the Compress (-z) option is used and Compress::Zlib is
+        compressed zTXt if the L<Compress|../ExifTool.html#Compress> (-z) option is used and Compress::Zlib is
         available.  Alternate language tags and values containing special characters
         (unless the Latin character set is used) are written as iTXt, and compressed
-        if the Compress option is used and Compress::Zlib is available.  Raw profile
+        if the L<Compress|../ExifTool.html#Compress> option is used and Compress::Zlib is available.  Raw profile
         information is always created as compressed zTXt if Compress::Zlib is
         available, or tEXt otherwise.  Standard XMP is written as uncompressed iTXt.
+        User-defined tags may set an 'iTXt' flag in the tag definition to be written
+        only as iTXt.
 
         Alternate languages are accessed by suffixing the tag name with a '-',
         followed by an RFC 3066 language code (eg. "PNG:Comment-fr", or
@@ -473,6 +653,8 @@ my %unreg = ( Notes => 'unregistered' );
     Label       => { %unreg },
     Make        => { %unreg, Groups => { 2 => 'Camera' } },
     Model       => { %unreg, Groups => { 2 => 'Camera' } },
+    parameters  => { %unreg }, # (written by Stable Diffusion)
+    aesthetic_score => { Name => 'AestheticScore', %unreg }, # (written by Stable Diffusion)
    'create-date'=> {
         Name => 'CreateDate',
         Groups => { 2 => 'Time' },
@@ -502,9 +684,7 @@ my %unreg = ( Notes => 'unregistered' );
             XMP specification, and is where ExifTool will add a new XMP chunk if the
             image didn't already contain XMP
         },
-        SubDirectory => {
-            TagTable => 'Image::ExifTool::XMP::Main',
-        },
+        SubDirectory => { TagTable => 'Image::ExifTool::XMP::Main' },
     },
    'Raw profile type APP1' => [
         {
@@ -588,7 +768,7 @@ my %unreg = ( Notes => 'unregistered' );
     GROUPS => { 2 => 'Image' },
     FORMAT => 'int32u',
     NOTES => q{
-        Tags found in the Animation Conrol chunk.  See
+        Tags found in the Animation Control chunk.  See
         L<https://wiki.mozilla.org/APNG_Specification> for details.
     },
     0 => {
@@ -811,8 +991,15 @@ sub FoundPNG($$$$;$$$$)
                 my $processProc = $$subdir{ProcessProc};
                 # nothing more to do if writing and subdirectory is not writable
                 my $subTable = GetTagTable($$subdir{TagTable});
-                return 1 if $outBuff and not $$subTable{WRITE_PROC};
-                my $dirName = $$subdir{DirName} || $tagName;
+                if ($outBuff and not $$subTable{WRITE_PROC}) {
+                    if ($$et{DEL_GROUP}{$dirName}) {
+                        # non-writable directories may be deleted as a group (eg. SEAL)
+                        $et->VPrint(0, "  Deleting $dirName\n");
+                        $$outBuff = '';
+                        ++$$et{CHANGED};
+                    }
+                    return 1;
+                }
                 my %subdirInfo = (
                     DataPt   => \$val,
                     DirStart => 0,
@@ -822,6 +1009,7 @@ sub FoundPNG($$$$;$$$$)
                     TagInfo  => $tagInfo,
                     ReadOnly => 1, # (used only by WriteXMP)
                     OutBuff  => $outBuff,
+                    IgnoreProp => $$subdir{IgnoreProp}, # (XML hack for meTa chunk)
                 );
                 # no need to re-decompress if already done
                 undef $processProc if $wasCompressed and $processProc and $processProc eq \&ProcessPNG_Compressed;
@@ -830,23 +1018,11 @@ sub FoundPNG($$$$;$$$$)
                     return 1 unless $$et{EDIT_DIRS}{$dirName};
                     $$outBuff = $et->WriteDirectory(\%subdirInfo, $subTable);
                     if ($tagName eq 'XMP' and $$outBuff) {
-                        if ($$et{FoundIDAT} and $$et{DEL_GROUP}{XMP}) {
-                            $et->VPrint(0,'  Deleting XMP');
-                            $$outBuff = '';
-                        } else {
-                            # make sure the XMP is marked as read-only
-                            Image::ExifTool::XMP::ValidateXMP($outBuff,'r');
-                        }
+                        # make sure the XMP is marked as read-only
+                        Image::ExifTool::XMP::ValidateXMP($outBuff,'r');
                     }
                     DoneDir($et, $dirName, $outBuff, $$tagInfo{NonStandard});
                 } else {
-                    # issue warning for standard XMP after IDAT (PNGEarlyXMP option)
-                    if ($tagName eq 'XMP' and not $$tagInfo{NonStandard} and
-                        $$et{FoundIDAT} and $$et{FoundIDAT} == 2)
-                    {
-                        $et->Warn('XMP found after PNG IDAT');
-                        $$et{FoundIDAT} = 1;
-                    }
                     $processed = $et->ProcessDirectory(\%subdirInfo, $subTable, $processProc);
                 }
                 $compressed = 1;    # pretend this is compressed since it is binary data
@@ -872,9 +1048,7 @@ sub FoundPNG($$$$;$$$$)
             {
                 # write new value for this tag if necessary
                 my $newVal;
-                if ($$et{DEL_GROUP}{PNG} or $$et{PNGDoneTag}{$tag} or
-                    $$et{PNGDoneTag}{ucfirst $tag})
-                {
+                if ($$et{DEL_GROUP}{PNG}){
                     # remove this tag now, but keep in ADD_PNG list to add back later
                     $isOverwriting = 1;
                 } else {
@@ -946,7 +1120,7 @@ sub FoundPNG($$$$;$$$$)
         $$tagInfo{LangCode} = $lang if $lang;
         # make unknown profiles binary data type
         $$tagInfo{Binary} = 1 if $tag =~ /^Raw profile type /;
-        $verbose and $et->VPrint(0, "  | [adding $tag]\n");
+        $verbose and $et->VPrint(0, "  [adding $tag]\n");
         AddTagToTable($tagTablePtr, $tag, $tagInfo);
     }
 #
@@ -1055,7 +1229,7 @@ sub ProcessProfile($$$)
             $$outBuff = $et->WriteDirectory(\%dirInfo, $tagTablePtr,
                                             \&Image::ExifTool::WriteTIFF);
             $$outBuff = $Image::ExifTool::exifAPP1hdr . $$outBuff if $$outBuff;
-            DoneDir($et, 'IFD0', $outBuff);
+            DoneDir($et, 'IFD0', $outBuff, $$tagInfo{NonStandard});
         } else {
             $processed = $et->ProcessTIFF(\%dirInfo);
         }
@@ -1069,7 +1243,7 @@ sub ProcessProfile($$$)
             return 1 unless $$editDirs{XMP};
             $$outBuff = $et->WriteDirectory(\%dirInfo, $tagTablePtr);
             $$outBuff and $$outBuff = $Image::ExifTool::xmpAPP1hdr . $$outBuff;
-            DoneDir($et, 'XMP', $outBuff, 1);
+            DoneDir($et, 'XMP', $outBuff, $$tagInfo{NonStandard});
         } else {
             $processed = $et->ProcessDirectory(\%dirInfo, $tagTablePtr);
         }
@@ -1085,7 +1259,7 @@ sub ProcessProfile($$$)
             }
             $$outBuff = $et->WriteDirectory(\%dirInfo, $tagTablePtr,
                                             \&Image::ExifTool::WriteTIFF);
-            DoneDir($et, 'IFD0', $outBuff);
+            DoneDir($et, 'IFD0', $outBuff, $$tagInfo{NonStandard});
         } else {
             $processed = $et->ProcessTIFF(\%dirInfo);
         }
@@ -1127,11 +1301,16 @@ sub ProcessPNG_Compressed($$$)
     if ($tagInfo and $$tagInfo{Name} eq 'ICC_Profile') {
         $et->VerboseDir('iCCP');
         $tagTablePtr = \%Image::ExifTool::PNG::Main;
-        if (length($tag) and not $outBuff) {
-            FoundPNG($et, $tagTablePtr, 'iCCP-name', $tag);
-        }
+        FoundPNG($et, $tagTablePtr, 'iCCP-name', $tag) if length($tag) and not $outBuff;
         $success = FoundPNG($et, $tagTablePtr, 'iCCP', $val, $compressed, $outBuff);
-        $$outBuff = $hdr . $$outBuff if $outBuff and $$outBuff;
+        if ($outBuff and $$outBuff) {
+            my $profileName = $et->GetNewValue($Image::ExifTool::PNG::Main{'iCCP-name'});
+            if (defined $profileName) {
+                $hdr = $profileName . substr($hdr, length $tag);
+                $et->VerboseValue("+ PNG:ProfileName", $profileName);
+            }
+            $$outBuff = $hdr . $$outBuff;
+        }
     } else {
         $success = FoundPNG($et, $tagTablePtr, $tag, $val, $compressed, $outBuff, 'Latin');
     }
@@ -1148,6 +1327,7 @@ sub ProcessPNG_tEXt($$$)
     my ($et, $dirInfo, $tagTablePtr) = @_;
     my ($tag, $val) = split /\0/, ${$$dirInfo{DataPt}}, 2;
     my $outBuff = $$dirInfo{OutBuff};
+    $$et{INDENT} = substr($$et{INDENT}, 0, -2) if $$et{OPTIONS}{Verbose};
     return FoundPNG($et, $tagTablePtr, $tag, $val, undef, $outBuff, 'Latin');
 }
 
@@ -1166,6 +1346,7 @@ sub ProcessPNG_iTXt($$$)
     # set compressed flag so we will decompress it in FoundPNG()
     $compressed and $compressed = 2 + $meth;
     my $outBuff = $$dirInfo{OutBuff};
+    $$et{INDENT} = substr($$et{INDENT}, 0, -2) if $$et{OPTIONS}{Verbose};
     return FoundPNG($et, $tagTablePtr, $tag, $val, $compressed, $outBuff, 'UTF8', $lang);
 }
 
@@ -1234,14 +1415,14 @@ sub ProcessPNG($$)
     my $datChunk = '';
     my $datCount = 0;
     my $datBytes = 0;
-    my ($sig, $err);
+    my $fastScan = $et->Options('FastScan');
+    my $hash = $$et{ImageDataHash};
+    my ($n, $sig, $err, $hbuf, $dbuf, $cbuf);
+    my ($wasHdr, $wasEnd, $wasDat, $doTxt, @txtOffset, $wasTrailer);
 
     # check to be sure this is a valid PNG/MNG/JNG image
     return 0 unless $raf->Read($sig,8) == 8 and $pngLookup{$sig};
 
-    $$raf{NoBuffer} = 1 if $et->Options('FastScan'); # disable buffering in FastScan mode
-
-    my $earlyXMP = $et->Options('PNGEarlyXMP');
     if ($outfile) {
         delete $$et{TextChunkType};
         Write($outfile, $sig) or $err = 1 if $outfile;
@@ -1249,16 +1430,11 @@ sub ProcessPNG($$)
         $$et{ADD_PNG} = $et->GetNewTagInfoHash(
             \%Image::ExifTool::PNG::Main,
             \%Image::ExifTool::PNG::TextualData);
-        # NOTE: PNGDoneTag and PNGDoneDir are used to keep track of metadata added
-        # before the PNG IEND chunk is encountered.  Currently this is implemented
-        # only for XMP (written before IDAT with the PNGEarlyXMP option), but
-        # may be implemented in the future for other types - PH
-        $$et{PNGDoneTag} = { };
-        $$et{PNGDoneDir} = { };
         # initialize with same directories, with PNG tags taking priority
         $et->InitWriteDirs(\%pngMap,'PNG');
-        # write XMP before IDAT if we would delete it later anyway
-        $earlyXMP = 1 if $$et{DEL_GROUP}{XMP};
+    } else {
+        # disable buffering in FastScan mode
+        $$raf{NoBuffer} = 1 if $fastScan;
     }
     my ($fileType, $hdrChunk, $endChunk) = @{$pngLookup{$sig}};
     $et->SetFileType($fileType);  # set the FileType tag
@@ -1269,16 +1445,41 @@ sub ProcessPNG($$)
         $mngTablePtr = GetTagTable('Image::ExifTool::MNG::Main');
     }
     my $verbose = $et->Options('Verbose');
+    my $validate = $et->Options('Validate');
     my $out = $et->Options('TextOut');
-    my ($hbuf, $dbuf, $cbuf, $wasHdr, $wasEnd);
+
+    # scan ahead to find offsets of all text chunks after IDAT
+    if ($outfile) {
+        while ($raf->Read($hbuf,8) == 8) {
+            my ($len, $chunk) = unpack('Na4',$hbuf);
+            last if $len > 0x7fffffff;
+            if ($wasDat) {
+                last if $noLeapFrog{$chunk}; # (don't move text across these chunks)
+                push @txtOffset, $raf->Tell() - 8 if $isTxtChunk{$chunk};
+            } elsif ($isDatChunk{$chunk}) {
+                $wasDat = $chunk;
+            }
+            $raf->Seek($len + 4, 1) or last;    # skip chunk data
+        }
+        $raf->Seek(8,0) or $et->Error('Error seeking in file'), return -1;
+        undef $wasDat;
+    }
 
     # process the PNG/MNG/JNG chunks
     undef $noCompressLib;
     for (;;) {
-        my $n = $raf->Read($hbuf,8);
+        if ($doTxt) {
+            # read text chunks that were found after IDAT so we can write them before
+            $raf->Seek(shift(@txtOffset), 0) or $et->Error('Seek error'), last;
+            # (this is the IDAT offset if @txtOffset is now empty)
+            undef $doTxt unless @txtOffset;
+        }
+        $n = $raf->Read($hbuf,8);   # read chunk header
+
         if ($wasEnd) {
             last unless $n; # stop now if normal end of PNG
-            $et->WarnOnce("Trailer data after $fileType $endChunk chunk", 1);
+            $et->Warn("Trailer data after $fileType $endChunk chunk", 1);
+            $wasTrailer = 1;
             last if $n < 8;
             $$et{SET_GROUP1} = 'Trailer';
         } elsif ($n != 8) {
@@ -1291,31 +1492,53 @@ sub ProcessPNG($$)
             last;
         }
         if ($verbose) {
+            print $out "  Moving $chunk from after IDAT ($len bytes)\n" if $doTxt;
             # don't dump image data chunks in verbose mode (only give count instead)
             if ($datCount and $chunk ne $datChunk) {
                 my $s = $datCount > 1 ? 's' : '';
                 print $out "$fileType $datChunk ($datCount chunk$s, total $datBytes bytes)\n";
+                print $out "$$et{INDENT}(ImageDataHash: $datBytes bytes of $datChunk data)\n" if $hash;
                 $datCount = $datBytes = 0;
-                $datChunk = '';
-            }
-            if ($chunk =~ /^(IDAT|JDAT|JDAA)$/) {
-                $datChunk = $chunk;
-                $datCount++;
-                $datBytes += $len;
             }
         }
+        unless ($wasHdr) {
+            if ($chunk eq $hdrChunk) {
+                $wasHdr = 1;
+            } elsif ($hdrChunk eq 'IHDR' and $chunk eq 'CgBI') {
+                $et->Warn('Non-standard PNG image (Apple iPhone format)');
+            } else {
+                $et->Warn("$fileType image did not start with $hdrChunk");
+            }
+        }
+        if ($outfile and ($isDatChunk{$chunk} or $chunk eq $endChunk) and @txtOffset) {
+            # continue processing here after we move the text chunks from after IDAT
+            push @txtOffset, $raf->Tell() - 8;
+            $doTxt = 1;     # process text chunks now
+            next;
+        }
+        if ($isDatChunk{$chunk}) {
+            if ($fastScan and $fastScan >= 2) {
+                $et->VPrint(0,"End processing at $chunk chunk due to FastScan=$fastScan setting");
+                last;
+            }
+            $datChunk = $chunk;
+            $datCount++;
+            $datBytes += $len;
+            $wasDat = $chunk;
+        } else {
+            $datChunk = '';
+        }
         if ($outfile) {
-            if ($chunk eq $endChunk) {
-                # add any new chunks immediately before the IEND/MEND chunk
-                AddChunks($et, $outfile) or $err = 1;
-            } elsif ($chunk eq 'PLTE' or $chunk eq 'IDAT') {
-                if ($chunk eq 'IDAT') {
-                    # add XMP before IDAT if specified
-                    AddChunks($et, $outfile, 'XMP') or $err = 1 if $earlyXMP;
-                    # pHYs comes before IDAT
-                    AddChunks($et, $outfile, 'PNG-pHYs') or $err = 1;
-                }
-                # iCCP chunk must come before PLTE and IDAT
+            # add text chunks (including XMP) before any data chunk end chunk
+            if ($datChunk or $chunk eq $endChunk) {
+                # write iCCP chunk now if requested because AddChunks will try
+                # to add it as a text profile chunk if this isn't successful
+                # (ie. if Compress::Zlib wasn't available)
+                Add_iCCP($et, $outfile);
+                AddChunks($et, $outfile) or $err = 1;           # add all text chunks
+                AddChunks($et, $outfile, 'IFD0') or $err = 1;   # and eXIf chunk
+            } elsif ($chunk eq 'PLTE') {
+                # iCCP chunk must come before PLTE (and IDAT, handled above)
                 # (ignore errors -- will add later as text profile if this fails)
                 Add_iCCP($et, $outfile);
             }
@@ -1350,47 +1573,79 @@ sub ProcessPNG($$)
             }
             next;
         }
-        # set FoundIDAT flag: 1=after IDAT, 2=after IDAT and warn about late XMP
-        $$et{FoundIDAT} = $earlyXMP ? 2 : 1 if $chunk eq 'IDAT';
+        if ($datChunk) {
+            my $chunkSizeLimit = 10000000;  # largest chunk to read into memory
+            if ($outfile) {
+                # avoid loading very large data chunks into memory
+                if ($len > $chunkSizeLimit) {
+                    Write($outfile, $hbuf) or $err = 1;
+                    Image::ExifTool::CopyBlock($raf, $outfile, $len+4) or $et->Error("Error copying $datChunk");
+                    next;
+                }
+            # skip over data chunks if possible/necessary
+            } elsif (not $validate or $len > $chunkSizeLimit) {
+                if ($hash) {
+                    $et->ImageDataHash($raf, $len);
+                    $raf->Read($cbuf, 4) == 4 or $et->Warn('Truncated data'), last;
+                } else {
+                    $raf->Seek($len + 4, 1) or $et->Warn('Seek error'), last;
+                }
+                next;
+            }
+        } elsif ($wasDat and $isTxtChunk{$chunk}) {
+            my $msg;
+            if (not $outfile) {
+                $msg = 'may be ignored by some readers';
+            } elsif (defined $doTxt) {  # $doTxt == 0 if we crossed a noLeapFrog chunk
+                $msg = "can't be moved"; # (but could be deleted then added back again)
+            } else {
+                $msg = 'fixed';
+            }
+            $et->Warn("Text/EXIF chunk(s) found after $$et{FileType} $wasDat ($msg)", 1);
+        }
         # read chunk data and CRC
         unless ($raf->Read($dbuf,$len)==$len and $raf->Read($cbuf, 4)==4) {
             $et->Warn("Corrupted $fileType image") unless $wasEnd;
             last;
         }
-        unless ($wasHdr) {
-            if ($chunk eq $hdrChunk) {
-                $wasHdr = 1;
-            } elsif ($hdrChunk eq 'IHDR' and $chunk eq 'CgBI') {
-                $et->Warn('Non-standard PNG image (Apple iPhone format)');
-            } else {
-                $et->Warn("$fileType image did not start with $hdrChunk");
-                last;
-            }
-        }
-        if ($verbose) {
+        $hash->add($dbuf) if $hash and $datChunk;   # add to hash if necessary
+        if ($verbose or $validate or ($outfile and not $fastScan)) {
             # check CRC when in verbose mode (since we don't care about speed)
             my $crc = CalculateCRC(\$hbuf, undef, 4);
             $crc = CalculateCRC(\$dbuf, $crc);
-            $crc == unpack('N',$cbuf) or $et->Warn("Bad CRC for $chunk chunk") unless $wasEnd;
+            unless ($crc == unpack('N',$cbuf)) {
+                my $msg = "Bad CRC for $chunk chunk";
+                $outfile ? $et->Error($msg, 1) : $et->Warn($msg);
+            }
             if ($datChunk) {
                 Write($outfile, $hbuf, $dbuf, $cbuf) or $err = 1 if $outfile;
                 next;
             }
-            print $out "$fileType $chunk ($len bytes):\n";
-            $et->VerboseDump(\$dbuf, Addr => $raf->Tell() - $len - 4) if $verbose > 2;
-        }
-        # translate case of chunk name if necessary
-        if (not $$tagTablePtr{$chunk}) {
-            my $stdChunk = $stdCase{lc $chunk};
-            if ($stdChunk) {
-                if ($outfile and ($$et{EDIT_DIRS}{IFD0} or $stdChunk !~ /^[ez]xif$/i)) {
-                    $et->Warn("Changed $chunk chunk to $stdChunk", 1);
-                    ++$$et{CHANGED};
-                } else {
-                    $et->Warn("$chunk chunk should be $stdChunk", 1);
+            # just skip over any text chunk found after IDAT
+            if ($outfile and $wasDat) {
+                if ($isTxtChunk{$chunk} and not defined $doTxt) {
+                    ++$$et{CHANGED} if $$et{FORCE_WRITE}{PNG};
+                    print $out "  Deleting $chunk that was moved ($len bytes)\n" if $verbose;
+                    next;
                 }
-                $chunk = $stdCase{lc $chunk};
+                # done moving text if we hit one of these chunks
+                $doTxt = 0 if $noLeapFrog{$chunk};
             }
+            if ($verbose) {
+                print $out "$fileType $chunk ($len bytes):\n";
+                $et->VerboseDump(\$dbuf, Addr => $raf->Tell() - $len - 4) if $verbose > 2;
+            }
+        }
+        # translate case of chunk names that have changed since the first implementation
+        if (not $$tagTablePtr{$chunk} and $stdCase{lc $chunk}) {
+            my $stdChunk = $stdCase{lc $chunk};
+            if ($outfile and ($$et{EDIT_DIRS}{IFD0} or $stdChunk !~ /^[ez]xif$/i)) {
+                $et->Warn("Changed $chunk chunk to $stdChunk", 1);
+                ++$$et{CHANGED};
+            } else {
+                $et->Warn("$chunk chunk should be $stdChunk", 1);
+            }
+            $chunk = $stdCase{lc $chunk};
         }
         # only extract information from chunks in our tables
         my ($theBuff, $outBuff);
@@ -1418,6 +1673,13 @@ sub ProcessPNG($$)
         }
     }
     delete $$et{SET_GROUP1};
+    # read Samsung trailer if it exists
+    if ($wasTrailer and not $outfile and $raf->Seek(-8, 2) and
+        $raf->Read($dbuf,8) and $dbuf =~ /\0\0(QDIOBS|SEFT)$/) # (have only seen SEFT type)
+    {
+        require Image::ExifTool::Samsung;
+        Image::ExifTool::Samsung::ProcessSamsung($et, { DirName => 'Samsung', RAF => $raf });
+    }
     return -1 if $outfile and ($err or not $wasEnd);
     return 1;   # this was a valid PNG/MNG/JNG image
 }
@@ -1442,7 +1704,7 @@ and JNG (JPEG Network Graphics) images.
 
 =head1 AUTHOR
 
-Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2026, Phil Harvey (philharvey66 at gmail.com)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

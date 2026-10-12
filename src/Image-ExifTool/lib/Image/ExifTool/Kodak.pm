@@ -25,7 +25,7 @@ use vars qw($VERSION);
 use Image::ExifTool qw(:DataAccess :Utils);
 use Image::ExifTool::Exif;
 
-$VERSION = '1.44';
+$VERSION = '1.48';
 
 sub ProcessKodakIFD($$$);
 sub ProcessKodakText($$$);
@@ -375,6 +375,8 @@ sub WriteKodakIFD($$$);
 %Image::ExifTool::Kodak::Type5 = (
     GROUPS => { 0 => 'MakerNotes', 2 => 'Camera' },
     PROCESS_PROC => \&Image::ExifTool::ProcessBinaryData,
+    WRITE_PROC => \&Image::ExifTool::WriteBinaryData,
+    CHECK_PROC => \&Image::ExifTool::CheckBinaryData,
     NOTES => q{
         These tags are used by the CX4200, CX4210, CX4230, CX4300, CX4310, CX6200
         and CX6230.
@@ -442,6 +444,8 @@ sub WriteKodakIFD($$$);
 %Image::ExifTool::Kodak::Type6 = (
     GROUPS => { 0 => 'MakerNotes', 2 => 'Camera' },
     PROCESS_PROC => \&Image::ExifTool::ProcessBinaryData,
+    WRITE_PROC => \&Image::ExifTool::WriteBinaryData,
+    CHECK_PROC => \&Image::ExifTool::CheckBinaryData,
     NOTES => 'These tags are used by the DX3215 and DX3700.',
     WRITABLE => 1,
     FIRST_ENTRY => 0,
@@ -784,6 +788,8 @@ sub WriteKodakIFD($$$);
         Name => 'PreviewImageSize',
         Writable => 'int16u',
         Count => 2,
+        PrintConv => '$val =~ tr/ /x/; $val',
+        PrintConvInv => '$val =~ tr/x/ /; $val',
     },
     # 0x03 int32u - ranges from about 33940 to 40680
     # 0x04 int32u - always 18493
@@ -2659,6 +2665,7 @@ my %sceneModeUsed = (
     'Image Number'  => 'ImageNumber',
     'ISO'           => 'ISO',
     'ISO Speed'     => 'ISO',
+    'Lens'          => { Name => 'Lens', Priority => 0 },
     'Max Aperture'  => {
         Name => 'MaxAperture',
         ValueConv => '$val=~s/^f//i; $val',
@@ -2976,7 +2983,8 @@ my %sceneModeUsed = (
         Priority => 0,  # (only integer seconds)
         PrintConv => 'ConvertDuration($val)',
     },
-   'ver '=> { Name => 'KodakVersion' },
+    # (save KodakVersion to recognize Rexing Dashcam video for GPS scaling)
+   'ver '=> { Name => 'KodakVersion', RawConv => '$$self{KodakVersion} = $val' },
     thma => { Name => 'ThumbnailImage', Groups => { 2 => 'Preview' }, Binary => 1 },
     scra => { Name => 'PreviewImage',   Groups => { 2 => 'Preview' }, Binary => 1 },
 );
@@ -3003,7 +3011,7 @@ my %sceneModeUsed = (
     PROCESS_PROC => \&ProcessPose,
     NOTES => q{
         Streamed orientation information from the PixPro 4KVR360, extracted as
-        sub-documents when the Duplicates option is used.
+        sub-documents when the L<Duplicates|../ExifTool.html#Duplicates> option is used.
     },
     Accelerometer => { }, # up, back, left?  units of g
     AngularVelocity => { } # left, up, ccw?  units?
@@ -3245,7 +3253,7 @@ interpret Kodak maker notes EXIF meta information.
 
 =head1 AUTHOR
 
-Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2026, Phil Harvey (philharvey66 at gmail.com)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

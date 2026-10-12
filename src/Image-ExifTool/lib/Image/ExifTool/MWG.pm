@@ -16,7 +16,7 @@ use Image::ExifTool qw(:DataAccess :Utils);
 use Image::ExifTool::Exif;
 use Image::ExifTool::XMP;
 
-$VERSION = '1.22';
+$VERSION = '1.24';
 
 sub RecoverTruncatedIPTC($$$);
 sub ListToString($);
@@ -28,7 +28,8 @@ my $mwgLoaded;  # flag set if we alreaded Load()ed the MWG tags
 # MWG Composite tags
 %Image::ExifTool::MWG::Composite = (
     GROUPS => { 0 => 'Composite', 1 => 'MWG', 2 => 'Image' },
-    VARS => { NO_ID => 1 },
+    VARS => { ID_FMT => 'none' },
+    WRITE_PROC => \&Image::ExifTool::DummyWriteProc,
     NOTES => q{
         The table below lists special Composite tags which are used to access other
         tags based on the MWG 2.0 recommendations.  These tags are only accessible
@@ -59,7 +60,7 @@ my $mwgLoaded;  # flag set if we alreaded Load()ed the MWG tags
         string values be stored as UTF-8.  To honour this, the exiftool application
         sets the default internal EXIF string encoding to "UTF8" when the MWG module
         is loaded, but via the API this must be done manually by setting the
-        CharsetEXIF option.
+        L<CharsetEXIF|../ExifTool.html#CharsetEXIF> option.
 
         A complication of the MWG specification is that although the MWG:Creator
         property may consist of multiple values, the associated EXIF tag
@@ -116,7 +117,7 @@ my $mwgLoaded;  # flag set if we alreaded Load()ed the MWG tags
     DateTimeOriginal => {
         Description => 'Date/Time Original',
         Groups => { 2 => 'Time' },
-        Notes => '"creation date of the intellectual content being shown" - MWG',
+        Notes => '"specifies when a photo was taken" - MWG',
         Writable => 1,
         Shift => 0, # don't shift this tag
         Desire => {
@@ -158,7 +159,7 @@ my $mwgLoaded;  # flag set if we alreaded Load()ed the MWG tags
     },
     CreateDate => {
         Groups => { 2 => 'Time' },
-        Notes => '"creation date of the digital representation" - MWG',
+        Notes => '"specifies when an image was digitized" - MWG',
         Writable => 1,
         Shift => 0, # don't shift this tag
         Desire => {
@@ -196,7 +197,7 @@ my $mwgLoaded;  # flag set if we alreaded Load()ed the MWG tags
     },
     ModifyDate => {
         Groups => { 2 => 'Time' },
-        Notes => '"modification date of the digital image file" - MWG',
+        Notes => '"specifies when a file was modified by the user" - MWG',
         Writable => 1,
         Shift => 0, # don't shift this tag
         Desire => {
@@ -440,6 +441,7 @@ my %sRegionStruct = (
         Writable => 'real',
         Notes => 'not part of MWG 2.0 spec',
     },
+    # Title - seen in sample XMP of MWG 2.0 specification, but not in spec itself
     seeAlso => { Namespace => 'rdfs', Resource => 1 },
 );
 my %sKeywordStruct;
@@ -459,7 +461,8 @@ my %sKeywordStruct;
     NOTES => q{
         Image region metadata defined by the MWG 2.0 specification.  These tags
         may be accessed without the need to load the MWG Composite tags above.  See
-        L<http://www.metadataworkinggroup.org/> for the official specification.
+        L<https://web.archive.org/web/20180919181934/http://www.metadataworkinggroup.org/pdf/mwg_guidance.pdf>
+        for the official specification.
     },
     Regions => {
         Name => 'RegionInfo',
@@ -484,11 +487,12 @@ my %sKeywordStruct;
     GROUPS => { 0 => 'XMP', 1 => 'XMP-mwg-kw', 2 => 'Image' },
     NAMESPACE => 'mwg-kw',
     NOTES => q{
-        Hierarchical keywords metadata defined by the MWG 2.0 specification. 
+        Hierarchical keywords metadata defined by the MWG 2.0 specification.
         ExifTool unrolls keyword structures to an arbitrary depth of 6 to allow
         individual levels to be accessed with different tag names, and to avoid
-        infinite recursion.  See L<http://www.metadataworkinggroup.org/> for the
-        official specification.
+        infinite recursion.  See
+        L<https://web.archive.org/web/20180919181934/http://www.metadataworkinggroup.org/pdf/mwg_guidance.pdf>
+        for the official specification.
     },
     # arbitrarily define only the first 6 levels of the keyword hierarchy
     Keywords => {
@@ -526,7 +530,8 @@ my %sKeywordStruct;
     NAMESPACE => 'mwg-coll',
     NOTES => q{
         Collections metadata defined by the MWG 2.0 specification.  See
-        L<http://www.metadataworkinggroup.org/> for the official specification.
+        L<https://web.archive.org/web/20180919181934/http://www.metadataworkinggroup.org/pdf/mwg_guidance.pdf>
+        for the official specification.
     },
     Collections => {
         FlatName => '',
@@ -625,6 +630,14 @@ sub OverwriteStringList($$$$)
     local $_;
     my ($et, $nvHash, $val, $newValuePt) = @_;
     my (@new, $delIndex);
+    my $writeMode = $et->Options('WriteMode');
+    if ($writeMode ne 'wcg') {
+        if (defined $val) {
+            $writeMode =~ /w/i or return 0;
+        } else {
+            $writeMode =~ /c/i or return 0;
+        }
+    }
     if ($$nvHash{DelValue} and defined $val) {
         # preserve specified old values
         my $old = StringToList($val, $et);
@@ -744,7 +757,7 @@ must be loaded explicitly as described above.
 
 =head1 AUTHOR
 
-Copyright 2003-2018, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2026, Phil Harvey (philharvey66 at gmail.com)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

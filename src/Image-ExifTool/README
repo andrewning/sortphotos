@@ -1,4 +1,4 @@
-ExifTool by Phil Harvey (phil at owl.phy.queensu.ca)
+ExifTool by Phil Harvey (philharvey66 at gmail.com)
 ----------------------------------------------------------------------------
 
 ExifTool is a customizable set of Perl modules plus a full-featured
@@ -14,44 +14,52 @@ supported by ExifTool (r = read, w = write, c = create):
 
   File Types
   ------------+-------------+-------------+-------------+------------
-  3FR   r     | DR4   r/w/c | J2C   r     | ODP   r     | RAW   r/w
-  3G2   r/w   | DSS   r     | JNG   r/w   | ODS   r     | RIFF  r
-  3GP   r/w   | DV    r     | JP2   r/w   | ODT   r     | RSRC  r
-  A     r     | DVB   r/w   | JPEG  r/w   | OFR   r     | RTF   r
-  AA    r     | DVR-MS r    | JSON  r     | OGG   r     | RW2   r/w
-  AAE   r     | DYLIB r     | K25   r     | OGV   r     | RWL   r/w
-  AAX   r/w   | EIP   r     | KDC   r     | OPUS  r     | RWZ   r
-  ACR   r     | EPS   r/w   | KEY   r     | ORF   r/w   | RM    r
-  AFM   r     | EPUB  r     | LA    r     | OTF   r     | SEQ   r
-  AI    r/w   | ERF   r/w   | LFP   r     | PAC   r     | SKETCH r
-  AIFF  r     | EXE   r     | LNK   r     | PAGES r     | SO    r
-  APE   r     | EXIF  r/w/c | M2TS  r     | PBM   r/w   | SR2   r/w
-  ARQ   r/w   | EXR   r     | M4A/V r/w   | PCD   r     | SRF   r
-  ARW   r/w   | EXV   r/w/c | MAX   r     | PDB   r     | SRW   r/w
-  ASF   r     | F4A/V r/w   | MEF   r/w   | PDF   r/w   | SVG   r
-  AVI   r     | FFF   r/w   | MIE   r/w/c | PEF   r/w   | SWF   r
-  AZW   r     | FLA   r     | MIFF  r     | PFA   r     | THM   r/w
-  BMP   r     | FLAC  r     | MKA   r     | PFB   r     | TIFF  r/w
-  BPG   r     | FLIF  r/w   | MKS   r     | PFM   r     | TORRENT r
-  BTF   r     | FLV   r     | MKV   r     | PGF   r     | TTC   r
-  CHM   r     | FPF   r     | MNG   r/w   | PGM   r/w   | TTF   r
-  COS   r     | FPX   r     | MOBI  r     | PLIST r     | VCF   r
-  CR2   r/w   | GIF   r/w   | MODD  r     | PICT  r     | VRD   r/w/c
-  CR3   r/w   | GPR   r/w   | MOI   r     | PMP   r     | VSD   r
-  CRM   r/w   | GZ    r     | MOS   r/w   | PNG   r/w   | WAV   r
-  CRW   r/w   | HDP   r/w   | MOV   r/w   | PPM   r/w   | WDP   r/w
-  CS1   r/w   | HDR   r     | MP3   r     | PPT   r     | WEBP  r
-  DCM   r     | HEIC  r     | MP4   r/w   | PPTX  r     | WEBM  r
-  DCP   r/w   | HEIF  r     | MPC   r     | PS    r/w   | WMA   r
-  DCR   r     | HTML  r     | MPG   r     | PSB   r/w   | WMV   r
-  DFONT r     | ICC   r/w/c | MPO   r/w   | PSD   r/w   | WTV   r
-  DIVX  r     | ICS   r     | MQV   r/w   | PSP   r     | WV    r
-  DJVU  r     | IDML  r     | MRW   r/w   | QTIF  r/w   | X3F   r/w
-  DLL   r     | IIQ   r/w   | MXF   r     | R3D   r     | XCF   r
-  DNG   r/w   | IND   r/w   | NEF   r/w   | RA    r     | XLS   r
-  DOC   r     | INX   r     | NRW   r/w   | RAF   r/w   | XLSX  r
-  DOCX  r     | ISO   r     | NUMBERS r   | RAM   r     | XMP   r/w/c
-  DPX   r     | ITC   r     | O     r     | RAR   r     | ZIP   r
+  360   r/w   | DR4   r/w/c | JNG   r/w   | ODP   r     | RTF   r
+  3FR   r     | DSF   r     | JP2   r/w   | ODS   r     | RW2   r/w
+  3G2   r/w   | DSS   r     | JPEG  r/w   | ODT   r     | RWL   r/w
+  3GP   r/w   | DV    r     | JSON  r     | OFR   r     | RWZ   r
+  7Z    r     | DVB   r/w   | JXL   r/w   | OGG   r     | RM    r
+  A     r     | DVR-MS r    | K25   r     | OGV   r     | SEQ   r
+  AA    r     | DYLIB r     | KDC   r     | ONP   r     | SKETCH r
+  AAC   r     | EIP   r     | KEY   r     | OPUS  r     | SO    r
+  AAE   r     | EPS   r/w   | KVAR  r     | ORF   r/w   | SR2   r/w
+  AAX   r/w   | EPUB  r     | LA    r     | ORI   r/w   | SRF   r
+  ACR   r     | ERF   r/w   | LFP   r     | OTF   r     | SRW   r/w
+  AFM   r     | EXE   r     | LIF   r     | PAC   r     | SVG   r
+  AI    r/w   | EXIF  r/w/c | LNK   r     | PAGES r     | SWF   r
+  AIFF  r     | EXR   r     | LRV   r/w   | PBM   r/w   | THM   r/w
+  APE   r     | EXV   r/w/c | M2TS  r     | PCAP  r     | TIFF  r/w
+  ARQ   r/w   | F4A/V r/w   | M4A/V r/w   | PCAPNG r    | TNEF  r
+  ARW   r/w   | FFF   r/w   | MACOS r     | PCD   r     | TORRENT r
+  ASF   r     | FIT   r     | MAX   r     | PCX   r     | TTC   r
+  AVI   r     | FITS  r     | MEF   r/w   | PDB   r     | TTF   r
+  AVIF  r/w   | FLA   r     | MIE   r/w/c | PDF   r/w   | TXT   r
+  AZW   r     | FLAC  r     | MIFF  r     | PEF   r/w   | URL   r
+  BMP   r     | FLIF  r/w   | MKA   r     | PFA   r     | VCF   r
+  BPG   r     | FLV   r     | MKS   r     | PFB   r     | VNT   r
+  BTF   r     | FPF   r     | MKV   r     | PFM   r     | VRD   r/w/c
+  C2PA  r     | FPX   r     | MNG   r/w   | PGF   r     | VSD   r
+  CHM   r     | GIF   r/w   | MOBI  r     | PGM   r/w   | VSDX  r
+  COS   r     | GLV   r/w   | MODD  r     | PLIST r     | WAV   r
+  CR2   r/w   | GPR   r/w   | MOI   r     | PICT  r     | WDP   r/w
+  CR3   r/w   | GZ    r     | MOS   r/w   | PMP   r     | WEBP  r/w
+  CRM   r/w   | HDP   r/w   | MOV   r/w   | PNG   r/w   | WEBM  r
+  CRW   r/w   | HDR   r     | MP3   r     | PPM   r/w   | WMA   r
+  CS1   r/w   | HEIC  r/w   | MP4   r/w   | PPT   r     | WMV   r
+  CSV   r     | HEIF  r/w   | MPC   r     | PPTX  r     | WOFF  r
+  CUR   r     | HTML  r     | MPG   r     | PS    r/w   | WOFF2 r
+  CZI   r     | ICC   r/w/c | MPO   r/w   | PSB   r/w   | WPG   r
+  DCM   r     | ICO   r     | MQV   r/w   | PSD   r/w   | WTV   r
+  DCP   r/w   | ICS   r     | MRC   r     | PSP   r     | WV    r
+  DCR   r     | IDML  r     | MRW   r/w   | QTIF  r/w   | X3F   r/w
+  DFONT r     | IIQ   r/w   | MXF   r     | R3D   r     | XCF   r
+  DIVX  r     | IND   r/w   | NEF   r/w   | RA    r     | XISF  r
+  DJVU  r     | INSP  r/w   | NKA   r     | RAF   r/w   | XLS   r
+  DLL   r     | INSV  r     | NKSC  r/w   | RAM   r     | XLSX  r
+  DNG   r/w   | INX   r     | NRW   r/w   | RAR   r     | XMP   r/w/c
+  DOC   r     | ISO   r     | NUMBERS r   | RAW   r/w   | ZIP   r
+  DOCX  r     | ITC   r     | NXD   r     | RIFF  r     |
+  DPX   r     | J2C   r     | O     r     | RSRC  r     |
 
   Meta Information
   ----------------------+----------------------+---------------------
@@ -75,7 +83,7 @@ See html/index.html for more details about ExifTool features.
 
 ExifTool can be downloaded from
 
-  http://owl.phy.queensu.ca/~phil/exiftool/
+  https://exiftool.org/
 
 RUNNING
 
@@ -103,8 +111,8 @@ your home directory, then you would type the following commands in a
 terminal window to extract and run ExifTool:
 
   cd ~/Desktop
-  gzip -dc Image-ExifTool-11.16.tar.gz | tar -xf -
-  cd Image-ExifTool-11.16
+  gzip -dc Image-ExifTool-13.59.tar.gz | tar -xf -
+  cd Image-ExifTool-13.59
   ./exiftool t/images/ExifTool.jpg
 
 Note:  These commands extract meta information from one of the test images. 
@@ -150,18 +158,22 @@ for calculating digest values and providing other features listed below:
   POSIX::strptime      (for inverse date/time conversion)
   Time::Piece          (alternative to POSIX::strptime)
   Unicode::LineBreak   (for column alignment of alternate-language output)
-  Win32::API           (for proper handling of Windows file times)
+  Win32::API           (for proper handling of Windows file names/times)
   Win32::FindFile      (for Windows Unicode directory support, app only)
   Win32API::File       (for Windows Unicode file names and file times)
+  File::StatX          (for reading FileCreateDate on Linux systems)
+  Compress::Raw::Lzma  (for reading encoded 7z files)
   IO::Compress::RawDeflate   (for writing FLIF images)
   IO::Uncompress::RawInflate (for reading FLIF images)
+  IO::Compress::Brotli       (for writing compressed JXL metadata)
+  IO::Uncompress::Brotli     (for reading compressed JXL metadata)
 
 COPYRIGHT AND LICENSE
 
-Copyright 2003-2018, Phil Harvey
+Copyright 2003-2026, Phil Harvey
 
 This is free software; you can redistribute it and/or modify it under the
-same terms as Perl itself.
+same terms as Perl itself (either the Perl Artistic License or GPL).
 
 DISTRIBUTION FILES
 
@@ -186,22 +198,35 @@ distribution package:
     xmp2gps.args              - Arguments for converting XMP to GPS
     xmp2iptc.args             - Arguments for converting XMP to IPTC
     xmp2pdf.args              - Arguments for converting XMP to PDF
+  build_geolocation         - Build custom Geolocation database
   config_files/             - Sample ExifTool configuration files:
+    acdsee.config             - Definitions for writing ACDSee XMP regions
     age.config                - Calculate Age of person in photo
     bibble.config             - Definitions for writing Bibble XMP tags
-    convert_regions.config    - Convert between MWG and MP face regions
-    dji.config                - Composite tags for metadata in DJI videos
+    convert_regions.config    - Convert between MWG, MP and IPTC regions
+    cuepointlist.config       - Extract cue points and labels as a list
+    depthmap.config           - Extract Google DepthMap images
     example.config            - General example showing config features
     fotoware.config           - Definitions for writing Fotoware XMP tags
+    frameCount.config         - Extract FrameCount from MP4 videos
     gps2utm.config            - Generate UTM coordinate tags from GPS info
+    guano.config              - Decode individual tags from Guano metadata
+    local_time.config         - Determine local time from GPS information
+    nksc.config               - Decode tags in Nikon ViewNX NKSC files
+    novelty.config            - Definitions for XMP Novelty Theory tags
+    onone.config              - Definitions for writing On1 XMP tags
     photoshop_paths.config    - For extracting or copying Photoshop paths
     picasa_faces.config       - Convert from Picasa to MWG/MP face regions
-    time_zone.config          - Calcuate time zone from EXIF tags
+    pix4d.config              - Definitions for writing Pix4D XMP tags
+    rotate_regions.config     - Rotate MWG and MP region tags
+    tiff_version.config       - Determine the version of a TIFF file
+    time_zone.config          - Calculate time zone from EXIF tags
   exiftool                  - The exiftool application (Perl script)
   fmt_files/                - Output formatting example files:
     gpx.fmt                   - Format file for creating GPX track
     gpx_wpt.fmt               - Format file for creating GPX waypoints
-    kml.fmt                   - Format file for creating KML output files
+    kml.fmt                   - Format file for creating KML placemarks
+    kml_track.fmt             - Format file for creating KML track
   html/                     - HTML documentation
   html/TagNames/            - HTML tag name documentation
   lib/                      - ExifTool Perl library modules
@@ -220,6 +245,7 @@ information:
   html/ExifTool.html        - API documentation
   html/TagNames/index.html  - Tag name documentation
   html/geotag.html          - Geotag feature
+  html/geolocation.html     - Geolocation feature
   html/faq.html             - Frequently asked questions
   html/filename.html        - Renaming/moving files
   html/metafiles.html       - Working with metadata sidecar files
