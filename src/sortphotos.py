@@ -87,11 +87,9 @@ def parse_date_exif(date_string: str) -> datetime | None:
                 time_zone_hour = int(time_zone[0])
                 time_zone_min = int(time_zone[1])
 
-                # check if + or -
-                if time_entries[1] == '+':
-                    time_zone_hour *= -1
-
-                dateadd = timedelta(hours=time_zone_hour, minutes=time_zone_min)
+                # Convert the complete offset so the sign applies to both hours and minutes.
+                offset_sign = -1 if time_entries[1] == '+' else 1
+                dateadd = timedelta(minutes=offset_sign * (time_zone_hour * 60 + time_zone_min))
                 time_zone_adjust = True
 
 
@@ -465,7 +463,7 @@ def sortPhotos(
                     dest_compare = test_file_dict[dest_file]
                 else:
                     dest_compare = dest_file
-                if remove_duplicates and filecmp.cmp(src_file, dest_compare):  # check for identical files
+                if remove_duplicates and filecmp.cmp(src_file, dest_compare, shallow=False):  # compare file contents
                     fileIsIdentical = True
                     logger.debug('Identical file already exists.  Duplicate will be ignored.')
                     stats['skipped_duplicate'] += 1

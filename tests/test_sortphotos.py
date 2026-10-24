@@ -42,6 +42,16 @@ class TestParseDateExif:
         result = parse_date_exif('2023:06:15 14:30:00-03:00')
         assert result == datetime(2023, 6, 15, 17, 30, 0)
 
+    def test_with_positive_half_hour_timezone(self):
+        # +05:30 means subtract the full 5 hours and 30 minutes to get UTC
+        result = parse_date_exif('2023:06:15 14:30:00+05:30')
+        assert result == datetime(2023, 6, 15, 9, 0, 0)
+
+    def test_with_negative_half_hour_timezone(self):
+        # -03:30 means add the full 3 hours and 30 minutes to get UTC
+        result = parse_date_exif('2023:06:15 14:30:00-03:30')
+        assert result == datetime(2023, 6, 15, 18, 0, 0)
+
     def test_with_z_timezone(self):
         result = parse_date_exif('2023:06:15 14:30:00Z')
         assert result == datetime(2023, 6, 15, 14, 30, 0)
@@ -389,12 +399,17 @@ class TestSortPhotos:
         dest_dir.mkdir()
 
         # create source file
-        (src_dir / 'photo1.jpg').write_text('new content')
+        src_file = src_dir / 'photo1.jpg'
+        src_file.write_text('new content')
 
-        # create different file at destination with same name
+        # create different file at destination with same name and metadata
         dest_subdir = dest_dir / '2023' / '06-Jun'
         dest_subdir.mkdir(parents=True)
-        (dest_subdir / 'photo1.jpg').write_text('old content')
+        dest_file = dest_subdir / 'photo1.jpg'
+        dest_file.write_text('old content')
+        same_mtime = 1_700_000_000
+        os.utime(src_file, (same_mtime, same_mtime))
+        os.utime(dest_file, (same_mtime, same_mtime))
 
         metadata = self._mock_metadata(src_dir, {'photo1.jpg': '2023:06:15 14:30:00'})
 
